@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-CountRoster is a local-first "anything tracker" (habits, meds, symptoms, spending, moods). It will ship on iOS, Android, and web from a shared TypeScript core. **Only `@countroster/core` exists today** — the platform shells (`apps/mobile`, `apps/web`) are designed but not yet scaffolded. See `DESIGN.md` for the full architecture and roadmap, `DEPLOYMENT.md` for platform deployment notes.
+CountRoster is a local-first "anything tracker" (habits, meds, symptoms, spending, moods). It will ship on iOS, Android, and web from a shared TypeScript core. `@countroster/core` and the web shell (`apps/web` — a Vite + React SPA) exist today; the mobile shell (`apps/mobile`) is designed but not yet scaffolded. See `DESIGN.md` for the full architecture and roadmap, `DEPLOYMENT.md` for platform deployment notes, and `apps/web/README.md` for web-shell specifics.
 
 ## Commands
 
-Run from the repo root (npm workspaces fan out to `packages/*`):
+Run from the repo root (npm workspaces fan out to `packages/*` and `apps/*`):
 
 ```bash
 npm install          # requires Node >= 20.10; CI/dev uses Node 22

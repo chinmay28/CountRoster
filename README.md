@@ -14,23 +14,28 @@ rebuilt with:
 ```
 countroster/
 ├── DESIGN.md                 # full design & architecture document
-└── packages/
-    └── core/                 # @countroster/core — shared TypeScript domain
-        ├── src/
-        └── test/
+├── packages/
+│   └── core/                 # @countroster/core — shared TypeScript domain
+│       ├── src/
+│       └── test/
+└── apps/
+    └── web/                  # @countroster/web — Vite + React SPA (sqlite-wasm + OPFS)
+        └── src/
 ```
 
 Future packages (not yet scaffolded):
 
 - `apps/mobile` — Expo (React Native) for iOS + Android
-- `apps/web`    — Next.js + sqlite-wasm
 
 ## Getting started
 
 ```bash
 npm install
-npm run test    # runs @countroster/core's Vitest suite
-npm run build   # typechecks and emits dist/
+npm run build   # typechecks and emits dist/ (build core before running the web app)
+npm run test    # runs every workspace's Vitest suite
+
+# Web shell
+npm run dev --workspace @countroster/web   # http://localhost:5173
 ```
 
 ## Documentation
