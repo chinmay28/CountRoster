@@ -19,13 +19,24 @@ const crossOriginIsolation = {
   'Cross-Origin-Embedder-Policy': 'require-corp',
 };
 
+/**
+ * Hostnames the dev/preview server will answer to, in addition to
+ * localhost. Vite rejects unknown Host headers as a DNS-rebinding
+ * safeguard; a leading dot allows a domain and all its subdomains.
+ * `.ts.net` covers Tailscale MagicDNS names (e.g. accessing the dev
+ * server from another device on your tailnet). Add your own as needed.
+ */
+const allowedHosts = ['.ts.net'];
+
 export default defineConfig({
   plugins: [react()],
   server: {
     headers: crossOriginIsolation,
+    allowedHosts,
   },
   preview: {
     headers: crossOriginIsolation,
+    allowedHosts,
   },
   // sqlite-wasm ships its own worker/wasm assets and does not play well with
   // Vite's dependency pre-bundling. Let it be loaded as-is.
