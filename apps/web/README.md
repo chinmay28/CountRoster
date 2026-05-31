@@ -103,6 +103,77 @@ This Capacitor shell is the pragmatic "the web app, on my phone, today" path. It
 is independent of the Expo `apps/mobile` shell described in `DESIGN.md`, which
 remains the plan for a fully native iOS/Android build later.
 
+## Updating the app (and keeping your data)
+
+Your logged data lives in the app's **OPFS store inside its private container**
+on the device. iOS keeps that container across an **upgrade install** — installing
+a newer build *over* the existing app — so updates are seamless. A routine update
+is just:
+
+```bash
+# pull the latest code, then:
+npm run ios:sync --workspace @countroster/web   # rebuild web + copy into the native app
+npm run ios:open --workspace @countroster/web   # ▶ in Xcode onto the same device
+```
+
+Schema changes ride along automatically: at startup `bootstrap.ts` runs
+`app.migrations.run()`, which applies any new core migrations to the **existing**
+database in place (migrations are append-only and idempotent). So a build with a
+newer schema upgrades your current data rather than starting fresh.
+
+**The one rule that guarantees continuity: never change the `appId` (bundle
+identifier) once you've stored data you care about.** iOS keys the data container
+to the bundle id. Things that *wipe* the container:
+
+- Changing `appId` in `capacitor.config.ts` → iOS sees a brand-new app, empty store.
+- **Deleting** the app from the Home Screen (vs. installing over it).
+- A full device erase / restoring to a different device.
+
+Things that are *safe* and keep data: installing a newer build over the old one,
+re-signing when the free 7-day cert lapses (re-running from Xcode is an upgrade
+install, not a delete), and **changing the signing team** (see below).
+
+> Until core's `BackupService` lands, an upgrade install is the only data-carry
+> path — there's no export/restore yet. Treat the on-device store as the single
+> copy and avoid deleting the app.
+
+## Moving to an Apple Developer account (free or paid)
+
+You can start with free provisioning and later attach a real Developer account
+**without losing data or reinstalling from scratch**, because the data container
+follows the bundle id, not the signing identity. Keep the **same `appId`** and do
+an upgrade install.
+
+When you get the account, in Xcode → **App** target → **Signing & Capabilities**:
+
+1. Keep **Automatically manage signing** ticked.
+2. **Team** → select the new team (your paid org, or the new account's personal
+   team). Leave the **Bundle Identifier unchanged.**
+3. Run onto the same device (▶). It upgrades the existing app in place; your
+   trackers, entries, and notes are preserved.
+
+What changes once you're on a **paid** Developer Program ($99/yr):
+
+- **No more 7-day expiry** — development builds last ~1 year, and distributed
+  builds don't expire. No weekly reinstall.
+- **TestFlight** — push builds to your phone over the air, no cable, no Xcode run.
+- **App Store / ad-hoc distribution** — install without a tethered Mac at all.
+- More than 3 apps per device and a registered, reservable bundle id.
+
+A free account stays subject to the free-provisioning limits above; the team-swap
+step still works, it just doesn't remove the 7-day expiry.
+
+### Versioning updates
+
+For TestFlight / App Store, **every uploaded build must have a higher build
+number**, and user-facing updates bump the version string. Capacitor does **not**
+sync these from `package.json` — set them in the **App** target → **General**
+(`Version` = `MARKETING_VERSION`, `Build` = `CURRENT_PROJECT_VERSION`), or via
+`agvtool`. Bump `Build` for each upload; bump `Version` for each release. iOS only
+performs an upgrade install (and thus preserves data) when the new build's version
+is **≥** the installed one.
+
+
 ## Layout
 
 ```
