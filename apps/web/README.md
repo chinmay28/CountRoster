@@ -5,8 +5,11 @@ The CountRoster web shell — a local-first SPA over [`@countroster/core`](../..
 - **Vite + React** (hash-routed SPA; no server, fitting the local-first model).
 - **Storage:** `SQLiteWasmAdapter` (`src/db/adapter.ts`) implements core's `Storage`
   contract against [`@sqlite.org/sqlite-wasm`](https://sqlite.org/wasm). It persists
-  to **OPFS** when the page is cross-origin isolated, and falls back to an
-  in-memory database otherwise (the UI shows a warning in that case).
+  via the **OPFS SAHPool VFS** (`installOpfsSAHPoolVfs`), falling back to an
+  in-memory database when OPFS is unavailable (the UI shows a warning in that case).
+- **iOS:** the same build runs on an iPhone via a [Capacitor](https://capacitorjs.com)
+  WKWebView shell you open in Xcode — see
+  [Run on an iPhone via Xcode](#run-on-an-iphone-via-xcode-no-apple-developer-account).
 
 ## Commands
 
@@ -21,24 +24,84 @@ npm run typecheck  --workspace @countroster/web
 > `@countroster/core` must be built first (`npm run build --workspace @countroster/core`)
 > so its `dist/` exists — the web app imports the package's compiled output.
 
-## Cross-origin isolation (OPFS persistence)
+## Persistence (OPFS SAHPool)
 
-The OPFS-backed sqlite-wasm VFS needs `SharedArrayBuffer`, which requires the page
-to be cross-origin isolated. Two response headers must be present on the document
-and worker responses:
+The adapter uses sqlite-wasm's **OPFS SAHPool VFS**. Unlike the older `OpfsDb`
+VFS, it does **not** require the page to be cross-origin isolated — no COOP/COEP
+headers, no `SharedArrayBuffer`. That means persistence works on any plain static
+host, over a LAN/Tailscale URL, and inside the iOS WKWebView shell (which serves
+from a custom scheme that is never cross-origin isolated).
 
-```
-Cross-Origin-Opener-Policy:   same-origin
-Cross-Origin-Embedder-Policy: require-corp
-```
+It only needs the Origin Private File System (`navigator.storage.getDirectory` +
+synchronous access handles), available in Safari / iOS 15.2+ and all current
+evergreen browsers. Where OPFS is missing (a private window, an old OS), the app
+still boots on an in-memory database and shows a banner — data is then lost on
+reload.
 
-- **Dev / preview:** set by `vite.config.ts`.
-- **Production:** the static host must send them. `public/_headers` covers
-  Netlify / Cloudflare Pages; other hosts need equivalent config (see
-  [`DEPLOYMENT.md`](../../DEPLOYMENT.md)).
+Persistence is **per origin**: `http://localhost:5173`, a `*.ts.net` URL, and the
+native app each keep their own separate database.
 
-Without isolation the app still boots, but data lives only in memory and is lost
-on reload.
+## Run on an iPhone via Xcode (no Apple Developer account)
+
+The web app is wrapped with [Capacitor](https://capacitorjs.com) into a native
+iOS project you build and install from Xcode. Xcode's **free provisioning** signs
+to your own device with a free Apple ID — no paid Developer Program needed. The
+catch: the signing certificate expires after **7 days**, so you re-run from Xcode
+to reinstall when it lapses.
+
+**These steps require a Mac with Xcode** (CocoaPods + the iOS toolchain are
+macOS-only). Everything else in this repo is cross-platform.
+
+1. **Pick a unique bundle id.** Edit `appId` in `capacitor.config.ts` to your own
+   reverse-domain string, e.g. `app.countroster.<yourname>`. Free provisioning
+   refuses ids already used by another Apple ID.
+
+2. **Generate the native project** (first time only):
+
+   ```bash
+   npm install
+   npm run build      --workspace @countroster/core   # core dist/
+   npm run ios:add    --workspace @countroster/web     # creates apps/web/ios/ (runs `pod install`)
+   ```
+
+3. **Build the web assets into the app** (re-run after any web change):
+
+   ```bash
+   npm run ios:sync   --workspace @countroster/web     # vite build + cap sync ios
+   ```
+
+4. **Open Xcode:**
+
+   ```bash
+   npm run ios:open   --workspace @countroster/web     # opens apps/web/ios/App/App.xcworkspace
+   ```
+
+5. **Configure signing** in Xcode → select the **App** target → **Signing &
+   Capabilities**:
+   - Tick **Automatically manage signing**.
+   - **Team** → *Add an Account…* → sign in with your Apple ID → pick your
+     **(Personal Team)**.
+   - Confirm the **Bundle Identifier** matches step 1 (or just set a unique one
+     here).
+
+6. **Run on the phone:** plug in your iPhone (unlocked, "Trust This Computer"),
+   pick it as the run destination, press **▶**. First launch fails to open until
+   you trust the cert: on the phone, **Settings → General → VPN & Device
+   Management → [your Apple ID] → Trust**. Press ▶ again.
+
+7. **When it expires (~7 days)** or after web changes: `npm run ios:sync`, then ▶
+   in Xcode again.
+
+Free-provisioning limits to know: app stops launching after 7 days until
+re-signed; max 3 sideloaded apps per device; up to 10 new app ids per 7 days.
+
+> The generated `apps/web/ios/` project **is** meant to be committed (it's your
+> native app). The heavy/generated parts — `Pods/`, copied web assets, Xcode
+> build output — are gitignored.
+
+This Capacitor shell is the pragmatic "the web app, on my phone, today" path. It
+is independent of the Expo `apps/mobile` shell described in `DESIGN.md`, which
+remains the plan for a fully native iOS/Android build later.
 
 ## Layout
 

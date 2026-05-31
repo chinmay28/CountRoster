@@ -20,9 +20,9 @@ export function AppLayout() {
 
       {!persistent && (
         <div className="banner banner--warn" role="alert">
-          Your browser isn’t storing data persistently (no cross-origin
-          isolation / OPFS). Anything you log will be lost on reload. See
-          DEPLOYMENT.md for how to enable persistence.
+          This browser can’t store data persistently (OPFS is unavailable, e.g.
+          a private window or an older OS). Anything you log will be lost on
+          reload.
         </div>
       )}
 
