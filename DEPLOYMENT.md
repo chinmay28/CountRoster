@@ -85,6 +85,13 @@ You will need these across all three platforms; pick once, never change:
 
 ## 4. iOS deployment
 
+> **Want it on your iPhone without a paid account first?** The web shell can run
+> on a device via a Capacitor WKWebView + Xcode free provisioning (free Apple ID,
+> no Developer Program). That path — plus how app updates and a later free/paid
+> Developer-account upgrade preserve your data — is documented in
+> [apps/web/README.md](apps/web/README.md#run-on-an-iphone-via-xcode-no-apple-developer-account).
+> The sections below cover the full native (Expo/EAS) App Store pipeline.
+
 ### 4.1 One-time setup
 
 1. **Enroll in Apple Developer Program** (~24-48h for individual accounts to be
@@ -294,23 +301,31 @@ does. Every hosting option below provides automatic HTTPS by default.
 
 ### 6.3 Build
 
-Assuming Next.js with the static export configured (`output: 'export'` in
-`next.config.js`):
+> **As-built note.** The web shell is **Vite + React** (not Next.js as this doc
+> originally sketched). The deployable static bundle is `apps/web/dist/`, and the
+> storage adapter uses sqlite-wasm's **OPFS SAHPool VFS**, which does **not**
+> require cross-origin isolation. So the `Cross-Origin-Embedder-Policy` /
+> `Cross-Origin-Opener-Policy` headers and the `_headers` / `vercel.json` snippets
+> below are **no longer required** — keep them only as optional hardening. Output
+> directory is `dist/`, not `out/`.
+>
+> To run the same bundle on an iPhone via Xcode (Capacitor WKWebView, free
+> provisioning), see [`apps/web/README.md`](apps/web/README.md).
 
 ```bash
-cd apps/web
-npm run build
-# → produces apps/web/out/  (the deployable static bundle)
+npm install
+npm run build --workspace @countroster/core   # core dist/ (the web app imports it)
+npm run build --workspace @countroster/web
+# → produces apps/web/dist/  (the deployable static bundle)
 ```
 
-Required headers for OPFS / WASM to work reliably across browsers:
+Historically these headers were needed for the older OPFS VFS that relied on
+`SharedArrayBuffer`; with the SAHPool VFS they are optional:
 
 ```
 Cross-Origin-Embedder-Policy: require-corp
 Cross-Origin-Opener-Policy:   same-origin
 ```
-
-These get set differently per host; see below.
 
 ### 6.4 Hosting options
 
@@ -331,15 +346,15 @@ leaves the user's device anyway, so the host's policies barely matter.
 1. Push the repo to GitHub.
 2. In the Cloudflare dashboard: Pages → Create a project → Connect to Git.
 3. Pick the repo. Build settings:
-   - Build command: `npm install && npm --workspace=apps/web run build`
-   - Build output directory: `apps/web/out`
+   - Build command: `npm install && npm run build --workspace @countroster/core && npm run build --workspace @countroster/web`
+   - Build output directory: `apps/web/dist`
    - Node version: `22`
-4. Add a `_headers` file in `apps/web/public/`:
+4. *(Optional hardening)* Add a `_headers` file in `apps/web/public/`. Not
+   required for persistence (the SAHPool VFS needs no cross-origin isolation),
+   but harmless:
 
    ```
    /*
-     Cross-Origin-Embedder-Policy: require-corp
-     Cross-Origin-Opener-Policy: same-origin
      X-Frame-Options: DENY
      X-Content-Type-Options: nosniff
      Referrer-Policy: strict-origin-when-cross-origin

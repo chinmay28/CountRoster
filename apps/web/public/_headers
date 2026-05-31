@@ -1,6 +1,0 @@
-# Cross-origin isolation, required for the OPFS-backed sqlite-wasm VFS
-# (it relies on SharedArrayBuffer). Format understood by Netlify/Cloudflare
-# Pages. Other hosts must send equivalent headers — see DEPLOYMENT.md.
-/*
-  Cross-Origin-Opener-Policy: same-origin
-  Cross-Origin-Embedder-Policy: require-corp
