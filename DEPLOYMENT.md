@@ -85,6 +85,13 @@ You will need these across all three platforms; pick once, never change:
 
 ## 4. iOS deployment
 
+> **Want it on your iPhone without a paid account first?** The web shell can run
+> on a device via a Capacitor WKWebView + Xcode free provisioning (free Apple ID,
+> no Developer Program). That path — plus how app updates and a later free/paid
+> Developer-account upgrade preserve your data — is documented in
+> [apps/web/README.md](apps/web/README.md#run-on-an-iphone-via-xcode-no-apple-developer-account).
+> The sections below cover the full native (Expo/EAS) App Store pipeline.
+
 ### 4.1 One-time setup
 
 1. **Enroll in Apple Developer Program** (~24-48h for individual accounts to be

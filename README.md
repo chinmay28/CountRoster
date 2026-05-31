@@ -38,7 +38,12 @@ npm run test    # runs every workspace's Vitest suite
 npm run dev --workspace @countroster/web   # http://localhost:5173
 ```
 
+To run the web shell on an iPhone via Xcode (Capacitor, free Apple ID — no paid
+Developer account), and how updates / Developer-account upgrades keep your data,
+see [apps/web/README.md](./apps/web/README.md#run-on-an-iphone-via-xcode-no-apple-developer-account).
+
 ## Documentation
 
 - [DESIGN.md](./DESIGN.md) — architecture, schema, `@countroster/core` API, roadmap
 - [DEPLOYMENT.md](./DEPLOYMENT.md) — iOS, Android, and web deployment instructions, costs, and gotchas
+- [apps/web/README.md](./apps/web/README.md) — web shell specifics, including running on iPhone via Xcode and keeping data across updates
