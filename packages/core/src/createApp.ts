@@ -41,8 +41,8 @@ export function createApp(
     notes: createNoteService(storage, clock),
     groups: createGroupService(storage, clock),
     reminders: createReminderService(storage, clock),
-    stats: createStatsService(storage),
-    backup: createBackupService(storage),
+    stats: createStatsService(storage, clock),
+    backup: createBackupService(storage, clock),
     migrations: createMigrationRunner(storage),
   };
 }

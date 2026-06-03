@@ -14,7 +14,11 @@ export const manifestSchema = z.object({
   device_id: z.string().optional(),
   row_counts: z.record(z.string(), z.number().int().nonnegative()),
   checksums: z.object({
-    'db.sqlite': z.string().regex(/^sha256:[0-9a-f]{64}$/),
+    // SHA-256 of the canonical serialization of the `tables` payload — the
+    // primary restorable artifact. (The SQL Storage contract has no raw-file
+    // access, so the table dump, not a `db.sqlite` blob, is what we checksum
+    // and restore. It excludes the manifest itself to avoid a circular hash.)
+    tables: z.string().regex(/^sha256:[0-9a-f]{64}$/),
   }),
 });
 
