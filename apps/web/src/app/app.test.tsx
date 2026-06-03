@@ -31,7 +31,7 @@ function renderApp(test: TestCore, initialPath = '/') {
     { initialEntries: [initialPath] },
   );
   return render(
-    <CoreValueProvider value={{ core: test.core, persistent: true }}>
+    <CoreValueProvider value={{ core: test.core, connected: true }}>
       <RouterProvider router={router} />
     </CoreValueProvider>,
   );
