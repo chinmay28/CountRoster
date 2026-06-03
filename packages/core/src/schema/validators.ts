@@ -75,3 +75,30 @@ export const noteInputSchema = z.object({
   occurred_at: z.string().datetime({ offset: true }).optional(),
 });
 export type NoteInput = z.infer<typeof noteInputSchema>;
+
+/** Input to GroupService.create() */
+export const groupInputSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  color: hexColor.optional().nullable(),
+  sort_order: z.number().int().default(0),
+});
+export type GroupInput = z.infer<typeof groupInputSchema>;
+
+/** Input to GroupService.update() — every field optional. */
+export const groupPatchSchema = groupInputSchema.partial();
+export type GroupPatch = z.infer<typeof groupPatchSchema>;
+
+/** Input to ReminderService.create() */
+export const reminderInputSchema = z.object({
+  tracker_id: z.string().min(1),
+  time_minute: z.number().int().min(0).max(1439),
+  days_mask: z.number().int().min(0).max(127).default(127),
+  enabled: z.union([z.literal(0), z.literal(1)]).default(1),
+});
+export type ReminderInput = z.infer<typeof reminderInputSchema>;
+
+/** Input to ReminderService.update() — tracker_id is immutable, so omitted. */
+export const reminderPatchSchema = reminderInputSchema
+  .omit({ tracker_id: true })
+  .partial();
+export type ReminderPatch = z.infer<typeof reminderPatchSchema>;

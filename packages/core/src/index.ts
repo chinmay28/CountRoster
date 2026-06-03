@@ -28,11 +28,19 @@ export {
   entryLogInputSchema,
   entryPatchSchema,
   noteInputSchema,
+  groupInputSchema,
+  groupPatchSchema,
+  reminderInputSchema,
+  reminderPatchSchema,
   type TrackerInput,
   type TrackerPatch,
   type EntryLogInput,
   type EntryPatch,
   type NoteInput,
+  type GroupInput,
+  type GroupPatch,
+  type ReminderInput,
+  type ReminderPatch,
 } from './schema/validators.js';
 
 // Services
@@ -49,9 +57,19 @@ export {
   type NoteService,
   NoteNotFoundError,
 } from './domain/notes.js';
-export type { GroupService } from './domain/groups.js';
-export type { ReminderService } from './domain/reminders.js';
-export type { StatsService, TargetProgress } from './aggregations/stats.js';
+export {
+  type GroupService,
+  GroupNotFoundError,
+} from './domain/groups.js';
+export {
+  type ReminderService,
+  ReminderNotFoundError,
+} from './domain/reminders.js';
+export type {
+  StatsService,
+  StatBucket,
+  TargetProgress,
+} from './aggregations/stats.js';
 
 // Aggregation primitives
 export type { Bucket, BucketPeriod } from './aggregations/periods.js';
