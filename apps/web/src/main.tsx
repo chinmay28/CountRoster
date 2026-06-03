@@ -6,6 +6,7 @@ import { AppLayout } from './app/AppLayout.tsx';
 import { HomePage } from './pages/HomePage.tsx';
 import { TrackerDetailPage } from './pages/TrackerDetailPage.tsx';
 import { TrackerFormPage } from './pages/TrackerFormPage.tsx';
+import { GroupsPage } from './pages/GroupsPage.tsx';
 import { DataPage } from './pages/DataPage.tsx';
 import { NotFoundPage } from './pages/NotFoundPage.tsx';
 import './styles.css';
@@ -23,6 +24,7 @@ const router = createBrowserRouter([
       { path: 'trackers/new', element: <TrackerFormPage /> },
       { path: 'trackers/:id', element: <TrackerDetailPage /> },
       { path: 'trackers/:id/edit', element: <TrackerFormPage /> },
+      { path: 'groups', element: <GroupsPage /> },
       { path: 'data', element: <DataPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],

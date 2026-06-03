@@ -4,6 +4,8 @@ import { useCore } from '../app/CoreContext.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import { EntryList } from '../components/EntryList.tsx';
 import { NotesSection } from '../components/NotesSection.tsx';
+import { StatsPanel } from '../components/StatsPanel.tsx';
+import { RemindersSection } from '../components/RemindersSection.tsx';
 import { formatValue, formatNumber, KIND_LABELS } from '../lib/format.ts';
 import { sumValues } from '../lib/range.ts';
 import { fromDatetimeLocalValue } from '../lib/format.ts';
@@ -25,6 +27,13 @@ export function TrackerDetailPage() {
   const [customValue, setCustomValue] = useState('');
   const [customWhen, setCustomWhen] = useState('');
   const [logging, setLogging] = useState(false);
+  // Bumped on any write so the stats panel re-fetches alongside the entry list.
+  const [statsKey, setStatsKey] = useState(0);
+
+  function refresh() {
+    reload();
+    setStatsKey((k) => k + 1);
+  }
 
   if (loading) return <p className="muted">Loading…</p>;
   if (error) return <p className="error">{error.message}</p>;
@@ -46,7 +55,7 @@ export function TrackerDetailPage() {
     setLogging(true);
     try {
       await core.entries.log(tracker!.id);
-      reload();
+      refresh();
     } finally {
       setLogging(false);
     }
@@ -62,7 +71,7 @@ export function TrackerDetailPage() {
       });
       setCustomValue('');
       setCustomWhen('');
-      reload();
+      refresh();
     } finally {
       setLogging(false);
     }
@@ -103,6 +112,8 @@ export function TrackerDetailPage() {
         <span className="muted">all-time total · {entries.length} entries</span>
       </section>
 
+      <StatsPanel tracker={tracker} refreshKey={statsKey} />
+
       <section className="detail__log">
         <h2>Log an entry</h2>
         <div className="detail__log-row">
@@ -137,8 +148,10 @@ export function TrackerDetailPage() {
 
       <section className="detail__entries">
         <h2>Entries</h2>
-        <EntryList tracker={tracker} entries={entries} onChanged={reload} />
+        <EntryList tracker={tracker} entries={entries} onChanged={refresh} />
       </section>
+
+      <RemindersSection trackerId={tracker.id} />
 
       <NotesSection trackerId={tracker.id} />
     </article>
