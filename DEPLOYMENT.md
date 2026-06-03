@@ -1,14 +1,57 @@
 # countroster — Deployment Guide
 
-This document covers shipping the three apps the project will eventually have:
-**iOS** to the App Store, **Android** to the Play Store, and the **desktop web app**
-to a static host. It assumes the architecture from [`DESIGN.md`](./DESIGN.md) —
-local-first, no backend, SQLite on every device.
-
-> As of this writing, `apps/mobile` and `apps/web` are not yet scaffolded — only
-> `@countroster/core` exists. The instructions below describe the deployment path each
-> app will take once scaffolded, and are written so you can use them as soon as
-> the platform shells are in place.
+> ## ⚠️ Superseded: this app is now client-server
+>
+> CountRoster pivoted from local-first (per-device SQLite, App Store / Play Store
+> native apps) to a **client-server** model: one backend owns the data, and a PWA
+> client serves desktop + mobile. **Deploy the server and the PWA** (next
+> section). Everything after it — the Apple Developer / EAS / TestFlight / Play
+> Console pipeline — describes the original native plan and is kept only for
+> historical reference. You no longer need a paid developer account, EAS, or a
+> static-host-only deploy.
+>
+> ## 0. Deploying CountRoster (server + PWA)
+>
+> The deployable unit is **one Node process** that serves both the REST API and
+> the built PWA from the same origin.
+>
+> ```bash
+> npm ci
+> npm run build --workspace @countroster/core     # compiled core (server & web import it)
+> npm run build --workspace @countroster/web        # → apps/web/dist (the PWA)
+> npm run build --workspace @countroster/server     # → apps/server/dist
+>
+> COUNTROSTER_DB=/var/lib/countroster/db.sqlite \
+> PORT=8787 \
+>   node apps/server/dist/server.js                 # API + PWA on one origin
+> ```
+>
+> - **Persistence is the SQLite file** at `COUNTROSTER_DB`. Back it up (or use the
+>   in-app Data page → bundle / raw SQLite export). Put it on a durable volume.
+> - **No auth** — run it on a trusted network. Expose it over **Tailscale** (a
+>   tailnet IP / MagicDNS `*.ts.net` name, already in the dev/preview allowlist),
+>   a VPN, or a reverse proxy that adds its own access control. Do **not** put it
+>   on the open internet unauthenticated.
+> - **HTTPS / PWA install:** browsers only allow "Add to Home Screen" / service
+>   workers on a secure context (`https://` or `http://localhost`). Tailscale
+>   Serve, a reverse proxy with a cert (Caddy/nginx + Let's Encrypt), or a tunnel
+>   gives you HTTPS.
+> - **Process management:** run under systemd / pm2 / a container; restart on
+>   boot; point `WEB_DIST` at the built client if it isn't the default
+>   `apps/web/dist` relative to the server.
+> - **A reasonable container** runs the three builds above, then
+>   `CMD ["node","apps/server/dist/server.js"]` with the SQLite file on a mounted
+>   volume.
+>
+> ---
+>
+> ## Historical: the original native deployment plan (local-first)
+>
+> The remainder of this document predates the client-server pivot. It assumed the
+> architecture from [`DESIGN.md`](./DESIGN.md) — local-first, no backend, SQLite
+> on every device — and three store apps: **iOS** to the App Store, **Android** to
+> the Play Store, and a static **web app**. None of it is the current path; keep
+> it only as reference if native store distribution is ever revived.
 
 ## 1. What's actually being deployed
 

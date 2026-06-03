@@ -1,5 +1,38 @@
 # CountRoster — Design & Architecture
 
+> ## 0. Architecture revision — client-server (current)
+>
+> **This is the authoritative description of the architecture as built.** The
+> sections below (1–12) are the *original local-first design* and are retained
+> for history/rationale; **where they conflict with this section, this section
+> wins.** Passages that are superseded are flagged inline.
+>
+> CountRoster is now a **client-server** application, not local-first:
+>
+> ```
+> browser PWA (apps/web)  ──HTTP/REST──>  Express API (apps/server)  ──>  @countroster/core  ──>  Storage adapter  ──>  node:sqlite file
+> ```
+>
+> - **One shared dataset.** `apps/server` (Express) owns a single SQLite file and
+>   is the source of truth. Every client — desktop or mobile — reads/writes the
+>   same data through the REST API. `@countroster/core` is unchanged in spirit
+>   (pure TS, SQL-is-the-contract) but runs **on the server**, over the
+>   file-backed `NodeSqliteAdapter`.
+> - **Thin PWA client.** `apps/web` is a mobile-friendly, installable PWA. Its API
+>   client (`src/api/client.ts`) exposes objects that mirror the core's service
+>   interfaces, so the React UI is unchanged by the move from a local core to HTTP.
+> - **No auth, by design.** The server runs on a *trusted network* (LAN /
+>   Tailscale / VPN). This is the "Option B"-adjacent decision: a shared server
+>   replaces backup-and-restore as the multi-device story (cf. §10 Phase 4).
+> - **No native shells.** The Expo (iOS/Android) and sqlite-wasm/OPFS web shells
+>   from the original plan are dropped; the PWA covers mobile + desktop. The
+>   `data model` (§6) and the `backup` format (§8) carry over, with backup now
+>   served by the API rather than written to a device file.
+>
+> Everything below predates this pivot. Read it for the data model, schema,
+> service contracts, and backup format — all still accurate — but treat the
+> "local-first / no server / per-device DB" framing as historical.
+
 ## 1. Overview
 
 We are building a personal "anything tracker" — a small app that lets a user define trackers (habits, medications, symptoms, spending, moods, etc.), tap to log entries, attach journal notes, and visualize trends over time. The model is inspired by [Tally](https://apps.apple.com/us/app/tally-the-anything-tracker/id1090990601) but fixes three gaps users repeatedly call out in its App Store reviews:

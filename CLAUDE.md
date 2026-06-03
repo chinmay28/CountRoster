@@ -4,7 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-CountRoster is a local-first "anything tracker" (habits, meds, symptoms, spending, moods). It will ship on iOS, Android, and web from a shared TypeScript core. `@countroster/core` and the web shell (`apps/web` — a Vite + React SPA) exist today; the mobile shell (`apps/mobile`) is designed but not yet scaffolded. See `DESIGN.md` for the full architecture and roadmap, `DEPLOYMENT.md` for platform deployment notes, and `apps/web/README.md` for web-shell specifics.
+CountRoster is an "anything tracker" (habits, meds, symptoms, spending, moods). It is a **client-server** application: a thin browser client over a shared backend, so every device — desktop or mobile — reads and writes the same data.
+
+- `packages/core` (`@countroster/core`) — the platform-agnostic TypeScript domain layer (schema, services, aggregations, backup). Runs **on the server**.
+- `apps/server` (`@countroster/server`) — an Express REST API that wires the core over a `node:sqlite` file adapter. This SQLite file is the single shared source of truth.
+- `apps/web` (`@countroster/web`) — a mobile-friendly, installable **PWA** (Vite + React) that talks to the server over HTTP and behaves like an app.
+
+> **History:** this project began *local-first* (per-device SQLite; web via sqlite-wasm/OPFS; Expo mobile shells). It was deliberately pivoted to client-server so all clients share one dataset. Parts of `DESIGN.md`/`DEPLOYMENT.md` still describe the old model — they're marked where superseded. There is **no auth** by design: the server is meant to run on a trusted network (LAN/Tailscale/VPN).
+
+See `DESIGN.md` for architecture, `apps/server/README.md` and `apps/web/README.md` for shell specifics.
 
 ## Commands
 
@@ -13,40 +21,51 @@ Run from the repo root (npm workspaces fan out to `packages/*` and `apps/*`):
 ```bash
 npm install          # requires Node >= 20.10; CI/dev uses Node 22
 npm test             # vitest run across all packages
-npm run build        # tsc — typechecks and emits dist/
-npm run typecheck    # tsc --noEmit
+npm run build        # build every workspace (core: tsc; server: tsc; web: vite)
+npm run typecheck    # tsc --noEmit across workspaces
 ```
 
-Inside `packages/core` (or via `npm test --workspace @countroster/core`):
+Run the app in development (two processes; **build core first** so its `dist/` exists):
 
 ```bash
-npm run test:watch                       # vitest watch mode
-npx vitest run test/entries.test.ts      # a single test file
-npx vitest run -t "logs an entry"        # a single test by name
+npm run build --workspace @countroster/core         # the server & web import the compiled core
+npm run dev   --workspace @countroster/server        # API on http://localhost:8787 (COUNTROSTER_DB, PORT, HOST envs)
+npm run dev   --workspace @countroster/web           # PWA on http://localhost:5173, proxies /api → server
 ```
+
+In production, `apps/server` serves the built `apps/web/dist` from the same origin (SPA fallback), so it's one process and no CORS.
+
+Single core test: `npx vitest run test/entries.test.ts` (or `-t "name"`) inside `packages/core`.
 
 There is no linter/formatter configured. TypeScript itself (strict mode) is the static-analysis gate.
 
 ## Architecture
 
-Three layers with strict one-way dependencies. The shells will share **no** business logic — anything used by two shells lives in `@countroster/core`.
+```
+browser PWA (apps/web)  ──HTTP/REST──>  Express API (apps/server)  ──>  @countroster/core  ──>  Storage adapter  ──>  node:sqlite file
+```
 
-```
-@countroster/core (pure TS)  →  Storage adapter (interface)  →  platform SQLite engine
-```
+The client holds **no business logic** — it's a typed HTTP client whose service objects (`apps/web/src/api/client.ts`) mirror the core's service interfaces, so React pages call `core.trackers.list()` etc. regardless of whether that's a local core (tests) or the API client (production). All domain logic lives in `@countroster/core` and runs server-side.
 
 ### The Storage contract is SQL
 
-`Storage` (`src/storage/adapter.ts`) is a ~4-method interface: `exec`, `query<T>`, `transaction`, `close`. **Domain services write raw parameterized SQL; the adapter never parses or rewrites it.** SQL *is* the contract between the domain and whatever engine a platform provides:
+`Storage` (`src/storage/adapter.ts`) is a ~4-method interface: `exec`, `query<T>`, `transaction`, `close`. **Domain services write raw parameterized SQL; the adapter never parses or rewrites it.** SQL *is* the contract between the domain and whatever engine provides it:
 
-- `MemoryAdapter` (`src/storage/memory.ts`) — backed by Node 22's built-in `node:sqlite`, used by tests. Loaded via `process.getBuiltinModule('node:sqlite')` (not a static import) to dodge bundlers that choke on `node:sqlite`.
-- `SQLiteExpoAdapter` / `SQLiteWasmAdapter` — mobile/web, not yet implemented.
-
-Despite the filename "memory", the adapter is `node:sqlite`-based. The `testing.ts` and `sqlite.ts` source comments mention `better-sqlite3`; that's stale — the actual engine is `node:sqlite`.
+- `MemoryAdapter` (`packages/core/src/storage/memory.ts`) — `node:sqlite`, `:memory:`, used by tests.
+- `NodeSqliteAdapter` (`apps/server/src/db/adapter.ts`) — `node:sqlite`, file-backed; the production engine. Same engine as the test adapter, just on disk.
+- Both load `node:sqlite` via `process.getBuiltinModule('node:sqlite')` (not a static import) to dodge bundlers that choke on `node:sqlite`. The `sqlite-expo.ts`/`sqlite-wasm.ts` sketches and the `testing.ts`/`sqlite.ts` `better-sqlite3` comments are stale relics of the local-first era.
 
 ### Composition root
 
-`createApp(storage, { clock? })` in `src/createApp.ts` wires every service over one `Storage` and returns a `CountRosterCore` (`trackers`, `entries`, `notes`, `groups`, `reminders`, `stats`, `backup`, `migrations`). Call it once at startup **after opening the adapter**, then call `app.migrations.run()` to apply pending migrations. `src/index.ts` is the curated public API — anything platform shells need must be re-exported there.
+`createApp(storage, { clock? })` in `src/createApp.ts` wires every service over one `Storage` and returns a `CountRosterCore` (`trackers`, `entries`, `notes`, `groups`, `reminders`, `stats`, `backup`, `migrations`). Call it once at startup **after opening the adapter**, then call `app.migrations.run()` to apply pending migrations. The server's `boot()` (`apps/server/src/boot.ts`) does exactly this. `src/index.ts` is the curated public API — anything the server/client need must be re-exported there.
+
+### Server (`apps/server`)
+
+Express 5, ESM, `NodeNext` module resolution (so the compiled `dist/` runs under Node ESM). `buildApp(core, opts)` (`src/app.ts`) registers the REST routes and a single error middleware that maps `ZodError → 400` and any `*NotFoundError → 404`; everything else is 500. `boot()` opens the file adapter, builds the core, runs migrations. `server.ts` listens and, when `apps/web/dist` exists, serves it from the same origin with an SPA fallback. Endpoints map 1:1 to core services (e.g. `POST /api/trackers`, `GET /api/trackers/:id/stats/streak`, `GET /api/backup/bundle`). `COUNTROSTER_DB=:memory:` is honored as a SQLite sentinel; tests boot against it.
+
+### Client (`apps/web`)
+
+A thin PWA. `src/api/client.ts` builds an `ApiCore` whose `trackers/entries/notes/groups/reminders/stats` objects implement the same interfaces the core exports, each method a `fetch`. `.get(id)` lookups return `null` on 404. `CoreContext` provides this client (production) or a real `MemoryAdapter`-backed core (tests) — they're interchangeable because both satisfy `ApiCore`. **Keep the client's method signatures in lockstep with the core service interfaces**, or the swap breaks. Backup is not part of `ApiCore` (binary streams); it's exposed via standalone helpers (`backupBundleUrl`, `importBackup`). vite-plugin-pwa supplies the manifest/service worker; the SW must **not** cache `/api`.
 
 ### Service layer (`src/domain/`)
 
@@ -57,7 +76,7 @@ Each service is `createXService(storage, clock)` returning a small interface. Pa
 - IDs come from `newId()` (`src/ids.ts`, UUIDv7 — timestamp-sortable).
 - **Never call `Date.now()` / `new Date()` for persisted timestamps.** Go through the injected `Clock` (`src/time.ts`) so tests are deterministic. Timestamps are stored as **ISO 8601 with a local offset** (`toLocalISO`), not UTC `Z` — the offset is needed for correct local-day bucketing.
 
-Fully implemented: `trackers`, `entries`, `notes`. **Stubbed (read-only or throwing TODOs):** `groups` and `reminders` only expose `list`/`forTracker`; `stats` (`src/aggregations/stats.ts`) and the entire `backup` layer (`src/backup/`) throw `"not yet implemented"`. The interfaces are the spec.
+All services are now fully implemented: `trackers`, `entries`, `notes`, `groups` (CRUD + membership), `reminders` (CRUD + toggle), `stats` (`src/aggregations/stats.ts`: `bucket`/`streak`/`targetProgress`), and `backup` (`src/backup/`). The interfaces in each module are the spec.
 
 ### Notes carry an append-only edit log
 
@@ -83,4 +102,5 @@ Fully implemented: `trackers`, `entries`, `notes`. **Stubbed (read-only or throw
 ## Conventions to preserve
 
 - ESM-only (`"type": "module"`). `tsconfig.base.json` is strict with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` — index access yields `T | undefined` (hence the `rows[0]!` / `?? null` patterns), and optional props can't be set to `undefined` explicitly.
-- The core stays platform-agnostic: **no React, no `expo-*`, no `next/*`, no network code** in `packages/core`. Backups are the only data egress.
+- The core stays platform-agnostic: **no React, no HTTP/Express, no network code** in `packages/core`. HTTP belongs to `apps/server`; React/PWA belongs to `apps/web`. The core reaches outside SQL only through `crypto.subtle` (backup checksums), which exists in both Node and browsers.
+- The server is `NodeNext` (real Node ESM, `.js` import extensions in compiled output); the core and web use `bundler` resolution. Keep imports consistent within each package.
