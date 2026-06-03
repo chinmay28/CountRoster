@@ -405,6 +405,72 @@ a {
   font-weight: 600;
 }
 
+/* Plot figures: fill their container and never force horizontal page scroll. */
+.app__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+.chart-fig {
+  width: 100%;
+  overflow-x: auto;
+}
+.chart-fig svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Calendar heatmap (wide; scrolls horizontally on small screens) */
+.heatmap {
+  margin: 1.25rem 0;
+}
+.heatmap__title {
+  font-size: 1rem;
+  margin: 0 0 0.4rem;
+}
+.heatmap__scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.heatmap__legend {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+}
+.heatmap__ramp {
+  width: 80px;
+  height: 10px;
+  border-radius: 3px;
+  background: linear-gradient(to right, #ebedf0, #9be9a8, #40c463, #216e39);
+}
+
+/* Compare-page tracker picker */
+.compare__picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.compare__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.compare__swatch {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+}
+
 /* Home group sections */
 .home-section {
   margin-bottom: 1.5rem;
