@@ -9,7 +9,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? '0.0.0.0';
-const DB_PATH = resolve(process.env.COUNTROSTER_DB ?? './data/countroster.sqlite');
+const DB_ENV = process.env.COUNTROSTER_DB ?? './data/countroster.sqlite';
+// ':memory:' is a SQLite sentinel, not a path — don't resolve it to a file.
+const DB_PATH = DB_ENV === ':memory:' ? ':memory:' : resolve(DB_ENV);
 
 // Where the built web client lives. Defaults to apps/web/dist relative to the
 // compiled server (apps/server/dist/server.js → ../../web/dist).

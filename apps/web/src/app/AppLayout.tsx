@@ -1,9 +1,9 @@
 import { Link, Outlet } from 'react-router-dom';
 import { useCoreContext } from './CoreContext.tsx';
 
-/** App chrome: header, persistence warning, and the routed page outlet. */
+/** App chrome: header, connectivity banner, and the routed page outlet. */
 export function AppLayout() {
-  const { persistent } = useCoreContext();
+  const { connected } = useCoreContext();
 
   return (
     <div className="app">
@@ -12,17 +12,19 @@ export function AppLayout() {
           CountRoster
         </Link>
         <nav className="app__nav">
+          <Link to="/data" className="btn btn--ghost">
+            Data
+          </Link>
           <Link to="/trackers/new" className="btn btn--primary">
             New tracker
           </Link>
         </nav>
       </header>
 
-      {!persistent && (
-        <div className="banner banner--warn" role="alert">
-          This browser can’t store data persistently (OPFS is unavailable, e.g.
-          a private window or an older OS). Anything you log will be lost on
-          reload.
+      {!connected && (
+        <div className="banner banner--warn" role="status">
+          Can’t reach the CountRoster server. Changes won’t be saved until the
+          connection is restored.
         </div>
       )}
 
@@ -31,7 +33,7 @@ export function AppLayout() {
       </main>
 
       <footer className="app__footer">
-        <span>Local-first · your data never leaves this device.</span>
+        <span>Synced to your CountRoster server · the same data on every device.</span>
       </footer>
     </div>
   );

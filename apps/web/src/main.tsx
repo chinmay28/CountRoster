@@ -1,19 +1,20 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createHashRouter, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { CoreProvider } from './app/CoreContext.tsx';
 import { AppLayout } from './app/AppLayout.tsx';
 import { HomePage } from './pages/HomePage.tsx';
 import { TrackerDetailPage } from './pages/TrackerDetailPage.tsx';
 import { TrackerFormPage } from './pages/TrackerFormPage.tsx';
+import { DataPage } from './pages/DataPage.tsx';
 import { NotFoundPage } from './pages/NotFoundPage.tsx';
 import './styles.css';
 
 /**
- * Hash routing keeps the SPA working on any static host without server-side
- * rewrite rules — fitting for a local-first, server-free app.
+ * Browser (history) routing gives clean URLs. The server serves index.html for
+ * any non-API GET (SPA fallback), so deep links and refreshes resolve.
  */
-const router = createHashRouter([
+const router = createBrowserRouter([
   {
     path: '/',
     element: <AppLayout />,
@@ -22,6 +23,7 @@ const router = createHashRouter([
       { path: 'trackers/new', element: <TrackerFormPage /> },
       { path: 'trackers/:id', element: <TrackerDetailPage /> },
       { path: 'trackers/:id/edit', element: <TrackerFormPage /> },
+      { path: 'data', element: <DataPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },
