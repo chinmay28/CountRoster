@@ -42,6 +42,11 @@
 > - **A reasonable container** runs the three builds above, then
 >   `CMD ["node","apps/server/dist/server.js"]` with the SQLite file on a mounted
 >   volume.
+> - **Raspberry Pi / bare-metal systemd:** a turnkey one-command installer and a
+>   seamless, data-safe updater live in
+>   [`deploy/raspberry-pi/`](./deploy/raspberry-pi/QUICKSTART.md). They run the
+>   server as a hardened systemd service with the database on a durable path
+>   outside the app checkout, so upgrades never lose data.
 >
 > ---
 >

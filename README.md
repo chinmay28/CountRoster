@@ -56,6 +56,12 @@ Server env vars: `PORT` (default 8787), `HOST` (default 0.0.0.0), `COUNTROSTER_D
 (SQLite file path; default `./data/countroster.sqlite`), `WEB_DIST` (path to the
 built client).
 
+### Run it 24/7 on a Raspberry Pi
+
+To host CountRoster as an always-on systemd service on a Raspberry Pi 4 — with a
+one-command installer and seamless, data-safe updates — see
+[deploy/raspberry-pi/QUICKSTART.md](./deploy/raspberry-pi/QUICKSTART.md).
+
 ## Testing & checks
 
 ```bash
