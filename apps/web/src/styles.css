@@ -398,6 +398,246 @@ a {
   }
 }
 
+.btn--active {
+  background: var(--primary);
+  color: var(--primary-ink);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+/* Home group sections */
+.home-section {
+  margin-bottom: 1.5rem;
+}
+.home-section__title {
+  font-size: 1rem;
+  color: var(--muted);
+  margin: 0 0 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Stats / charts */
+.stats {
+  margin: 1.5rem 0;
+}
+.stats__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.stats__periods {
+  display: flex;
+  gap: 0.3rem;
+}
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  display: grid;
+  gap: 0.25rem;
+}
+.stat-card__value {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+.stat-card__label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.progress {
+  height: 8px;
+  background: var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 0.35rem;
+}
+.progress__fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.35rem;
+  height: 160px;
+  padding: 0.5rem 0 0;
+  margin-top: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.chart__col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+}
+.chart__bar-track {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.chart__bar {
+  width: 70%;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
+  transition: height 0.25s ease;
+}
+.chart__label {
+  font-size: 0.65rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.chart__empty {
+  padding: 1.5rem 0;
+}
+
+/* Reminders */
+.reminders {
+  margin: 1.5rem 0;
+}
+.reminders__note {
+  font-size: 0.85rem;
+  margin-top: 0;
+}
+.reminders__add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+.reminders__days {
+  display: flex;
+  gap: 0.25rem;
+}
+.day-toggle {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.day-toggle--on {
+  background: var(--primary);
+  color: var(--primary-ink);
+  border-color: transparent;
+  font-weight: 600;
+}
+.reminders__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.reminder {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.reminder--off {
+  opacity: 0.6;
+}
+.reminder__time {
+  font-weight: 700;
+  min-width: 5rem;
+}
+.reminder__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.reminder__enabled {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+/* Groups */
+.groups__create {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin: 1rem 0 1.5rem;
+}
+.groups__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 1rem;
+}
+.group-card {
+  border-left: 4px solid var(--border);
+  display: grid;
+  gap: 0.6rem;
+}
+.group-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.group-card__name {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.group-card__members {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.group-member {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.group-member__dot {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  flex: none;
+}
+.group-member__name {
+  flex: 1;
+}
+.group-card__add {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 @media (max-width: 600px) {
   .detail__custom {
     grid-template-columns: 1fr;

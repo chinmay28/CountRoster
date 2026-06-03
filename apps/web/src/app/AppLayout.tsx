@@ -12,6 +12,9 @@ export function AppLayout() {
           CountRoster
         </Link>
         <nav className="app__nav">
+          <Link to="/groups" className="btn btn--ghost">
+            Groups
+          </Link>
           <Link to="/data" className="btn btn--ghost">
             Data
           </Link>

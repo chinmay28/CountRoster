@@ -1,4 +1,4 @@
-import { toLocalISO, type TimeRange } from '@countroster/core';
+import { toLocalISO, bucketStart, bucketEnd, type TimeRange, type BucketPeriod } from '@countroster/core';
 
 /**
  * The [start, end) ISO range covering the local calendar day that contains
@@ -25,4 +25,25 @@ export function todayRange(now: Date = new Date()): Required<TimeRange> {
 /** Sum the `value` field across rows. */
 export function sumValues(rows: readonly { value: number }[]): number {
   return rows.reduce((acc, r) => acc + r.value, 0);
+}
+
+/**
+ * The [start, end) ISO range covering the most recent `count` buckets of the
+ * given `period`, up to and including the in-progress one. Boundaries are
+ * aligned to the same `weekStart` the core uses so the server's buckets line
+ * up exactly with what we requested.
+ */
+export function lastNBuckets(
+  period: BucketPeriod,
+  count: number,
+  weekStart: 0 | 1 = 1,
+  now: Date = new Date(),
+): Required<TimeRange> {
+  const end = bucketEnd(now, period, weekStart);
+  let start = bucketStart(now, period, weekStart);
+  for (let i = 1; i < count; i++) {
+    // Step into the previous bucket, then normalize to its start.
+    start = bucketStart(new Date(start.getTime() - 1), period, weekStart);
+  }
+  return { start: toLocalISO(start), end: toLocalISO(end) };
 }
