@@ -1,11 +1,21 @@
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCore } from '../app/CoreContext.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import { EntryList } from '../components/EntryList.tsx';
 import { NotesSection } from '../components/NotesSection.tsx';
-import { StatsPanel } from '../components/StatsPanel.tsx';
 import { RemindersSection } from '../components/RemindersSection.tsx';
+
+// Charts pull in Observable Plot (~100KB gzip); load them on demand so the
+// home screen and first paint stay light on mobile.
+const StatsPanel = lazy(() =>
+  import('../components/StatsPanel.tsx').then((m) => ({ default: m.StatsPanel })),
+);
+const CalendarHeatmap = lazy(() =>
+  import('../components/CalendarHeatmap.tsx').then((m) => ({
+    default: m.CalendarHeatmap,
+  })),
+);
 import { formatValue, formatNumber, KIND_LABELS } from '../lib/format.ts';
 import { sumValues } from '../lib/range.ts';
 import { fromDatetimeLocalValue } from '../lib/format.ts';
@@ -112,7 +122,10 @@ export function TrackerDetailPage() {
         <span className="muted">all-time total · {entries.length} entries</span>
       </section>
 
-      <StatsPanel tracker={tracker} refreshKey={statsKey} />
+      <Suspense fallback={<p className="muted">Loading charts…</p>}>
+        <StatsPanel tracker={tracker} refreshKey={statsKey} />
+        <CalendarHeatmap tracker={tracker} refreshKey={statsKey} />
+      </Suspense>
 
       <section className="detail__log">
         <h2>Log an entry</h2>

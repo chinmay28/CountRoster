@@ -7,6 +7,7 @@ import { AppLayout } from './AppLayout.tsx';
 import { HomePage } from '../pages/HomePage.tsx';
 import { TrackerDetailPage } from '../pages/TrackerDetailPage.tsx';
 import { GroupsPage } from '../pages/GroupsPage.tsx';
+import { ComparePage } from '../pages/ComparePage.tsx';
 import { NotFoundPage } from '../pages/NotFoundPage.tsx';
 import { makeTestCore, type TestCore } from '../test/makeTestCore.ts';
 
@@ -20,6 +21,7 @@ function renderApp(test: TestCore, initialPath = '/') {
           { index: true, element: <HomePage /> },
           { path: 'trackers/:id', element: <TrackerDetailPage /> },
           { path: 'groups', element: <GroupsPage /> },
+          { path: 'compare', element: <ComparePage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },
@@ -123,5 +125,26 @@ describe('groups', () => {
     renderApp(test, '/');
     expect(await screen.findByText('Habits')).toBeInTheDocument();
     expect(await screen.findByText('Reading')).toBeInTheDocument();
+  });
+});
+
+describe('compare page', () => {
+  it('renders a comparison chart for trackers with data', async () => {
+    const a = await test.createTracker({ name: 'Water', kind: 'number' });
+    const b = await test.createTracker({ name: 'Coffee', kind: 'number' });
+    await test.core.entries.log(a.id, { value: 3 });
+    await test.core.entries.log(b.id, { value: 1 });
+
+    renderApp(test, '/compare');
+
+    // The picker lists both trackers (checkboxes), defaulted on.
+    expect(await screen.findByText('Compare trackers')).toBeInTheDocument();
+    const boxes = await screen.findAllByRole('checkbox');
+    expect(boxes.length).toBeGreaterThanOrEqual(2);
+
+    // With both selected and data present, the comparison figure renders.
+    expect(
+      await screen.findByRole('img', { name: /tracker comparison over time/i }),
+    ).toBeInTheDocument();
   });
 });

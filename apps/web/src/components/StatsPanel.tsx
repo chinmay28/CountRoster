@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import * as Plot from '@observablehq/plot';
 import type { Tracker, BucketPeriod } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import { formatValue } from '../lib/format.ts';
 import { lastNBuckets } from '../lib/range.ts';
+import { PlotFigure } from './PlotFigure.tsx';
 
 /** How many buckets to show per period, and the toggle label. */
 const PERIODS: { period: BucketPeriod; label: string; count: number }[] = [
@@ -108,36 +110,47 @@ interface BucketChartProps {
   period: BucketPeriod;
 }
 
-/** A dependency-free CSS column chart of bucketed values. */
+/** A bucketed bar chart (Observable Plot) with axes and hover tooltips. */
 function BucketChart({ tracker, buckets, period }: BucketChartProps) {
   const max = buckets.reduce((m, b) => Math.max(m, b.value), 0);
+
+  const options = useMemo<Plot.PlotOptions>(() => {
+    const data = buckets.map((b) => ({
+      bucket: labelFor(b.start, period),
+      label: b.label,
+      value: b.value,
+      pretty: formatValue(tracker, b.value),
+    }));
+    return {
+      height: 200,
+      marginLeft: 48,
+      marginBottom: 30,
+      x: { label: null },
+      y: { label: tracker.unit ?? null, grid: true, ticks: 4 },
+      marks: [
+        Plot.barY(data, {
+          x: 'bucket',
+          y: 'value',
+          fill: tracker.color,
+          title: (d: { label: string; pretty: string }) => `${d.label}: ${d.pretty}`,
+          tip: true,
+        }),
+        Plot.ruleY([0]),
+      ],
+    };
+    // tracker.kind affects formatValue output; include it so tips stay correct.
+  }, [buckets, period, tracker.color, tracker.unit, tracker.kind, tracker.name]);
 
   if (buckets.length === 0 || max === 0) {
     return <p className="muted chart__empty">No entries logged in this range yet.</p>;
   }
 
   return (
-    <div
-      className="chart"
-      role="img"
-      aria-label={`${tracker.name} totals by ${period}`}
-    >
-      {buckets.map((b) => {
-        const heightPct = max > 0 ? (b.value / max) * 100 : 0;
-        return (
-          <div className="chart__col" key={b.label}>
-            <div className="chart__bar-track">
-              <div
-                className="chart__bar"
-                style={{ height: `${heightPct}%`, background: tracker.color }}
-                title={`${formatValue(tracker, b.value)} · ${b.label}`}
-              />
-            </div>
-            <span className="chart__label">{labelFor(b.start, period)}</span>
-          </div>
-        );
-      })}
-    </div>
+    <PlotFigure
+      className="chart-fig"
+      options={options}
+      ariaLabel={`${tracker.name} totals by ${period}`}
+    />
   );
 }
 

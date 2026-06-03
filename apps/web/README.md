@@ -14,6 +14,10 @@ the server, so every device that points at the same server sees the same data.
   manifest + service worker for installability and an app-like standalone window.
   The service worker precaches the app shell but **never** caches `/api` — data is
   always live.
+- **Charts** via [Observable Plot](https://observablehq.com/plot/): a `PlotFigure`
+  wrapper renders Plot specs into React, sized to its container (ResizeObserver) so
+  charts fit a phone. Plot is **code-split** — it loads only when you open a tracker
+  detail or the Compare page, keeping the home screen's first paint light.
 - **No local database.** The old sqlite-wasm/OPFS adapter is gone; the only state
   here is UI state.
 
@@ -63,7 +67,16 @@ src/
 ## What's implemented
 
 Tracker list / create / edit / archive, tap-to-log and custom/backdated logging,
-entry edit & delete, editable journal notes with per-note edit history, and a Data
-page for backup export (bundle / raw SQLite) and restore. Charts, groups, and
-reminders have full backend support and API endpoints; richer UI for them can be
-layered on without further core work.
+entry edit & delete, and editable journal notes with per-note edit history.
+
+Visualizations & organization:
+
+- **Trends** — a bucketed bar chart (day/week/month/year) with axes and tooltips,
+  a current/longest day-streak card, and a target-progress bar, on each tracker.
+- **Calendar heatmap** — a GitHub-style daily-activity grid for the last ~year.
+- **Compare** (`/compare`) — a multi-series line chart comparing several trackers
+  over time, with a tracker picker and period toggle.
+- **Groups** (`/groups`) — organize trackers into groups; the home screen renders
+  them under group headings.
+- **Reminders** — per-tracker reminder schedules (time + days), on the detail page.
+- **Data** (`/data`) — backup export (bundle / raw SQLite) and restore.
