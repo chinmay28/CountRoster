@@ -15,10 +15,9 @@ interface TrackerCardProps {
 }
 
 /**
- * Home-screen card: shows today's total and a one-tap log button that
- * increments by the tracker's default value (DESIGN §3.2 "Tap to log").
- * Tapping the chevron opens a small panel to log a *custom* value and,
- * optionally, attach a note to that very entry.
+ * Home-screen card: shows the tracker's running total and a single log button.
+ * Tapping it opens a compact panel to enter a value (blank falls back to the
+ * tracker's default) and, optionally, a note attached to that very entry.
  */
 export function TrackerCard({ tracker, todayTotal, onLogged }: TrackerCardProps) {
   const core = useCore();
@@ -27,18 +26,8 @@ export function TrackerCard({ tracker, todayTotal, onLogged }: TrackerCardProps)
   const [value, setValue] = useState('');
   const [note, setNote] = useState('');
 
-  // Tint the count button with the tracker's own color (readable ink on top).
+  // Tint the log button with the tracker's own color (readable ink on top).
   const accent = { background: tracker.color, color: readableInk(tracker.color) };
-
-  async function quickLog() {
-    setBusy(true);
-    try {
-      await core.entries.log(tracker.id);
-      onLogged();
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function customLog(e: React.FormEvent) {
     e.preventDefault();
@@ -76,23 +65,14 @@ export function TrackerCard({ tracker, todayTotal, onLogged }: TrackerCardProps)
         <div className="tracker-card__actions">
           <button
             type="button"
-            className="btn btn--log"
+            className="btn btn--log tracker-card__log-toggle"
             style={accent}
-            onClick={quickLog}
-            disabled={busy}
-            aria-label={`Log ${tracker.name}`}
-          >
-            +{tracker.default_value}
-          </button>
-          <button
-            type="button"
-            className="btn btn--small tracker-card__custom-toggle"
             onClick={() => setCustomOpen((o) => !o)}
             aria-expanded={customOpen}
-            aria-label={`Log a custom value for ${tracker.name}`}
-            title="Custom value"
+            aria-label={`Log ${tracker.name}`}
+            title="Log an entry"
           >
-            {customOpen ? '×' : '⋯'}
+            {customOpen ? '×' : '+'}
           </button>
         </div>
       </div>

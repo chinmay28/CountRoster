@@ -9,8 +9,10 @@
   --danger: #ef4444;
   --warn-bg: #fef3c7;
   --warn-ink: #92400e;
-  --radius: 10px;
+  --radius: 12px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.16);
+  --tab-bar-height: 4rem;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
 
@@ -55,14 +57,29 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 0;
+  gap: 0.75rem;
+  padding: 0.85rem 0;
   border-bottom: 1px solid var(--border);
+  /* Keep the brand + nav reachable while scrolling long timelines. */
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
 }
 
 .app__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   font-weight: 700;
   font-size: 1.25rem;
   text-decoration: none;
+}
+.app__brand-mark {
+  color: var(--primary);
+  font-size: 1.15rem;
+  line-height: 1;
 }
 
 .app__main {
@@ -76,6 +93,73 @@ a {
   color: var(--muted);
   font-size: 0.85rem;
   text-align: center;
+}
+
+/* Floating action button + mobile tab bar: hidden on wide screens, where the
+   header nav already carries navigation and the "New tracker" button. */
+.fab,
+.tab-bar {
+  display: none;
+}
+
+.fab {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom) + 0.9rem);
+  z-index: 30;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-ink);
+  box-shadow: var(--shadow-lg);
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.fab:active {
+  transform: scale(0.93);
+  filter: brightness(0.96);
+}
+.fab svg {
+  width: 1.6rem;
+  height: 1.6rem;
+}
+
+.tab-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: stretch;
+  height: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: saturate(1.4) blur(12px);
+  border-top: 1px solid var(--border);
+}
+.tab-bar__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 500;
+  -webkit-tap-highlight-color: transparent;
+}
+.tab-bar__item--active {
+  color: var(--primary);
+}
+.tab-bar__icon svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  display: block;
 }
 
 /* Boot / banners */
@@ -119,6 +203,9 @@ a {
 .btn:hover:not(:disabled) {
   filter: brightness(0.97);
 }
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
 .btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -151,6 +238,16 @@ a {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 1rem;
+}
+
+.tracker-card {
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+@media (hover: hover) {
+  .tracker-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+  }
 }
 
 .tracker-grid {
@@ -193,8 +290,15 @@ a {
   align-items: center;
   gap: 0.4rem;
 }
-.tracker-card__custom-toggle {
-  align-self: stretch;
+/* Single round "+" log button: clean, thumb-sized, tinted to the tracker. */
+.tracker-card__log-toggle {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.4rem;
+  line-height: 1;
+  justify-content: center;
 }
 .tracker-card__custom {
   display: flex;
@@ -787,19 +891,101 @@ a {
   align-items: center;
 }
 
-@media (max-width: 600px) {
+/* ------------------------------------------------------------------ *
+ * Mobile: ≤ 720px swaps the header nav for a bottom tab bar + FAB,
+ * enlarges tap targets, and gives forms room to breathe.
+ * ------------------------------------------------------------------ */
+@media (max-width: 720px) {
+  /* The header keeps only the brand; navigation moves to the tab bar. */
+  .app__nav {
+    display: none;
+  }
+  .fab,
+  .tab-bar {
+    display: grid;
+  }
+  .fab {
+    display: flex;
+  }
+
+  /* Leave room so the fixed tab bar never covers the footer or content. */
+  .app__main {
+    padding-bottom: 1rem;
+  }
+  .app__footer {
+    margin-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+  }
+
   .detail__custom {
     grid-template-columns: 1fr;
   }
-  /* Comfortable tap targets and a wrap-friendly header on phones. */
-  .app__header {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
+
+  /* Comfortable 44px+ tap targets across interactive controls. */
   .btn {
-    padding: 0.6rem 1rem;
+    padding: 0.65rem 1rem;
+    min-height: 2.75rem;
   }
+  .btn--small {
+    min-height: 2.25rem;
+    padding: 0.4rem 0.7rem;
+  }
+
+  /* 16px inputs stop iOS Safari from zooming in on focus. */
+  .field input,
+  .field select,
+  .field textarea,
+  .notes__add textarea,
+  .entry input,
+  .tracker-card__custom input,
+  .tracker-card__custom textarea,
+  .entry__add-note textarea {
+    font-size: 16px;
+    min-height: 2.75rem;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+  }
+  .form {
+    max-width: none;
+  }
+
+  /* Stack the detail header so the title isn't squeezed by its actions. */
+  .detail__header {
+    flex-direction: column;
+  }
+  .detail__header-actions {
+    align-self: stretch;
+  }
+  .detail__header-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  /* Editing an entry inline: let the inputs use the full row width. */
+  .entry--editing input {
+    flex: 1 1 8rem;
+    min-width: 0;
+  }
+}
+
+/* Two-up tracker cards on phones; single column on the very narrowest. */
+@media (max-width: 720px) {
   .tracker-grid {
     grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+}
+@media (max-width: 380px) {
+  .tracker-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Honour users who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
   }
 }
