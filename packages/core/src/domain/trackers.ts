@@ -14,6 +14,7 @@ export interface TrackerService {
   update(id: string, patch: TrackerPatch): Promise<Tracker>;
   archive(id: string): Promise<void>;
   unarchive(id: string): Promise<void>;
+  delete(id: string): Promise<void>;
   reorder(orderedIds: readonly string[]): Promise<void>;
   get(id: string): Promise<Tracker | null>;
   list(opts?: { includeArchived?: boolean }): Promise<Tracker[]>;
@@ -133,6 +134,12 @@ class TrackerServiceImpl implements TrackerService {
       `UPDATE trackers SET archived_at = NULL, updated_at = ? WHERE id = ?`,
       [now, id],
     );
+  }
+
+  async delete(id: string): Promise<void> {
+    // Permanent, unlike archive(). Entries, notes (and their edit log),
+    // options, reminders, and group memberships cascade via ON DELETE CASCADE.
+    await this.storage.exec(`DELETE FROM trackers WHERE id = ?`, [id]);
   }
 
   async reorder(orderedIds: readonly string[]): Promise<void> {

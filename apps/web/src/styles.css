@@ -47,7 +47,13 @@ a {
 .app {
   max-width: 960px;
   margin: 0 auto;
+  /* Dynamic viewport height (dvh) tracks the *visible* area as mobile browser
+     toolbars expand/collapse. Plain 100vh is the large viewport, which on
+     short, non-scrolling pages (e.g. Data) leaves the fixed bottom tab bar
+     stranded behind the browser's bottom toolbar. The 100vh first line is the
+     fallback for engines without dvh. */
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   padding: 0 1rem;
@@ -601,6 +607,41 @@ a {
   background: color-mix(in srgb, var(--primary) 25%, transparent);
   padding: 0.5rem 0.75rem;
   border-radius: var(--radius);
+}
+
+.archived-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.archived-list__item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.archived-list__swatch {
+  flex: none;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+}
+.archived-list__meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.archived-list__name {
+  font-weight: 600;
+}
+.archived-list__actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.5rem;
 }
 
 /* Respect notched-device safe areas when installed as a standalone PWA. */

@@ -4,6 +4,7 @@ import {
   backupSqliteUrl,
   importBackup,
 } from '../api/client.ts';
+import { ArchivedTrackers } from '../components/ArchivedTrackers.tsx';
 
 /**
  * Backup & restore. Backups are the documented egress point: download a
@@ -81,6 +82,8 @@ export function DataPage() {
         {message && <p className="data__ok">{message}</p>}
         {error && <p className="error">{error}</p>}
       </section>
+
+      <ArchivedTrackers />
     </section>
   );
 }

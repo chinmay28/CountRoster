@@ -59,6 +59,10 @@ export function buildApp(
     await core.trackers.unarchive(req.params.id);
     res.status(204).end();
   });
+  api.delete('/trackers/:id', async (req, res) => {
+    await core.trackers.delete(req.params.id);
+    res.status(204).end();
+  });
 
   // ---- Entries ------------------------------------------------------------
   api.get('/trackers/:id/entries', async (req, res) => {

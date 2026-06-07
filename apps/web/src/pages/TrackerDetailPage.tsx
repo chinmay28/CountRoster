@@ -124,7 +124,7 @@ export function TrackerDetailPage() {
   }
 
   async function archive() {
-    if (!confirm(`Archive "${tracker!.name}"? You can restore it later.`)) return;
+    if (!confirm(`Archive "${tracker!.name}"? You can restore it later from the Data page.`)) return;
     await core.trackers.archive(tracker!.id);
     navigate('/');
   }
