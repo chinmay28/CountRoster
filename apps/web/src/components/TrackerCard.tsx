@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Tracker } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
-import { formatValue } from '../lib/format.ts';
+import { formatValue, fromDatetimeLocalValue } from '../lib/format.ts';
 import { RESET_PERIOD_LABEL } from '../lib/range.ts';
 import { readableInk } from '../lib/color.ts';
 
@@ -24,6 +24,7 @@ export function TrackerCard({ tracker, todayTotal, onLogged }: TrackerCardProps)
   const [busy, setBusy] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   const [value, setValue] = useState('');
+  const [when, setWhen] = useState('');
   const [note, setNote] = useState('');
 
   // Tint the log button with the tracker's own color (readable ink on top).
@@ -33,17 +34,21 @@ export function TrackerCard({ tracker, todayTotal, onLogged }: TrackerCardProps)
     e.preventDefault();
     setBusy(true);
     try {
+      const occurredAt = when ? fromDatetimeLocalValue(when) : undefined;
       const entry = await core.entries.log(tracker.id, {
         ...(value.trim() ? { value: Number(value) } : {}),
+        ...(occurredAt ? { occurred_at: occurredAt } : {}),
       });
       if (note.trim()) {
         await core.notes.create({
           tracker_id: tracker.id,
           entry_id: entry.id,
           body: note.trim(),
+          ...(occurredAt ? { occurred_at: occurredAt } : {}),
         });
       }
       setValue('');
+      setWhen('');
       setNote('');
       setCustomOpen(false);
       onLogged();
@@ -53,7 +58,10 @@ export function TrackerCard({ tracker, todayTotal, onLogged }: TrackerCardProps)
   }
 
   return (
-    <div className="card tracker-card" style={{ borderTopColor: tracker.color }}>
+    <div
+      className={`card tracker-card${customOpen ? ' tracker-card--logging' : ''}`}
+      style={{ borderTopColor: tracker.color }}
+    >
       <div className="tracker-card__top">
         <Link to={`/trackers/${tracker.id}`} className="tracker-card__body">
           <span className="tracker-card__name">{tracker.name}</span>
@@ -79,21 +87,35 @@ export function TrackerCard({ tracker, todayTotal, onLogged }: TrackerCardProps)
 
       {customOpen && (
         <form className="tracker-card__custom" onSubmit={customLog}>
-          <input
-            type="number"
-            step="any"
-            inputMode="decimal"
-            placeholder={`Value (default ${tracker.default_value})`}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            autoFocus
-          />
-          <textarea
-            rows={2}
-            placeholder="Note (optional)"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-          />
+          <label className="field tracker-card__field-value">
+            <span>Value</span>
+            <input
+              type="number"
+              step="any"
+              inputMode="decimal"
+              placeholder={`Default ${tracker.default_value}`}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              autoFocus
+            />
+          </label>
+          <label className="field tracker-card__field-when">
+            <span>When (optional)</span>
+            <input
+              type="datetime-local"
+              value={when}
+              onChange={(e) => setWhen(e.target.value)}
+            />
+          </label>
+          <label className="field tracker-card__field-note">
+            <span>Note (optional)</span>
+            <textarea
+              rows={2}
+              placeholder="Describe this entry…"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </label>
           <button type="submit" className="btn btn--primary btn--small" disabled={busy}>
             Log
           </button>
