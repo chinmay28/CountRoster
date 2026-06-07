@@ -303,12 +303,23 @@ a {
   line-height: 1;
   justify-content: center;
 }
+/* While a card's quick-log form is open, let it span the full grid width so
+   the value/when/note inputs have room to breathe. */
+.tracker-card--logging {
+  grid-column: 1 / -1;
+}
 .tracker-card__custom {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem 0.75rem;
+  align-items: end;
   border-top: 1px solid var(--border);
   padding-top: 0.75rem;
+}
+/* The note and submit button stretch across both columns. */
+.tracker-card__field-note,
+.tracker-card__custom .btn--primary {
+  grid-column: 1 / -1;
 }
 .tracker-card__custom input,
 .tracker-card__custom textarea {
@@ -322,7 +333,7 @@ a {
   resize: vertical;
 }
 .tracker-card__custom .btn--primary {
-  align-self: flex-end;
+  justify-self: end;
 }
 
 /* Typography helpers */
