@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { Entry, Note, Tracker } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
-import { NoteItem } from './NoteItem.tsx';
 import {
   formatValue,
   formatDateTime,
@@ -17,8 +16,8 @@ interface EntryListProps {
   onChanged: () => void;
 }
 
-/** Recent entries with inline edit (value + backdate), delete, and the notes
- * that describe each entry shown right beneath it. */
+/** Recent entries with a single inline edit (value, backdate, and the one note
+ * describing the entry) and delete. The entry's note is shown right beneath it. */
 export function EntryList({ tracker, entries, notesByEntry, onChanged }: EntryListProps) {
   if (entries.length === 0) {
     return <p className="muted">No entries yet. Log one above.</p>;
@@ -33,7 +32,7 @@ export function EntryList({ tracker, entries, notesByEntry, onChanged }: EntryLi
             key={entry.id}
             tracker={tracker}
             entry={entry}
-            notes={notesByEntry?.get(entry.id) ?? []}
+            note={notesByEntry?.get(entry.id)?.[0] ?? null}
             onChanged={onChanged}
           />
         ))}
@@ -44,48 +43,53 @@ export function EntryList({ tracker, entries, notesByEntry, onChanged }: EntryLi
 function EntryRow({
   tracker,
   entry,
-  notes,
+  note,
   onChanged,
 }: {
   tracker: Tracker;
   entry: Entry;
-  notes: Note[];
+  /** The single note describing this entry, if any. */
+  note: Note | null;
   onChanged: () => void;
 }) {
   const core = useCore();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(String(entry.value));
   const [when, setWhen] = useState(toDatetimeLocalValue(entry.occurred_at));
+  const [noteBody, setNoteBody] = useState(note?.body ?? '');
   const [busy, setBusy] = useState(false);
-  const [noteDraft, setNoteDraft] = useState('');
-  const [addingNote, setAddingNote] = useState(false);
 
-  async function addNote(e: React.FormEvent) {
-    e.preventDefault();
-    if (!noteDraft.trim()) return;
-    setBusy(true);
-    try {
-      await core.notes.create({
-        tracker_id: tracker.id,
-        entry_id: entry.id,
-        body: noteDraft.trim(),
-        occurred_at: entry.occurred_at,
-      });
-      setNoteDraft('');
-      setAddingNote(false);
-      onChanged();
-    } finally {
-      setBusy(false);
-    }
+  function startEditing() {
+    setValue(String(entry.value));
+    setWhen(toDatetimeLocalValue(entry.occurred_at));
+    setNoteBody(note?.body ?? '');
+    setEditing(true);
   }
 
   async function save() {
     setBusy(true);
     try {
+      const occurredAt = fromDatetimeLocalValue(when);
       await core.entries.update(entry.id, {
         value: Number(value),
-        occurred_at: fromDatetimeLocalValue(when),
+        occurred_at: occurredAt,
       });
+      // A single note per entry, edited right here in the entry's edit flow.
+      const body = noteBody.trim();
+      if (note) {
+        if (!body) {
+          await core.notes.delete(note.id);
+        } else if (body !== note.body) {
+          await core.notes.update(note.id, { body });
+        }
+      } else if (body) {
+        await core.notes.create({
+          tracker_id: tracker.id,
+          entry_id: entry.id,
+          body,
+          occurred_at: occurredAt,
+        });
+      }
       setEditing(false);
       onChanged();
     } finally {
@@ -107,16 +111,25 @@ function EntryRow({
   if (editing) {
     return (
       <li className="entry entry--editing">
-        <input
-          type="number"
-          step="any"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-        />
-        <input
-          type="datetime-local"
-          value={when}
-          onChange={(e) => setWhen(e.target.value)}
+        <div className="entry__edit-fields">
+          <input
+            type="number"
+            step="any"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+          <input
+            type="datetime-local"
+            value={when}
+            onChange={(e) => setWhen(e.target.value)}
+          />
+        </div>
+        <textarea
+          className="entry__note-input"
+          rows={2}
+          placeholder="Note (optional)…"
+          value={noteBody}
+          onChange={(e) => setNoteBody(e.target.value)}
         />
         <div className="entry__actions">
           <button className="btn btn--small" onClick={() => setEditing(false)} disabled={busy}>
@@ -136,15 +149,8 @@ function EntryRow({
         <span className="entry__value">{formatValue(tracker, entry.value)}</span>
         <span className="entry__time muted">{formatDateTime(entry.occurred_at)}</span>
         <div className="entry__actions">
-          <button className="btn btn--small" onClick={() => setEditing(true)}>
+          <button className="btn btn--small" onClick={startEditing}>
             Edit
-          </button>
-          <button
-            className="btn btn--small"
-            onClick={() => setAddingNote((a) => !a)}
-            aria-expanded={addingNote}
-          >
-            Note
           </button>
           <button className="btn btn--small btn--danger" onClick={remove} disabled={busy}>
             Delete
@@ -152,32 +158,7 @@ function EntryRow({
         </div>
       </div>
 
-      {addingNote && (
-        <form className="entry__add-note" onSubmit={addNote}>
-          <textarea
-            rows={2}
-            placeholder="Note about this entry…"
-            value={noteDraft}
-            onChange={(e) => setNoteDraft(e.target.value)}
-            autoFocus
-          />
-          <button
-            type="submit"
-            className="btn btn--small btn--primary"
-            disabled={busy || !noteDraft.trim()}
-          >
-            Add
-          </button>
-        </form>
-      )}
-
-      {notes.length > 0 && (
-        <ul className="entry__notes notes__list">
-          {notes.map((note) => (
-            <NoteItem key={note.id} note={note} onChanged={onChanged} />
-          ))}
-        </ul>
-      )}
+      {note && <p className="entry__note">{note.body}</p>}
     </li>
   );
 }
