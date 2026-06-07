@@ -137,7 +137,7 @@ export function NoteItem({ note, onChanged }: { note: Note; onChanged: () => voi
   );
 }
 
-function NoteHistory({ noteId }: { noteId: string }) {
+export function NoteHistory({ noteId }: { noteId: string }) {
   const core = useCore();
   const { data, loading, error } = useAsync<NoteEdit[]>(
     () => core.notes.history(noteId),

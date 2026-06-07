@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Entry, Note, Tracker } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
+import { NoteHistory } from './NoteItem.tsx';
 import {
   formatValue,
   formatDateTime,
@@ -57,12 +58,14 @@ function EntryRow({
   const [value, setValue] = useState(String(entry.value));
   const [when, setWhen] = useState(toDatetimeLocalValue(entry.occurred_at));
   const [noteBody, setNoteBody] = useState(note?.body ?? '');
+  const [showHistory, setShowHistory] = useState(false);
   const [busy, setBusy] = useState(false);
 
   function startEditing() {
     setValue(String(entry.value));
     setWhen(toDatetimeLocalValue(entry.occurred_at));
     setNoteBody(note?.body ?? '');
+    setShowHistory(false);
     setEditing(true);
   }
 
@@ -132,6 +135,15 @@ function EntryRow({
           onChange={(e) => setNoteBody(e.target.value)}
         />
         <div className="entry__actions">
+          {note && (
+            <button
+              className="btn btn--small"
+              onClick={() => setShowHistory((s) => !s)}
+              aria-expanded={showHistory}
+            >
+              History
+            </button>
+          )}
           <button className="btn btn--small" onClick={() => setEditing(false)} disabled={busy}>
             Cancel
           </button>
@@ -139,6 +151,7 @@ function EntryRow({
             Save
           </button>
         </div>
+        {note && showHistory && <NoteHistory noteId={note.id} />}
       </li>
     );
   }
