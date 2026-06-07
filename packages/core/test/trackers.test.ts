@@ -71,6 +71,27 @@ describe('TrackerService', () => {
     expect(all.map((t) => t.id).sort()).toEqual([a.id, b.id].sort());
   });
 
+  it('delete permanently removes the tracker and cascades its data', async () => {
+    const { app } = await makeTestApp();
+    const t = await app.trackers.create({ name: 'Temp' });
+    const entry = await app.entries.log(t.id);
+    await app.notes.create({ tracker_id: t.id, entry_id: entry.id, body: 'hi' });
+
+    await app.trackers.delete(t.id);
+
+    expect(await app.trackers.get(t.id)).toBeNull();
+    const all = await app.trackers.list({ includeArchived: true });
+    expect(all.map((x) => x.id)).not.toContain(t.id);
+    // Dependent rows cascade away with the tracker.
+    expect(await app.entries.get(entry.id)).toBeNull();
+    expect(await app.notes.forTracker(t.id)).toEqual([]);
+  });
+
+  it('delete is a no-op for an unknown id', async () => {
+    const { app } = await makeTestApp();
+    await expect(app.trackers.delete('nope')).resolves.toBeUndefined();
+  });
+
   it('reorder rewrites sort_order in the given sequence', async () => {
     const { app } = await makeTestApp();
     const a = await app.trackers.create({ name: 'A', sort_order: 0 });

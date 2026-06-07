@@ -111,6 +111,7 @@ export function createApiClient(baseUrl = '/api'): ApiCore {
     update: (id, patch: TrackerPatch) => request('PATCH', `/trackers/${id}`, patch),
     archive: (id) => request('POST', `/trackers/${id}/archive`),
     unarchive: (id) => request('POST', `/trackers/${id}/unarchive`),
+    delete: (id) => request('DELETE', `/trackers/${id}`),
     reorder: (orderedIds) => request('POST', '/trackers/reorder', { orderedIds }),
   };
 

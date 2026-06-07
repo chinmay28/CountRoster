@@ -39,7 +39,7 @@ All routes are under `/api`. JSON in/out; errors are `{ error, issues? }` with
 
 | Area      | Examples                                                                                  |
 |-----------|-------------------------------------------------------------------------------------------|
-| Trackers  | `GET/POST /trackers`, `GET/PATCH /trackers/:id`, `POST /trackers/:id/{archive,unarchive}`, `POST /trackers/reorder` |
+| Trackers  | `GET/POST /trackers`, `GET/PATCH/DELETE /trackers/:id`, `POST /trackers/:id/{archive,unarchive}`, `POST /trackers/reorder` |
 | Entries   | `GET/POST /trackers/:id/entries`, `GET/PATCH/DELETE /entries/:id`                          |
 | Notes     | `POST /notes`, `GET/PATCH/DELETE /notes/:id`, `GET /notes/:id/history`, `GET /trackers/:id/notes` |
 | Groups    | `GET/POST /groups`, `GET/PATCH/DELETE /groups/:id`, `GET/POST/DELETE /groups/:id/trackers[/:trackerId]`, `POST /groups/:id/reorder` |

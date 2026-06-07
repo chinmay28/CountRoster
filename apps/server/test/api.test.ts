@@ -77,6 +77,28 @@ describe('CountRoster API', () => {
     expect(history[0].prev_body).toBe('first');
   });
 
+  it('archives, restores, then permanently deletes a tracker', async () => {
+    const tracker = await (await api.post('/api/trackers', { name: 'Temp' })).json();
+
+    // Archive hides it from the default list but keeps it with includeArchived.
+    expect((await api.post(`/api/trackers/${tracker.id}/archive`)).status).toBe(204);
+    const active = await (await api.get('/api/trackers')).json();
+    expect(active.map((t: { id: string }) => t.id)).not.toContain(tracker.id);
+    const archived = await (await api.get('/api/trackers?includeArchived=1')).json();
+    expect(archived.map((t: { id: string }) => t.id)).toContain(tracker.id);
+
+    // Restore brings it back to the active list.
+    expect((await api.post(`/api/trackers/${tracker.id}/unarchive`)).status).toBe(204);
+    const restored = await (await api.get('/api/trackers')).json();
+    expect(restored.map((t: { id: string }) => t.id)).toContain(tracker.id);
+
+    // Delete removes it for good.
+    expect((await api.del(`/api/trackers/${tracker.id}`)).status).toBe(204);
+    expect((await api.get(`/api/trackers/${tracker.id}`)).status).toBe(404);
+    const gone = await (await api.get('/api/trackers?includeArchived=1')).json();
+    expect(gone.map((t: { id: string }) => t.id)).not.toContain(tracker.id);
+  });
+
   it('returns 404 for an unknown tracker', async () => {
     const res = await api.get('/api/trackers/does-not-exist');
     expect(res.status).toBe(404);
