@@ -973,17 +973,38 @@ a {
   .app__nav {
     display: none;
   }
-  .fab,
+  /* App-shell layout. Pin the shell to the *visible* viewport (dvh) and let
+     the main region scroll inside it, so the tab bar can be a normal flex
+     child anchored to the shell's bottom — not `position: fixed`. A fixed
+     bottom bar anchors to the *layout* viewport (mobile toolbars hidden), so
+     on first load — when the address bar/toolbars are still expanded — it
+     renders below the visible area and only snaps to the bottom once the
+     toolbars collapse on the first scroll or navigation. Anchoring to the
+     dvh shell keeps it at the visible bottom from the first paint. */
+  .app {
+    position: relative;
+    height: 100vh; /* fallback for engines without dvh */
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .app__main {
+    flex: 1;
+    min-height: 0; /* let the flex child shrink so it can scroll */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    /* Clear the floating FAB at the end of long lists (tab bar is in flow). */
+    padding-bottom: 4rem;
+  }
   .tab-bar {
     display: grid;
+    position: static; /* in normal flow at the bottom of the shell */
   }
+  /* Float the FAB against the shell (not the layout viewport) so it, too,
+     sits correctly above the tab bar from the first paint. */
   .fab {
     display: flex;
-  }
-
-  /* Leave room so the fixed tab bar and FAB never cover content. */
-  .app__main {
-    padding-bottom: calc(var(--tab-bar-height) + 5rem);
+    position: absolute;
   }
   /* The "synced" footer is desktop-only chrome; hide it under the tab bar. */
   .app__footer {
