@@ -1,4 +1,12 @@
-import { toLocalISO, bucketStart, bucketEnd, type TimeRange, type BucketPeriod } from '@countroster/core';
+import {
+  toLocalISO,
+  bucketStart,
+  bucketEnd,
+  type TimeRange,
+  type BucketPeriod,
+  type ResetPeriod,
+  type WeekStart,
+} from '@countroster/core';
 
 /**
  * The [start, end) ISO range covering the local calendar day that contains
@@ -26,6 +34,44 @@ export function todayRange(now: Date = new Date()): Required<TimeRange> {
 /** Sum the `value` field across rows. */
 export function sumValues(rows: readonly { value: number }[]): number {
   return rows.reduce((acc, r) => acc + r.value, 0);
+}
+
+/** Map a tracker's `reset_period` to the bucketing period it corresponds to. */
+const RESET_TO_BUCKET: Record<Exclude<ResetPeriod, 'never'>, BucketPeriod> = {
+  daily: 'day',
+  weekly: 'week',
+  monthly: 'month',
+  yearly: 'year',
+};
+
+/** Short label for the window a tracker's total covers, e.g. "this week". */
+export const RESET_PERIOD_LABEL: Record<ResetPeriod, string> = {
+  never: 'all time',
+  daily: 'today',
+  weekly: 'this week',
+  monthly: 'this month',
+  yearly: 'this year',
+};
+
+/**
+ * The [start, end) range covering the *current* reset period for a tracker —
+ * the window whose total the home card should show (à la Tally's "resets
+ * every…"). Returns `null` for `'never'`, meaning "no window: all-time total".
+ *
+ * Boundaries are aligned with core's bucketing (honoring `weekStart`) and
+ * formatted with the local offset; the core compares them by instant.
+ */
+export function resetPeriodRange(
+  resetPeriod: ResetPeriod,
+  weekStart: WeekStart = 1,
+  now: Date = new Date(),
+): Required<TimeRange> | null {
+  if (resetPeriod === 'never') return null;
+  const period = RESET_TO_BUCKET[resetPeriod];
+  return {
+    start: toLocalISO(bucketStart(now, period, weekStart)),
+    end: toLocalISO(bucketEnd(now, period, weekStart)),
+  };
 }
 
 /**

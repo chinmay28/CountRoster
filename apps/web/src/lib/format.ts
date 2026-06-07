@@ -1,4 +1,4 @@
-import type { Tracker, TrackerKind } from '@countroster/core';
+import type { ResetPeriod, Tracker, TrackerKind } from '@countroster/core';
 
 /** Human label for each tracker kind. */
 export const KIND_LABELS: Record<TrackerKind, string> = {
@@ -15,6 +15,15 @@ export const TRACKER_KINDS: readonly TrackerKind[] = [
   'duration',
   'boolean',
   'choice',
+];
+
+/** "Reset every" choices for the tracker form, in menu order. */
+export const RESET_PERIOD_OPTIONS: readonly { value: ResetPeriod; label: string }[] = [
+  { value: 'never', label: 'Never (cumulative)' },
+  { value: 'daily', label: 'Day' },
+  { value: 'weekly', label: 'Week' },
+  { value: 'monthly', label: 'Month' },
+  { value: 'yearly', label: 'Year' },
 ];
 
 /** Format a duration given in seconds as e.g. "1h 5m 3s". */

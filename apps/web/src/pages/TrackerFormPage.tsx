@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { TrackerInput, TrackerKind } from '@countroster/core';
+import type { ResetPeriod, TrackerInput, TrackerKind } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
-import { KIND_LABELS, TRACKER_KINDS } from '../lib/format.ts';
+import { KIND_LABELS, TRACKER_KINDS, RESET_PERIOD_OPTIONS } from '../lib/format.ts';
 
 interface FormValues {
   name: string;
@@ -12,6 +12,7 @@ interface FormValues {
   unit: string;
   target: string;
   default_value: string;
+  reset_period: ResetPeriod;
 }
 
 const DEFAULTS: FormValues = {
@@ -22,6 +23,7 @@ const DEFAULTS: FormValues = {
   unit: '',
   target: '',
   default_value: '1',
+  reset_period: 'never',
 };
 
 /** Create a new tracker, or edit an existing one when `:id` is present. */
@@ -54,6 +56,7 @@ export function TrackerFormPage() {
         unit: t.unit ?? '',
         target: t.target == null ? '' : String(t.target),
         default_value: String(t.default_value),
+        reset_period: t.reset_period,
       });
       setLoading(false);
     });
@@ -77,6 +80,7 @@ export function TrackerFormPage() {
         color: values.color,
         kind: values.kind,
         default_value: Number(values.default_value) || 0,
+        reset_period: values.reset_period,
         // Zod fills the rest of the required defaults.
       } as TrackerInput;
       const description = values.description.trim();
@@ -164,6 +168,20 @@ export function TrackerFormPage() {
             value={values.default_value}
             onChange={(e) => set('default_value', e.target.value)}
           />
+        </label>
+
+        <label className="field">
+          <span>Reset every</span>
+          <select
+            value={values.reset_period}
+            onChange={(e) => set('reset_period', e.target.value as ResetPeriod)}
+          >
+            {RESET_PERIOD_OPTIONS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="field">

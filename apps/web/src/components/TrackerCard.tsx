@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { Tracker } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
 import { formatValue } from '../lib/format.ts';
+import { RESET_PERIOD_LABEL } from '../lib/range.ts';
 import { readableInk } from '../lib/color.ts';
 
 interface TrackerCardProps {
@@ -70,7 +71,7 @@ export function TrackerCard({ tracker, todayTotal, onLogged }: TrackerCardProps)
           <span className="tracker-card__total" style={{ color: tracker.color }}>
             {formatValue(tracker, todayTotal)}
           </span>
-          <span className="tracker-card__sub">today</span>
+          <span className="tracker-card__sub">{RESET_PERIOD_LABEL[tracker.reset_period]}</span>
         </Link>
         <div className="tracker-card__actions">
           <button
