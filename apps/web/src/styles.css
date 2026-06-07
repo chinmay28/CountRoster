@@ -973,17 +973,43 @@ a {
   .app__nav {
     display: none;
   }
-  .fab,
+  /* App-shell layout. iOS standalone PWAs report the viewport height too
+     small on first paint and only correct it after an interaction/resize,
+     which leaves a `position: fixed` bottom bar floating above the real
+     bottom until you navigate. dvh is mis-measured the same way. So instead
+     we size the shell from --app-height (set from window.innerHeight in JS,
+     and kept current on resize/visualViewport changes) and let the main
+     region scroll inside it. The tab bar is then a normal in-flow flex child
+     at the shell's bottom — when --app-height updates, it repositions
+     instantly, with no fixed-positioning quirk. */
+  .app {
+    position: relative;
+    height: 100dvh; /* fallback before the --app-height var is set */
+    height: var(--app-height, 100dvh);
+    min-height: 0;
+    overflow: hidden;
+  }
+  .app__main {
+    flex: 1;
+    min-height: 0; /* let the flex child shrink so it can scroll */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    /* Clear the floating FAB at the end of long lists (tab bar is in flow). */
+    padding-bottom: 4rem;
+  }
   .tab-bar {
     display: grid;
+    position: static; /* in normal flow at the bottom of the shell */
+    /* Cancel the shell's 1rem side padding so the bar spans edge-to-edge and
+       blends into the screen, instead of floating as an inset panel. */
+    margin-left: -1rem;
+    margin-right: -1rem;
   }
+  /* Float the FAB against the shell (not the layout viewport) so it tracks
+     the visible bottom from the first paint, like the tab bar. */
   .fab {
     display: flex;
-  }
-
-  /* Leave room so the fixed tab bar and FAB never cover content. */
-  .app__main {
-    padding-bottom: calc(var(--tab-bar-height) + 5rem);
+    position: absolute;
   }
   /* The "synced" footer is desktop-only chrome; hide it under the tab bar. */
   .app__footer {
