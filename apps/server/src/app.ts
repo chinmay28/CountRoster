@@ -91,7 +91,7 @@ export function buildApp(
     res.json(await core.notes.history(req.params.id));
   });
   api.patch('/notes/:id', async (req, res) => {
-    res.json(await core.notes.edit(req.params.id, req.body.body));
+    res.json(await core.notes.update(req.params.id, req.body));
   });
   api.delete('/notes/:id', async (req, res) => {
     await core.notes.delete(req.params.id);

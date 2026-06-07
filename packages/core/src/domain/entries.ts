@@ -122,12 +122,19 @@ class EntryServiceImpl implements EntryService {
   async forTracker(trackerId: string, range: TimeRange = {}): Promise<Entry[]> {
     const where: string[] = ['tracker_id = ?'];
     const params: (string | number)[] = [trackerId];
+    // Compare by absolute instant, not lexically: occurred_at is stored with
+    // the *server's* local offset, but a client may request a range in a
+    // *different* offset (e.g. a desktop in another timezone than the box that
+    // logged the entry). A plain string `>=` is wrong across mismatched
+    // offsets — `julianday()` parses the offset so both sides are compared as
+    // the same moment in time. (This is why a tracker could read 0 on one
+    // device and correctly on another.)
     if (range.start !== undefined) {
-      where.push('occurred_at >= ?');
+      where.push('julianday(occurred_at) >= julianday(?)');
       params.push(range.start);
     }
     if (range.end !== undefined) {
-      where.push('occurred_at < ?');
+      where.push('julianday(occurred_at) < julianday(?)');
       params.push(range.end);
     }
     return this.storage.query<Entry>(

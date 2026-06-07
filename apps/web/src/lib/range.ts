@@ -4,10 +4,11 @@ import { toLocalISO, bucketStart, bucketEnd, type TimeRange, type BucketPeriod }
  * The [start, end) ISO range covering the local calendar day that contains
  * `now`. Used for "today's total" on the home screen.
  *
- * Bounds are formatted with `toLocalISO` (local offset, never UTC "Z") so
- * they compare correctly as strings against the timestamps the core stores —
- * core persists `occurred_at` in local-offset ISO, and the SQL range filter
- * is a lexical TEXT comparison.
+ * Bounds are formatted with `toLocalISO` (local offset, never UTC "Z"). The
+ * core compares them against stored `occurred_at` by absolute instant (via
+ * SQLite `julianday`, which parses the offset), so a range expressed in this
+ * device's timezone is correct even when the server logged entries in a
+ * different one — see `EntryService.forTracker`.
  *
  * NOTE: This is calendar-local midnight, matching the baseline bucketing in
  * core's periods.ts. It does not yet honor per-tracker `day_start_minute` —

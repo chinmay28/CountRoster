@@ -1,13 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="96" fill="#1f2933"/>
-  <g fill="none" stroke="#4ECDC4" stroke-width="34" stroke-linecap="round">
-    <line x1="150" y1="150" x2="362" y2="150"/>
-    <line x1="150" y1="256" x2="362" y2="256"/>
-    <line x1="150" y1="362" x2="300" y2="362"/>
+  <rect width="512" height="512" rx="112" fill="#1f2933"/>
+
+  <!-- Sheet of paper, tilted for a casual notepad look -->
+  <g transform="rotate(-7 256 256)">
+    <rect x="150" y="104" width="190" height="288" rx="20" fill="#f5f7f7"/>
+    <rect x="150" y="104" width="190" height="288" rx="20" fill="none" stroke="#d4dedd" stroke-width="4"/>
+    <g stroke="#c2d0cf" stroke-width="11" stroke-linecap="round">
+      <line x1="182" y1="170" x2="308" y2="170"/>
+      <line x1="182" y1="214" x2="308" y2="214"/>
+      <line x1="182" y1="258" x2="308" y2="258"/>
+      <line x1="182" y1="302" x2="270" y2="302"/>
+    </g>
   </g>
-  <g fill="#4ECDC4">
-    <circle cx="110" cy="150" r="20"/>
-    <circle cx="110" cy="256" r="20"/>
-    <circle cx="110" cy="362" r="20"/>
+
+  <!-- Fountain pen laid diagonally across the page -->
+  <g transform="rotate(40 256 256)">
+    <!-- end cap -->
+    <rect x="232" y="92" width="48" height="44" rx="14" fill="#2f9e93"/>
+    <!-- barrel -->
+    <rect x="232" y="128" width="48" height="186" fill="#4ECDC4"/>
+    <!-- grip band -->
+    <rect x="230" y="300" width="52" height="20" rx="4" fill="#dfe8e7"/>
+    <!-- shoulder to nib -->
+    <path d="M232 320 H280 L256 420 Z" fill="#f5f7f7"/>
+    <!-- nib slit -->
+    <line x1="256" y1="324" x2="256" y2="392" stroke="#1f2933" stroke-width="6" stroke-linecap="round"/>
+    <!-- nib breather hole -->
+    <circle cx="256" cy="338" r="8" fill="#1f2933"/>
   </g>
 </svg>

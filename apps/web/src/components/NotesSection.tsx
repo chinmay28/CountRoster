@@ -1,18 +1,26 @@
 import { useState } from 'react';
-import type { Note, NoteEdit } from '@countroster/core';
+import type { Note } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
-import { useAsync } from '../app/useAsync.ts';
-import { formatDateTime } from '../lib/format.ts';
+import { NoteItem } from './NoteItem.tsx';
+import { fromDatetimeLocalValue } from '../lib/format.ts';
 
-/** Journal notes for a tracker, with add / edit / delete and edit history. */
-export function NotesSection({ trackerId }: { trackerId: string }) {
+interface NotesSectionProps {
+  trackerId: string;
+  /** Standalone notes (not tied to a specific entry). */
+  notes: Note[];
+  /** Called after add/edit/delete so the parent can refetch. */
+  onChanged: () => void;
+}
+
+/**
+ * Standalone journal notes for a tracker, with add / edit / delete and edit
+ * history. Notes attached to a specific entry are shown inline with that entry
+ * (see EntryList) — this section holds the general, entry-less ones.
+ */
+export function NotesSection({ trackerId, notes, onChanged }: NotesSectionProps) {
   const core = useCore();
-  const { data: notes, loading, error, reload } = useAsync(
-    () => core.notes.forTracker(trackerId),
-    [trackerId],
-  );
-
   const [draft, setDraft] = useState('');
+  const [when, setWhen] = useState('');
   const [adding, setAdding] = useState(false);
 
   async function addNote(e: React.FormEvent) {
@@ -20,9 +28,14 @@ export function NotesSection({ trackerId }: { trackerId: string }) {
     if (!draft.trim()) return;
     setAdding(true);
     try {
-      await core.notes.create({ tracker_id: trackerId, body: draft.trim() });
+      await core.notes.create({
+        tracker_id: trackerId,
+        body: draft.trim(),
+        ...(when ? { occurred_at: fromDatetimeLocalValue(when) } : {}),
+      });
       setDraft('');
-      reload();
+      setWhen('');
+      onChanged();
     } finally {
       setAdding(false);
     }
@@ -39,143 +52,35 @@ export function NotesSection({ trackerId }: { trackerId: string }) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
         />
-        <button
-          type="submit"
-          className="btn btn--primary"
-          disabled={adding || !draft.trim()}
-        >
-          Add note
-        </button>
+        <div className="notes__add-row">
+          <label className="field">
+            <span>When (optional)</span>
+            <input
+              type="datetime-local"
+              value={when}
+              onChange={(e) => setWhen(e.target.value)}
+            />
+          </label>
+          <button
+            type="submit"
+            className="btn btn--primary"
+            disabled={adding || !draft.trim()}
+          >
+            Add note
+          </button>
+        </div>
       </form>
 
-      {loading && <p className="muted">Loading notes…</p>}
-      {error && <p className="error">{error.message}</p>}
-
-      {notes && notes.length === 0 && (
-        <p className="muted">No notes yet.</p>
-      )}
+      {notes.length === 0 && <p className="muted">No notes yet.</p>}
 
       <ul className="notes__list">
         {notes
-          ?.slice()
+          .slice()
           .reverse()
           .map((note) => (
-            <NoteItem key={note.id} note={note} onChanged={reload} />
+            <NoteItem key={note.id} note={note} onChanged={onChanged} />
           ))}
       </ul>
     </section>
-  );
-}
-
-function NoteItem({ note, onChanged }: { note: Note; onChanged: () => void }) {
-  const core = useCore();
-  const [editing, setEditing] = useState(false);
-  const [body, setBody] = useState(note.body);
-  const [showHistory, setShowHistory] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  async function save() {
-    setBusy(true);
-    try {
-      await core.notes.edit(note.id, body.trim());
-      setEditing(false);
-      onChanged();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function remove() {
-    if (!confirm('Delete this note?')) return;
-    setBusy(true);
-    try {
-      await core.notes.delete(note.id);
-      onChanged();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <li className="note">
-      {editing ? (
-        <>
-          <textarea
-            rows={3}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-          />
-          <div className="note__actions">
-            <button
-              className="btn"
-              onClick={() => {
-                setBody(note.body);
-                setEditing(false);
-              }}
-              disabled={busy}
-            >
-              Cancel
-            </button>
-            <button className="btn btn--primary" onClick={save} disabled={busy}>
-              Save
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <p className="note__body">{note.body}</p>
-          <div className="note__meta">
-            <span className="muted">{formatDateTime(note.occurred_at)}</span>
-            <div className="note__actions">
-              <button className="btn btn--small" onClick={() => setEditing(true)}>
-                Edit
-              </button>
-              <button
-                className="btn btn--small"
-                onClick={() => setShowHistory((s) => !s)}
-              >
-                History
-              </button>
-              <button
-                className="btn btn--small btn--danger"
-                onClick={remove}
-                disabled={busy}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-          {showHistory && <NoteHistory noteId={note.id} />}
-        </>
-      )}
-    </li>
-  );
-}
-
-function NoteHistory({ noteId }: { noteId: string }) {
-  const core = useCore();
-  const { data, loading, error } = useAsync<NoteEdit[]>(
-    () => core.notes.history(noteId),
-    [noteId],
-  );
-
-  if (loading) return <p className="muted">Loading history…</p>;
-  if (error) return <p className="error">{error.message}</p>;
-  if (!data || data.length === 0) {
-    return <p className="muted note__history-empty">No previous versions.</p>;
-  }
-
-  return (
-    <ol className="note__history">
-      {data
-        .slice()
-        .reverse()
-        .map((edit) => (
-          <li key={edit.id}>
-            <span className="muted">{formatDateTime(edit.edited_at)}</span>
-            <blockquote>{edit.prev_body}</blockquote>
-          </li>
-        ))}
-    </ol>
   );
 }
