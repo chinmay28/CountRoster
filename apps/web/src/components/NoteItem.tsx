@@ -19,6 +19,8 @@ export function NoteItem({ note, onChanged }: { note: Note; onChanged: () => voi
   const [body, setBody] = useState(note.body);
   const [when, setWhen] = useState(toDatetimeLocalValue(note.occurred_at));
   const [showHistory, setShowHistory] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [ackHistory, setAckHistory] = useState(false);
   const [busy, setBusy] = useState(false);
 
   function startEditing() {
@@ -42,10 +44,12 @@ export function NoteItem({ note, onChanged }: { note: Note; onChanged: () => voi
   }
 
   async function remove() {
-    if (!confirm('Delete this note?')) return;
     setBusy(true);
     try {
+      // Deleting the note cascades to its edit history; the checkbox makes that
+      // explicit and gates the action so history is never lost by accident.
       await core.notes.delete(note.id);
+      setConfirmingDelete(false);
       onChanged();
     } finally {
       setBusy(false);
@@ -90,13 +94,44 @@ export function NoteItem({ note, onChanged }: { note: Note; onChanged: () => voi
           </button>
           <button
             className="btn btn--small btn--danger"
-            onClick={remove}
+            onClick={() => {
+              setAckHistory(false);
+              setConfirmingDelete(true);
+            }}
             disabled={busy}
           >
             Delete
           </button>
         </div>
       </div>
+      {confirmingDelete && (
+        <div className="note__delete-confirm">
+          <label className="note__delete-history">
+            <input
+              type="checkbox"
+              checked={ackHistory}
+              onChange={(e) => setAckHistory(e.target.checked)}
+            />
+            <span>Delete edit history too</span>
+          </label>
+          <div className="note__actions">
+            <button
+              className="btn btn--small"
+              onClick={() => setConfirmingDelete(false)}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+            <button
+              className="btn btn--small btn--danger"
+              onClick={remove}
+              disabled={busy || !ackHistory}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
       {showHistory && <NoteHistory noteId={note.id} />}
     </li>
   );

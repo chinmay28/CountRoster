@@ -401,9 +401,6 @@ a {
   font-size: 2rem;
   font-weight: 700;
 }
-.detail__log-row {
-  margin-bottom: 1rem;
-}
 .detail__custom {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
@@ -456,36 +453,40 @@ a {
   gap: 0.4rem;
 }
 .entry--editing {
-  flex-direction: row;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.entry__add-note {
-  display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  align-items: flex-end;
+  align-items: stretch;
 }
-.entry__add-note textarea {
+.entry__edit-fields {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.entry__edit-fields input {
+  flex: 1 1 8rem;
+}
+.entry__note-input {
   width: 100%;
   font: inherit;
-  padding: 0.45rem 0.6rem;
+  padding: 0.5rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: var(--surface);
   color: var(--text);
   resize: vertical;
 }
-/* Notes nested under an entry: lighter, indented from the entry edge. */
-.entry__notes {
-  margin-left: 0.75rem;
+.entry--editing .entry__actions {
+  justify-content: flex-end;
+}
+/* The single note describing an entry, shown beneath it. */
+.entry__note {
+  margin: 0;
   padding-left: 0.75rem;
   border-left: 2px solid var(--border);
+  color: var(--muted);
+  white-space: pre-wrap;
+  font-size: 0.9rem;
 }
-.entry__notes .note {
-  background: var(--bg);
-}
-
 /* Notes */
 .notes__add {
   display: grid;
@@ -522,6 +523,23 @@ a {
   justify-content: space-between;
   gap: 0.5rem;
   font-size: 0.85rem;
+}
+.note__delete-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+}
+.note__delete-history {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 .note__history {
   margin-top: 0.5rem;
@@ -940,9 +958,9 @@ a {
   .field textarea,
   .notes__add textarea,
   .entry input,
+  .entry__note-input,
   .tracker-card__custom input,
-  .tracker-card__custom textarea,
-  .entry__add-note textarea {
+  .tracker-card__custom textarea {
     font-size: 16px;
     min-height: 2.75rem;
   }

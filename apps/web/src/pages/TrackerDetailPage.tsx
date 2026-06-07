@@ -96,16 +96,6 @@ export function TrackerDetailPage() {
     }
   }
 
-  async function quickLog() {
-    setLogging(true);
-    try {
-      await core.entries.log(tracker!.id);
-      refresh();
-    } finally {
-      setLogging(false);
-    }
-  }
-
   async function customLog(e: React.FormEvent) {
     e.preventDefault();
     setLogging(true);
@@ -194,16 +184,6 @@ export function TrackerDetailPage() {
 
       <section className="detail__log">
         <h2>Log an entry</h2>
-        <div className="detail__log-row">
-          <button
-            className="btn btn--primary"
-            style={{ background: tracker.color, color: readableInk(tracker.color) }}
-            onClick={quickLog}
-            disabled={logging}
-          >
-            Quick log (+{tracker.default_value})
-          </button>
-        </div>
         <form className="detail__custom" onSubmit={customLog}>
           <label className="field">
             <span>Value</span>
@@ -232,8 +212,13 @@ export function TrackerDetailPage() {
               onChange={(e) => setCustomNote(e.target.value)}
             />
           </label>
-          <button type="submit" className="btn" disabled={logging}>
-            Log custom
+          <button
+            type="submit"
+            className="btn btn--primary"
+            style={{ background: tracker.color, color: readableInk(tracker.color) }}
+            disabled={logging}
+          >
+            Log entry
           </button>
         </form>
       </section>
