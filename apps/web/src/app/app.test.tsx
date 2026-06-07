@@ -57,19 +57,35 @@ describe('HomePage', () => {
   });
 });
 
+describe('mobile tab bar', () => {
+  it('renders the bottom navigation and marks the current route active', async () => {
+    renderApp(test);
+
+    const tabBar = document.querySelector('.tab-bar') as HTMLElement;
+    expect(tabBar).toBeInTheDocument();
+    // All four primary destinations are present as tabs.
+    for (const label of ['Home', 'Compare', 'Groups', 'Data']) {
+      expect(within(tabBar).getByText(label)).toBeInTheDocument();
+    }
+    // On "/", the Home tab is the active one.
+    const home = within(tabBar).getByText('Home').closest('a')!;
+    expect(home.className).toContain('tab-bar__item--active');
+  });
+});
+
 describe('quick log', () => {
-  it('increments today total by the default value', async () => {
+  it('logs the default value when the value field is left blank', async () => {
     const user = userEvent.setup();
     await test.createTracker({ name: 'Pushups', default_value: 5 });
     renderApp(test);
 
     await screen.findByText('Pushups');
-    const card = screen.getByText('Pushups').closest('.tracker-card')!;
-    await user.click(within(card as HTMLElement).getByRole('button', { name: /log pushups/i }));
+    const card = screen.getByText('Pushups').closest('.tracker-card')! as HTMLElement;
+    // Open the log panel, then submit without typing a value (uses the default).
+    await user.click(within(card).getByRole('button', { name: /log pushups/i }));
+    await user.click(within(card).getByRole('button', { name: 'Log' }));
 
-    await waitFor(() =>
-      expect(within(card as HTMLElement).getByText('5')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(within(card).getByText('5')).toBeInTheDocument());
   });
 });
 
