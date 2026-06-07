@@ -44,6 +44,26 @@ const router = createBrowserRouter([
   },
 ]);
 
+/**
+ * Pin the app shell to the *actual* visible height. iOS (especially installed
+ * standalone PWAs) reports CSS viewport units (100vh/100dvh) too small on the
+ * first paint and only corrects after an interaction, which strands the fixed
+ * bottom tab bar above the real bottom until you navigate. window.innerHeight
+ * is reliable, so we publish it as --app-height (read by the mobile shell in
+ * styles.css) and keep it current as the viewport changes.
+ */
+function syncAppHeight() {
+  document.documentElement.style.setProperty(
+    '--app-height',
+    `${window.innerHeight}px`,
+  );
+}
+syncAppHeight();
+window.addEventListener('resize', syncAppHeight);
+window.addEventListener('orientationchange', syncAppHeight);
+window.addEventListener('pageshow', syncAppHeight);
+window.visualViewport?.addEventListener('resize', syncAppHeight);
+
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('Root element #root not found');
 
