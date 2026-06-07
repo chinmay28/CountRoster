@@ -262,20 +262,20 @@ a {
   gap: 0.75rem;
   border-top: 4px solid var(--primary);
 }
+/* The log button sits in the top-right corner so the name/total/sub stack can
+   use the full card width (units like "cups" no longer wrap onto a new line). */
 .tracker-card__top {
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 0.5rem;
+  position: relative;
 }
 .tracker-card__body {
   display: flex;
   flex-direction: column;
   text-decoration: none;
-  flex: 1;
 }
 .tracker-card__name {
   font-weight: 600;
+  /* Keep the name clear of the corner log button. */
+  padding-right: 3rem;
 }
 .tracker-card__total {
   font-size: 1.6rem;
@@ -286,6 +286,9 @@ a {
   font-size: 0.8rem;
 }
 .tracker-card__actions {
+  position: absolute;
+  top: 0;
+  right: 0;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -908,12 +911,13 @@ a {
     display: flex;
   }
 
-  /* Leave room so the fixed tab bar never covers the footer or content. */
+  /* Leave room so the fixed tab bar and FAB never cover content. */
   .app__main {
-    padding-bottom: 1rem;
+    padding-bottom: calc(var(--tab-bar-height) + 5rem);
   }
+  /* The "synced" footer is desktop-only chrome; hide it under the tab bar. */
   .app__footer {
-    margin-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+    display: none;
   }
 
   .detail__custom {
