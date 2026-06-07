@@ -3,7 +3,7 @@ import type { Tracker } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import { TrackerCard } from '../components/TrackerCard.tsx';
-import { todayRange, sumValues } from '../lib/range.ts';
+import { resetPeriodRange, sumValues } from '../lib/range.ts';
 
 /**
  * Home: the roster of active trackers, each showing today's total with a
@@ -18,11 +18,13 @@ export function HomePage() {
       core.trackers.list(),
       core.groups.list(),
     ]);
-    const range = todayRange();
+    // Each tracker's headline total covers its own reset window (today / this
+    // week / month / year), or all-time when it never resets.
     const totals = new Map(
       await Promise.all(
         trackers.map(async (t) => {
-          const entries = await core.entries.forTracker(t.id, range);
+          const range = resetPeriodRange(t.reset_period, t.week_start);
+          const entries = await core.entries.forTracker(t.id, range ?? undefined);
           return [t.id, sumValues(entries)] as const;
         }),
       ),
