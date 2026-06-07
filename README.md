@@ -42,7 +42,37 @@ npm run dev --workspace @countroster/web       # http://localhost:5173
 Open `http://localhost:5173`. To use it from your phone, reach the dev server (or
 a deployed instance) over your LAN/Tailscale and "Add to Home Screen".
 
-### Production (single process)
+### Quick start on Linux (Ubuntu / Raspberry Pi)
+
+Install CountRoster as a hardened **systemd service** with one command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chinmay28/countroster/main/scripts/quickstart.sh | sudo bash
+```
+
+(or, from a checkout: `sudo ./scripts/quickstart.sh`)
+
+It installs Node 22 if needed, creates a dedicated `countroster` system user, builds
+the app, and runs it under systemd serving the API + PWA on `http://<host>:8787`.
+
+**Re-run it any time to upgrade — installs and upgrades are non-disruptive and
+never lose data:**
+
+- The live SQLite database lives at a stable path **outside** the source tree
+  (`/var/lib/countroster/`), so rebuilding/pulling can't clobber it.
+- Each upgrade quiesces the service, **snapshots the database** (`+ WAL/SHM`) to a
+  timestamped backup, then swaps code in. The new build compiles while the old
+  version keeps serving, so a failed build leaves the running app untouched.
+- After restart it polls `/api/health`; if the new version is unhealthy it **rolls
+  back** to the previous commit and **restores the pre-upgrade snapshot**.
+- Schema changes run through the core's append-only, idempotent migration runner.
+
+Override defaults with env vars (`PORT`, `HOST`, `COUNTROSTER_REF`,
+`COUNTROSTER_DATA_DIR`, `COUNTROSTER_PREFIX`, `COUNTROSTER_USER`, …). The generated
+unit is documented at [`deploy/countroster.service`](./deploy/countroster.service).
+Manage it with `systemctl status countroster` and `journalctl -u countroster -f`.
+
+### Production (single process, manual)
 
 ```bash
 npm run build --workspace @countroster/core

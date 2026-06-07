@@ -1,0 +1,41 @@
+# Reference systemd unit for CountRoster.
+#
+# scripts/quickstart.sh generates a copy of this with the real paths/port filled
+# in and installs it at /etc/systemd/system/countroster.service. Use this file as
+# documentation, or adapt it for a hand-rolled install.
+#
+# Defaults assumed below (override in quickstart.sh via env vars):
+#   service user : countroster   (COUNTROSTER_USER)
+#   source       : /opt/countroster/src   (COUNTROSTER_PREFIX/src)
+#   database     : /var/lib/countroster/countroster.sqlite   (COUNTROSTER_DATA_DIR)
+#   port         : 8787   (PORT)
+
+[Unit]
+Description=CountRoster — anything tracker (REST API + PWA)
+Documentation=https://github.com/chinmay28/countroster
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=countroster
+Group=countroster
+WorkingDirectory=/opt/countroster/src
+ExecStart=/usr/bin/node /opt/countroster/src/apps/server/dist/server.js
+Environment=NODE_ENV=production
+Environment=COUNTROSTER_DB=/var/lib/countroster/countroster.sqlite
+Environment=PORT=8787
+Environment=HOST=0.0.0.0
+Restart=on-failure
+RestartSec=3
+
+# Hardening — safe on a trusted LAN, defensive if exposure ever widens.
+# The database directory is the only writable path the service needs.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/countroster
+
+[Install]
+WantedBy=multi-user.target
