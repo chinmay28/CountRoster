@@ -124,4 +124,37 @@ describe('NoteService', () => {
     expect(reread!.entry_id).toBeNull();
     expect(reread!.body).toBe('v1');
   });
+
+  it('update() can re-date a note without touching the edit history', async () => {
+    const { app } = await makeTestApp();
+    const t = await app.trackers.create({ name: 'Mood' });
+    const n = await app.notes.create({ tracker_id: t.id, body: 'Note' });
+
+    const moved = await app.notes.update(n.id, {
+      occurred_at: '2026-05-01T09:00:00.000-07:00',
+    });
+
+    expect(moved.occurred_at).toBe('2026-05-01T09:00:00.000-07:00');
+    expect(moved.body).toBe('Note');
+    // Re-dating carries no prior content, so no audit row is written.
+    expect(await app.notes.history(n.id)).toHaveLength(0);
+  });
+
+  it('update() changes body (audited) and occurred_at together', async () => {
+    const { app, setTime } = await makeTestApp('2026-05-25T12:00:00.000-07:00');
+    const t = await app.trackers.create({ name: 'Mood' });
+    const n = await app.notes.create({ tracker_id: t.id, body: 'before' });
+
+    setTime('2026-05-25T13:00:00.000-07:00');
+    const updated = await app.notes.update(n.id, {
+      body: 'after',
+      occurred_at: '2026-04-01T08:00:00.000-07:00',
+    });
+
+    expect(updated.body).toBe('after');
+    expect(updated.occurred_at).toBe('2026-04-01T08:00:00.000-07:00');
+    const history = await app.notes.history(n.id);
+    expect(history).toHaveLength(1);
+    expect(history[0]!.prev_body).toBe('before');
+  });
 });

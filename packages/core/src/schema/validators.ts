@@ -76,6 +76,13 @@ export const noteInputSchema = z.object({
 });
 export type NoteInput = z.infer<typeof noteInputSchema>;
 
+/** Input to NoteService.update() — body and/or occurred_at. */
+export const notePatchSchema = z.object({
+  body: z.string().max(100_000).optional(),
+  occurred_at: z.string().datetime({ offset: true }).optional(),
+});
+export type NotePatch = z.infer<typeof notePatchSchema>;
+
 /** Input to GroupService.create() */
 export const groupInputSchema = z.object({
   name: z.string().trim().min(1).max(120),

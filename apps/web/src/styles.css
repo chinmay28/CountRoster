@@ -161,10 +161,15 @@ a {
 
 .tracker-card {
   display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border-top: 4px solid var(--primary);
+}
+.tracker-card__top {
+  display: flex;
   align-items: stretch;
   justify-content: space-between;
   gap: 0.5rem;
-  border-top: 4px solid var(--primary);
 }
 .tracker-card__body {
   display: flex;
@@ -182,6 +187,35 @@ a {
 .tracker-card__sub {
   color: var(--muted);
   font-size: 0.8rem;
+}
+.tracker-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.tracker-card__custom-toggle {
+  align-self: stretch;
+}
+.tracker-card__custom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+.tracker-card__custom input,
+.tracker-card__custom textarea {
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+  resize: vertical;
+}
+.tracker-card__custom .btn--primary {
+  align-self: flex-end;
 }
 
 /* Typography helpers */
@@ -269,6 +303,13 @@ a {
   gap: 0.75rem;
   align-items: end;
 }
+/* The optional note spans the full width, above the submit button. */
+.detail__custom-note {
+  grid-column: 1 / -1;
+}
+.detail__custom-note textarea {
+  resize: vertical;
+}
 
 /* Entries */
 .entry-list,
@@ -282,12 +323,17 @@ a {
 }
 .entry {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: 0.5rem;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
+}
+.entry__main {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 .entry__value {
   font-weight: 600;
@@ -303,7 +349,34 @@ a {
   gap: 0.4rem;
 }
 .entry--editing {
+  flex-direction: row;
+  align-items: center;
   flex-wrap: wrap;
+}
+.entry__add-note {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: flex-end;
+}
+.entry__add-note textarea {
+  width: 100%;
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  resize: vertical;
+}
+/* Notes nested under an entry: lighter, indented from the entry edge. */
+.entry__notes {
+  margin-left: 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--border);
+}
+.entry__notes .note {
+  background: var(--bg);
 }
 
 /* Notes */
@@ -315,6 +388,16 @@ a {
 }
 .notes__add textarea {
   width: 100%;
+}
+.notes__add-row {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.note--editing {
+  display: grid;
+  gap: 0.5rem;
 }
 .note {
   padding: 0.75rem;

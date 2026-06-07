@@ -19,6 +19,7 @@ const CalendarHeatmap = lazy(() =>
 import { formatValue, formatNumber, KIND_LABELS } from '../lib/format.ts';
 import { sumValues } from '../lib/range.ts';
 import { fromDatetimeLocalValue } from '../lib/format.ts';
+import { readableInk } from '../lib/color.ts';
 
 /** Per-tracker detail: header, custom log, entry timeline, notes. */
 export function TrackerDetailPage() {
@@ -29,13 +30,17 @@ export function TrackerDetailPage() {
   const { data, loading, error, reload } = useAsync(async () => {
     if (!id) return null;
     const tracker = await core.trackers.get(id);
-    if (!tracker) return { tracker: null, entries: [] };
-    const entries = await core.entries.forTracker(id);
-    return { tracker, entries };
+    if (!tracker) return { tracker: null, entries: [], notes: [] };
+    const [entries, notes] = await Promise.all([
+      core.entries.forTracker(id),
+      core.notes.forTracker(id),
+    ]);
+    return { tracker, entries, notes };
   }, [id]);
 
   const [customValue, setCustomValue] = useState('');
   const [customWhen, setCustomWhen] = useState('');
+  const [customNote, setCustomNote] = useState('');
   const [logging, setLogging] = useState(false);
   // Bumped on any write so the stats panel re-fetches alongside the entry list.
   const [statsKey, setStatsKey] = useState(0);
@@ -58,8 +63,22 @@ export function TrackerDetailPage() {
     );
   }
 
-  const { tracker, entries } = data;
+  const { tracker, entries, notes } = data;
   const total = sumValues(entries);
+
+  // Notes that describe a specific entry are shown inline with that entry;
+  // the rest are general journal notes for the Notes section.
+  const notesByEntry = new Map<string, typeof notes>();
+  const standaloneNotes: typeof notes = [];
+  for (const note of notes) {
+    if (note.entry_id) {
+      const list = notesByEntry.get(note.entry_id) ?? [];
+      list.push(note);
+      notesByEntry.set(note.entry_id, list);
+    } else {
+      standaloneNotes.push(note);
+    }
+  }
 
   async function quickLog() {
     setLogging(true);
@@ -75,12 +94,23 @@ export function TrackerDetailPage() {
     e.preventDefault();
     setLogging(true);
     try {
-      await core.entries.log(tracker!.id, {
+      const occurredAt = customWhen ? fromDatetimeLocalValue(customWhen) : undefined;
+      const entry = await core.entries.log(tracker!.id, {
         ...(customValue.trim() ? { value: Number(customValue) } : {}),
-        ...(customWhen ? { occurred_at: fromDatetimeLocalValue(customWhen) } : {}),
+        ...(occurredAt ? { occurred_at: occurredAt } : {}),
       });
+      // A note typed alongside the value describes this very entry, so link it.
+      if (customNote.trim()) {
+        await core.notes.create({
+          tracker_id: tracker!.id,
+          entry_id: entry.id,
+          body: customNote.trim(),
+          ...(occurredAt ? { occurred_at: occurredAt } : {}),
+        });
+      }
       setCustomValue('');
       setCustomWhen('');
+      setCustomNote('');
       refresh();
     } finally {
       setLogging(false);
@@ -130,7 +160,12 @@ export function TrackerDetailPage() {
       <section className="detail__log">
         <h2>Log an entry</h2>
         <div className="detail__log-row">
-          <button className="btn btn--primary" onClick={quickLog} disabled={logging}>
+          <button
+            className="btn btn--primary"
+            style={{ background: tracker.color, color: readableInk(tracker.color) }}
+            onClick={quickLog}
+            disabled={logging}
+          >
             Quick log (+{tracker.default_value})
           </button>
         </div>
@@ -153,6 +188,15 @@ export function TrackerDetailPage() {
               onChange={(e) => setCustomWhen(e.target.value)}
             />
           </label>
+          <label className="field detail__custom-note">
+            <span>Note (optional)</span>
+            <textarea
+              rows={2}
+              placeholder="Describe this entry…"
+              value={customNote}
+              onChange={(e) => setCustomNote(e.target.value)}
+            />
+          </label>
           <button type="submit" className="btn" disabled={logging}>
             Log custom
           </button>
@@ -161,12 +205,21 @@ export function TrackerDetailPage() {
 
       <section className="detail__entries">
         <h2>Entries</h2>
-        <EntryList tracker={tracker} entries={entries} onChanged={refresh} />
+        <EntryList
+          tracker={tracker}
+          entries={entries}
+          notesByEntry={notesByEntry}
+          onChanged={refresh}
+        />
       </section>
 
       <RemindersSection trackerId={tracker.id} />
 
-      <NotesSection trackerId={tracker.id} />
+      <NotesSection
+        trackerId={tracker.id}
+        notes={standaloneNotes}
+        onChanged={refresh}
+      />
     </article>
   );
 }

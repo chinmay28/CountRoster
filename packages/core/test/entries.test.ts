@@ -88,6 +88,32 @@ describe('EntryService', () => {
     expect(filtered.map((e) => e.id)).toEqual([inside.id]);
   });
 
+  it('forTracker() compares by instant across mismatched offsets', async () => {
+    // An entry stored in the server's offset (+00:00) at 03:00 UTC is, in a
+    // client's -08:00 timezone, still the *previous* calendar day — so a
+    // "today" range expressed in -08:00 must exclude it. A naive lexical
+    // string comparison would wrongly include it (this was the bug behind a
+    // tracker reading 0 on one device but correct on another).
+    const { app } = await makeTestApp();
+    const t = await app.trackers.create({ name: 'X' });
+
+    // 2026-05-22T03:00Z === 2026-05-21T19:00 in -08:00 (the day before).
+    const prevDay = await app.entries.log(t.id, {
+      occurred_at: '2026-05-22T03:00:00.000+00:00',
+    });
+    // 2026-05-22T20:00Z === 2026-05-22T12:00 in -08:00 (the requested day).
+    const sameDay = await app.entries.log(t.id, {
+      occurred_at: '2026-05-22T20:00:00.000+00:00',
+    });
+
+    const today = await app.entries.forTracker(t.id, {
+      start: '2026-05-22T00:00:00.000-08:00',
+      end: '2026-05-23T00:00:00.000-08:00',
+    });
+    expect(today.map((e) => e.id)).toEqual([sameDay.id]);
+    expect(today.map((e) => e.id)).not.toContain(prevDay.id);
+  });
+
   it('deleting a tracker cascades to its entries', async () => {
     const { app, storage } = await makeTestApp();
     const t = await app.trackers.create({ name: 'X' });

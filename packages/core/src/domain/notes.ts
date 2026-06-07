@@ -2,7 +2,12 @@ import type { Storage } from '../storage/adapter.js';
 import { newId } from '../ids.js';
 import type { Clock } from '../time.js';
 import type { Note, NoteEdit } from '../schema/tables.js';
-import { noteInputSchema, type NoteInput } from '../schema/validators.js';
+import {
+  noteInputSchema,
+  notePatchSchema,
+  type NoteInput,
+  type NotePatch,
+} from '../schema/validators.js';
 import type { TimeRange } from './entries.js';
 
 export interface NoteService {
@@ -13,6 +18,12 @@ export interface NoteService {
    * always see what the note used to say.
    */
   edit(id: string, newBody: string): Promise<Note>;
+  /**
+   * Patch a note's body and/or `occurred_at`. A body change is audit-logged
+   * exactly like {@link edit}; an `occurred_at` change (re-dating a note) is
+   * not, since it carries no prior content. No-ops when nothing changes.
+   */
+  update(id: string, patch: NotePatch): Promise<Note>;
   delete(id: string): Promise<void>;
   get(id: string): Promise<Note | null>;
   /** Edit history for a note, oldest first. */
@@ -59,6 +70,11 @@ class NoteServiceImpl implements NoteService {
 
   async edit(id: string, newBody: string): Promise<Note> {
     if (typeof newBody !== 'string') throw new TypeError('body must be a string');
+    return this.update(id, { body: newBody });
+  }
+
+  async update(id: string, rawPatch: NotePatch): Promise<Note> {
+    const patch = notePatchSchema.parse(rawPatch);
 
     return this.storage.transaction(async (tx) => {
       const rows = await tx.query<Note>(
@@ -68,23 +84,39 @@ class NoteServiceImpl implements NoteService {
       const existing = rows[0];
       if (!existing) throw new NoteNotFoundError(id);
 
-      // No-op if the body didn't actually change.
-      if (existing.body === newBody) return existing;
+      const bodyChanged = patch.body !== undefined && patch.body !== existing.body;
+      const dateChanged =
+        patch.occurred_at !== undefined && patch.occurred_at !== existing.occurred_at;
+
+      // No-op if nothing actually changed.
+      if (!bodyChanged && !dateChanged) return existing;
 
       const now = this.clock.nowISO();
 
-      // Capture the previous body in the audit log.
-      await tx.exec(
-        `INSERT INTO note_edits (id, note_id, prev_body, edited_at)
-         VALUES (?, ?, ?, ?)`,
-        [newId(), id, existing.body, now],
-      );
+      // Capture the previous body in the audit log (body edits only).
+      if (bodyChanged) {
+        await tx.exec(
+          `INSERT INTO note_edits (id, note_id, prev_body, edited_at)
+           VALUES (?, ?, ?, ?)`,
+          [newId(), id, existing.body, now],
+        );
+      }
 
-      // Update the current note.
-      await tx.exec(
-        `UPDATE notes SET body = ?, updated_at = ? WHERE id = ?`,
-        [newBody, now, id],
-      );
+      const sets: string[] = [];
+      const params: (string | number)[] = [];
+      if (bodyChanged) {
+        sets.push('body = ?');
+        params.push(patch.body!);
+      }
+      if (dateChanged) {
+        sets.push('occurred_at = ?');
+        params.push(patch.occurred_at!);
+      }
+      sets.push('updated_at = ?');
+      params.push(now);
+      params.push(id);
+
+      await tx.exec(`UPDATE notes SET ${sets.join(', ')} WHERE id = ?`, params);
 
       const updated = await tx.query<Note>(
         `SELECT * FROM notes WHERE id = ?`,
@@ -117,12 +149,15 @@ class NoteServiceImpl implements NoteService {
   async forTracker(trackerId: string, range: TimeRange = {}): Promise<Note[]> {
     const where: string[] = ['tracker_id = ?'];
     const params: (string | number)[] = [trackerId];
+    // Compare by absolute instant (see EntryService.forTracker): occurred_at is
+    // stored in the server's local offset, but range bounds may arrive in a
+    // different offset, so lexical comparison is unsafe.
     if (range.start !== undefined) {
-      where.push('occurred_at >= ?');
+      where.push('julianday(occurred_at) >= julianday(?)');
       params.push(range.start);
     }
     if (range.end !== undefined) {
-      where.push('occurred_at < ?');
+      where.push('julianday(occurred_at) < julianday(?)');
       params.push(range.end);
     }
     return this.storage.query<Note>(
