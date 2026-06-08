@@ -71,7 +71,10 @@ export function HomePage() {
 
   return (
     <section>
-      <h1 className="page-title">Your trackers</h1>
+      <h1 className="page-title">
+        <img className="page-title__logo" src="/icon.svg" alt="" aria-hidden="true" />
+        Your trackers
+      </h1>
       {data.sections.map((section) => (
         <div className="home-section" key={section.key}>
           {section.title && <h2 className="home-section__title">{section.title}</h2>}
