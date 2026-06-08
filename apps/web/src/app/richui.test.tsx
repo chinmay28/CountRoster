@@ -10,6 +10,7 @@ import { GroupsPage } from '../pages/GroupsPage.tsx';
 import { ComparePage } from '../pages/ComparePage.tsx';
 import { NotFoundPage } from '../pages/NotFoundPage.tsx';
 import { makeTestCore, type TestCore } from '../test/makeTestCore.ts';
+import { lastNBuckets } from '../lib/range.ts';
 
 function renderApp(test: TestCore, initialPath = '/') {
   const router = createMemoryRouter(
@@ -52,6 +53,33 @@ describe('stats panel', () => {
     // The bucket chart renders (role="img") rather than the empty-state text.
     const chart = await screen.findByRole('img', { name: /water totals by day/i });
     expect(chart).toBeInTheDocument();
+  });
+
+  it('orders the Month trend chart chronologically, not by data order', async () => {
+    const t = await test.createTracker({ name: 'Sleep', kind: 'number' });
+    await test.core.entries.log(t.id, { value: 7 });
+
+    // The expected x-axis labels are the core's chronological month buckets,
+    // formatted the way the chart formats them. Computing them here (rather than
+    // hardcoding month names) keeps the test correct whatever day it runs.
+    const range = lastNBuckets('month', 6, t.week_start);
+    const buckets = await test.core.stats.bucket(t.id, range, 'month');
+    const expected = buckets.map((b) =>
+      new Date(b.start).toLocaleDateString(undefined, { month: 'short' }),
+    );
+
+    const { container } = renderApp(test, `/trackers/${t.id}`);
+
+    // Switch the Trends panel to the Month period.
+    await userEvent.click(await screen.findByRole('button', { name: 'Month' }));
+
+    const chart = await screen.findByRole('img', { name: /sleep totals by month/i });
+    await waitFor(() => {
+      const labels = [
+        ...chart.querySelectorAll('g[aria-label="x-axis tick label"] text'),
+      ].map((n) => n.textContent ?? '');
+      expect(labels).toEqual(expected);
+    });
   });
 
   it('shows target progress when the tracker has a target', async () => {

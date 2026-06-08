@@ -125,7 +125,11 @@ function BucketChart({ tracker, buckets, period }: BucketChartProps) {
       height: 200,
       marginLeft: 48,
       marginBottom: 30,
-      x: { label: null },
+      // `data` arrives from the core already in chronological order. The x scale
+      // is ordinal (bucket labels), and Plot would otherwise sort that domain
+      // naturally — e.g. month names alphabetically (Apr, Aug, Dec…). Pin the
+      // domain to the data order so bars read left-to-right by date.
+      x: { label: null, domain: data.map((d) => d.bucket) },
       y: { label: tracker.unit ?? null, grid: true, ticks: 4 },
       marks: [
         Plot.barY(data, {
