@@ -345,6 +345,15 @@ a {
 /* Typography helpers */
 .page-title {
   margin: 0 0 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.page-title__logo {
+  width: 1.6em;
+  height: 1.6em;
+  flex: none;
+  border-radius: 0.3em;
 }
 .muted {
   color: var(--muted);
@@ -679,6 +688,15 @@ a {
 .chart-fig svg {
   max-width: 100%;
   height: auto;
+}
+/* Observable Plot hover tooltips fill their box with --plot-background (white
+   by default) while the text uses currentColor — the app's theme text. In dark
+   mode that's near-white text on a white box, so the tip is invisible (and it's
+   the only way to read values on touch, where there's no cursor). Pin the box
+   to the theme surface so tips stay legible in both light and dark. */
+[class^='plot-'],
+[class*=' plot-'] {
+  --plot-background: var(--surface);
 }
 
 /* Calendar heatmap (wide; scrolls horizontally on small screens) */
