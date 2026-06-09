@@ -44,6 +44,14 @@ describe('formatNumber', () => {
     expect(formatNumber(5)).toBe('5');
     expect(formatNumber(2.5, 'cups')).toBe('2.5 cups');
   });
+
+  it('writes currency units as a prefix without a space', () => {
+    expect(formatNumber(5, '$')).toBe('$5');
+    expect(formatNumber(12.5, '€')).toBe('€12.5');
+    expect(formatNumber(3, '£')).toBe('£3');
+    // The sign stays ahead of the symbol.
+    expect(formatNumber(-5, '$')).toBe('-$5');
+  });
 });
 
 describe('formatValue', () => {
