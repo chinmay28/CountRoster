@@ -41,11 +41,25 @@ export function formatDuration(totalSeconds: number): string {
   return sign + parts.join(' ');
 }
 
+/**
+ * A currency-style unit (e.g. "$", "€", "£", "¥") is written *before* the
+ * number with no space ("$5"), the way money reads, unlike trailing units
+ * like "5 cups". Detected via the Unicode Currency_Symbol property.
+ */
+export function isCurrencyUnit(unit: string): boolean {
+  return /^\p{Sc}+$/u.test(unit);
+}
+
 /** Format a number without trailing zeros, with a unit if present. */
 export function formatNumber(value: number, unit?: string | null): string {
   // Round to 2 decimals but drop trailing zeros (2.5 not 2.50, 3 not 3.00).
   const n = String(Math.round(value * 100) / 100);
-  return unit ? `${n} ${unit}` : n;
+  if (!unit) return n;
+  if (isCurrencyUnit(unit)) {
+    // Keep the sign ahead of the symbol: "-$5", not "$-5".
+    return n.startsWith('-') ? `-${unit}${n.slice(1)}` : `${unit}${n}`;
+  }
+  return `${n} ${unit}`;
 }
 
 /**

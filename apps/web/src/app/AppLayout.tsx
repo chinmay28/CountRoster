@@ -22,9 +22,7 @@ export function AppLayout() {
     <div className="app">
       <header className="app__header">
         <Link to="/" className="app__brand">
-          <span className="app__brand-mark" aria-hidden="true">
-            ✦
-          </span>
+          <img className="app__brand-logo" src="/icon.svg" alt="" aria-hidden="true" />
           CountRoster
         </Link>
         {/* Desktop / wide-screen navigation. The mobile tab bar mirrors it. */}
