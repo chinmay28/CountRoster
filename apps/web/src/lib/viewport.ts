@@ -1,23 +1,29 @@
 /**
- * Mobile shell sizing. iOS (especially installed standalone PWAs) reports CSS
- * viewport units (100vh/100dvh) too small on first paint and only corrects
- * after an interaction, which strands the in-flow bottom tab bar above the real
- * bottom until you navigate. `window.innerHeight` is reliable, so we publish it
- * as `--app-height` (read by the mobile shell in styles.css).
+ * Mobile shell sizing. The mobile shell (`.app`) is locked to `--app-height`
+ * with the tab bar as an in-flow child at its bottom, so `--app-height` must
+ * equal the *actually visible* height or the bar drifts off the real bottom.
  *
- * The catch: `window.innerHeight` can also be measured *wrong* transiently —
- * most notably while a native `window.confirm()`/`alert()` dialog is open. If we
- * publish that stale value and no further resize event fires, `.app` (which is
- * `overflow: hidden`) clips the tab bar off-screen and it stays hidden until the
- * app is backgrounded/reopened (`pageshow`). To avoid that, every sync also
- * re-measures on the next animation frame: a frame scheduled while a modal
- * dialog blocks the main thread only runs once the dialog closes and layout has
- * settled, so a bad measurement self-corrects.
+ * The source of truth is `window.visualViewport.height`, not
+ * `window.innerHeight`. On iOS — especially installed standalone PWAs — the
+ * layout viewport (`innerHeight`) is reported too small on first paint and is
+ * left at the keyboard-reduced height after the keyboard is dismissed, so
+ * publishing it sizes the shell short and leaves a gap below the tab bar (both
+ * on first load and after every keyboard dismiss). The *visual* viewport tracks
+ * the real visible area: it's correct at rest, shrinks to the area above the
+ * keyboard while typing (so the tab bar rides just above it), and restores
+ * exactly on dismiss. We fall back to `innerHeight` only where `visualViewport`
+ * is unavailable.
  */
+function visibleHeight(): number {
+  const vv = window.visualViewport;
+  if (vv && vv.height > 0) return vv.height;
+  return window.innerHeight;
+}
+
 export function syncAppHeight(): void {
   document.documentElement.style.setProperty(
     '--app-height',
-    `${window.innerHeight}px`,
+    `${visibleHeight()}px`,
   );
 }
 
@@ -40,15 +46,12 @@ let settleTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
  * Like {@link scheduleAppHeightSync}, but also re-measures once the viewport
- * stops changing. The soft keyboard animates `window.innerHeight` over several
+ * stops changing. The soft keyboard animates the visible height over several
  * hundred ms, firing resize events throughout; the immediate + next-frame
- * measurements above can both land mid-animation on a too-small height. When
- * the keyboard is dismissed by swipe/"done" the window never refocuses, so —
- * unlike a native dialog — no later event corrects that stale value, and the
- * shell stays sized too short, stranding the in-flow tab bar upward and leaving
- * a gap at the bottom. Debouncing a final measurement that fires only after the
- * resize stream goes quiet guarantees the shell settles to the true height,
- * however long the animation runs.
+ * measurements above can both land mid-animation on a transient height.
+ * Debouncing a final measurement that fires only after the resize stream goes
+ * quiet guarantees the shell settles to the true height, however long the
+ * animation runs.
  */
 export function scheduleSettledAppHeightSync(): void {
   scheduleAppHeightSync();
