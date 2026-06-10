@@ -20,7 +20,6 @@ import { formatValue, formatNumber, KIND_LABELS } from '../lib/format.ts';
 import { sumValues, resetPeriodRange, RESET_PERIOD_LABEL } from '../lib/range.ts';
 import { fromDatetimeLocalValue } from '../lib/format.ts';
 import { readableInk } from '../lib/color.ts';
-import { scheduleAppHeightSync } from '../lib/viewport.ts';
 
 /** Per-tracker detail: header, custom log, entry timeline, notes. */
 export function TrackerDetailPage() {
@@ -128,10 +127,6 @@ export function TrackerDetailPage() {
     if (!confirm(`Archive "${tracker!.name}"? You can restore it later from the Data page.`)) return;
     await core.trackers.archive(tracker!.id);
     navigate('/');
-    // The native confirm dialog can leave window.innerHeight mis-measured, which
-    // strands the in-flow mobile tab bar outside the clipped app shell. Re-sync
-    // once the dialog has closed and the new route has painted so it reappears.
-    scheduleAppHeightSync();
   }
 
   return (

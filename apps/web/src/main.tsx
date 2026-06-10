@@ -9,7 +9,6 @@ import { TrackerFormPage } from './pages/TrackerFormPage.tsx';
 import { GroupsPage } from './pages/GroupsPage.tsx';
 import { DataPage } from './pages/DataPage.tsx';
 import { NotFoundPage } from './pages/NotFoundPage.tsx';
-import { installAppHeightSync } from './lib/viewport.ts';
 import './styles.css';
 
 // The comparison page is chart-heavy (Observable Plot); load it on demand.
@@ -44,10 +43,6 @@ const router = createBrowserRouter([
     ],
   },
 ]);
-
-// Pin the app shell to the actual visible height so the mobile tab bar tracks
-// the real bottom. See ./lib/viewport.ts for the why.
-installAppHeightSync();
 
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('Root element #root not found');
