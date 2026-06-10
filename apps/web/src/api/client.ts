@@ -4,6 +4,7 @@ import type {
   Note,
   NoteEdit,
   TrackerGroup,
+  TrackerLink,
   Reminder,
   TrackerService,
   EntryService,
@@ -113,6 +114,8 @@ export function createApiClient(baseUrl = '/api'): ApiCore {
     unarchive: (id) => request('POST', `/trackers/${id}/unarchive`),
     delete: (id) => request('DELETE', `/trackers/${id}`),
     reorder: (orderedIds) => request('POST', '/trackers/reorder', { orderedIds }),
+    links: (id) => request<TrackerLink[]>('GET', `/trackers/${id}/links`),
+    setLinks: (id, links) => request('PUT', `/trackers/${id}/links`, { links }),
   };
 
   const entries: EntryService = {

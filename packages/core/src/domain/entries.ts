@@ -1,4 +1,4 @@
-import type { Storage } from '../storage/adapter.js';
+import type { SqlParam, Storage } from '../storage/adapter.js';
 import { newId } from '../ids.js';
 import type { Clock } from '../time.js';
 import type { Entry } from '../schema/tables.js';
@@ -9,6 +9,7 @@ import {
   type EntryPatch,
 } from '../schema/validators.js';
 import { TrackerNotFoundError } from './trackers.js';
+import { DerivedTrackerError, effectiveEntrySource } from './derived.js';
 
 export interface TimeRange {
   /** Inclusive ISO 8601 lower bound. */
@@ -53,11 +54,19 @@ class EntryServiceImpl implements EntryService {
     const input = entryLogInputSchema.parse(rawInput);
 
     // Look up the tracker's default_value so a bare .log() does the right thing.
-    const trackerRows = await this.storage.query<{ default_value: number }>(
-      `SELECT default_value FROM trackers WHERE id = ?`,
+    const trackerRows = await this.storage.query<{
+      default_value: number;
+      is_derived: number;
+    }>(
+      `SELECT default_value, is_derived FROM trackers WHERE id = ?`,
       [trackerId],
     );
     if (trackerRows.length === 0) throw new TrackerNotFoundError(trackerId);
+    if (trackerRows[0]!.is_derived === 1) {
+      throw new DerivedTrackerError(
+        'Cannot log entries on a derived tracker; its value is computed from its sources.',
+      );
+    }
 
     const now = this.clock.nowISO();
     const id = newId();
@@ -120,8 +129,13 @@ class EntryServiceImpl implements EntryService {
   }
 
   async forTracker(trackerId: string, range: TimeRange = {}): Promise<Entry[]> {
-    const where: string[] = ['tracker_id = ?'];
-    const params: (string | number)[] = [trackerId];
+    // For a derived tracker this resolves to a virtual stream of its sources'
+    // entries (each scaled by its coefficient); for an ordinary tracker it's
+    // just its own `entries`. Either way the range filter and ordering below
+    // are identical.
+    const source = await effectiveEntrySource(this.storage, trackerId);
+    const where: string[] = [];
+    const params: SqlParam[] = [...source.params];
     // Compare by absolute instant, not lexically: occurred_at is stored with
     // the *server's* local offset, but a client may request a range in a
     // *different* offset (e.g. a desktop in another timezone than the box that
@@ -137,8 +151,9 @@ class EntryServiceImpl implements EntryService {
       where.push('julianday(occurred_at) < julianday(?)');
       params.push(range.end);
     }
+    const whereSql = where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '';
     return this.storage.query<Entry>(
-      `SELECT * FROM entries WHERE ${where.join(' AND ')}
+      `SELECT * FROM ${source.sql}${whereSql}
        ORDER BY occurred_at ASC, id ASC`,
       params,
     );

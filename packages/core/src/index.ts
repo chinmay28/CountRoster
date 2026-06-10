@@ -12,6 +12,7 @@ export type {
   Tracker,
   TrackerKind,
   TrackerOption,
+  TrackerLink,
   ResetPeriod,
   WeekStart,
   Entry,
@@ -25,6 +26,7 @@ export type {
 export {
   trackerInputSchema,
   trackerPatchSchema,
+  trackerLinkInputSchema,
   entryLogInputSchema,
   entryPatchSchema,
   noteInputSchema,
@@ -35,6 +37,7 @@ export {
   reminderPatchSchema,
   type TrackerInput,
   type TrackerPatch,
+  type TrackerLinkInput,
   type EntryLogInput,
   type EntryPatch,
   type NoteInput,
@@ -50,6 +53,7 @@ export {
   type TrackerService,
   TrackerNotFoundError,
 } from './domain/trackers.js';
+export { DerivedTrackerError } from './domain/derived.js';
 export {
   type EntryService,
   type TimeRange,

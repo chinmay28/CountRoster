@@ -30,12 +30,26 @@ export function TrackerDetailPage() {
   const { data, loading, error, reload } = useAsync(async () => {
     if (!id) return null;
     const tracker = await core.trackers.get(id);
-    if (!tracker) return { tracker: null, entries: [], notes: [] };
+    if (!tracker) {
+      return { tracker: null, entries: [], notes: [], links: [], sourceNames: new Map() };
+    }
     const [entries, notes] = await Promise.all([
       core.entries.forTracker(id),
       core.notes.forTracker(id),
     ]);
-    return { tracker, entries, notes };
+    // For a derived tracker, also resolve its source operands (which may be
+    // archived) so the detail can show what it's computed from.
+    let links: Awaited<ReturnType<typeof core.trackers.links>> = [];
+    let sourceNames = new Map<string, string>();
+    if (tracker.is_derived) {
+      const [linkRows, all] = await Promise.all([
+        core.trackers.links(id),
+        core.trackers.list({ includeArchived: true }),
+      ]);
+      links = linkRows;
+      sourceNames = new Map(all.map((t) => [t.id, t.name]));
+    }
+    return { tracker, entries, notes, links, sourceNames };
   }, [id]);
 
   const [customValue, setCustomValue] = useState('');
@@ -63,7 +77,8 @@ export function TrackerDetailPage() {
     );
   }
 
-  const { tracker, entries, notes } = data;
+  const { tracker, entries, notes, links, sourceNames } = data;
+  const isDerived = tracker.is_derived === 1;
   const total = sumValues(entries);
 
   // Total for the current reset window (today / this week / …). Compared by
@@ -135,7 +150,7 @@ export function TrackerDetailPage() {
         <div>
           <h1 className="page-title">{tracker.name}</h1>
           <p className="muted">
-            {KIND_LABELS[tracker.kind]}
+            {isDerived ? 'Derived' : KIND_LABELS[tracker.kind]}
             {tracker.unit ? ` · ${tracker.unit}` : ''}
             {tracker.target != null
               ? ` · target ${formatNumber(tracker.target, tracker.unit)}`
@@ -177,63 +192,89 @@ export function TrackerDetailPage() {
         )}
       </section>
 
+      {isDerived && (
+        <section className="detail__derivation card">
+          <h2>Derived from</h2>
+          {links.length === 0 ? (
+            <p className="muted">
+              No sources linked. Add sources from{' '}
+              <Link to={`/trackers/${tracker.id}/edit`}>Edit</Link> to compute a value.
+            </p>
+          ) : (
+            <ul className="derivation-list">
+              {links.map((link) => (
+                <li key={link.id} className="derivation-item">
+                  <span className="derivation-item__op">{formatCoefficient(link.coefficient)}</span>
+                  <Link to={`/trackers/${link.source_id}`}>
+                    {sourceNames.get(link.source_id) ?? 'Unknown tracker'}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
       <Suspense fallback={<p className="muted">Loading charts…</p>}>
         <StatsPanel tracker={tracker} refreshKey={statsKey} />
         <CalendarHeatmap tracker={tracker} refreshKey={statsKey} />
       </Suspense>
 
-      <section className="detail__log">
-        <h2>Log an entry</h2>
-        <form className="detail__custom" onSubmit={customLog}>
-          <label className="field">
-            <span>Value</span>
-            <input
-              type="number"
-              step="any"
-              placeholder={String(tracker.default_value)}
-              value={customValue}
-              onChange={(e) => setCustomValue(e.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span>When (optional, for backdating)</span>
-            <input
-              type="datetime-local"
-              value={customWhen}
-              onChange={(e) => setCustomWhen(e.target.value)}
-            />
-          </label>
-          <label className="field detail__custom-note">
-            <span>Note (optional)</span>
-            <textarea
-              rows={2}
-              placeholder="Describe this entry…"
-              value={customNote}
-              onChange={(e) => setCustomNote(e.target.value)}
-            />
-          </label>
-          <button
-            type="submit"
-            className="btn btn--primary"
-            style={{ background: tracker.color, color: readableInk(tracker.color) }}
-            disabled={logging}
-          >
-            Log entry
-          </button>
-        </form>
-      </section>
+      {!isDerived && (
+        <section className="detail__log">
+          <h2>Log an entry</h2>
+          <form className="detail__custom" onSubmit={customLog}>
+            <label className="field">
+              <span>Value</span>
+              <input
+                type="number"
+                step="any"
+                placeholder={String(tracker.default_value)}
+                value={customValue}
+                onChange={(e) => setCustomValue(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>When (optional, for backdating)</span>
+              <input
+                type="datetime-local"
+                value={customWhen}
+                onChange={(e) => setCustomWhen(e.target.value)}
+              />
+            </label>
+            <label className="field detail__custom-note">
+              <span>Note (optional)</span>
+              <textarea
+                rows={2}
+                placeholder="Describe this entry…"
+                value={customNote}
+                onChange={(e) => setCustomNote(e.target.value)}
+              />
+            </label>
+            <button
+              type="submit"
+              className="btn btn--primary"
+              style={{ background: tracker.color, color: readableInk(tracker.color) }}
+              disabled={logging}
+            >
+              Log entry
+            </button>
+          </form>
+        </section>
+      )}
 
       <section className="detail__entries">
-        <h2>Entries</h2>
+        <h2>{isDerived ? 'Contributing entries' : 'Entries'}</h2>
         <EntryList
           tracker={tracker}
           entries={entries}
           notesByEntry={notesByEntry}
           onChanged={refresh}
+          readOnly={isDerived}
         />
       </section>
 
-      <RemindersSection trackerId={tracker.id} />
+      {!isDerived && <RemindersSection trackerId={tracker.id} />}
 
       <NotesSection
         trackerId={tracker.id}
@@ -242,4 +283,12 @@ export function TrackerDetailPage() {
       />
     </article>
   );
+}
+
+/** Render a link's coefficient as an operator: +1 → "+", −1 → "−", 2 → "× 2". */
+function formatCoefficient(coefficient: number): string {
+  if (coefficient === 1) return '+';
+  if (coefficient === -1) return '−';
+  if (coefficient < 0) return `− ${Math.abs(coefficient)} ×`;
+  return `+ ${coefficient} ×`;
 }

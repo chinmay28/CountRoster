@@ -59,6 +59,12 @@ export function buildApp(
     await core.trackers.unarchive(req.params.id);
     res.status(204).end();
   });
+  api.get('/trackers/:id/links', async (req, res) => {
+    res.json(await core.trackers.links(req.params.id));
+  });
+  api.put('/trackers/:id/links', async (req, res) => {
+    res.json(await core.trackers.setLinks(req.params.id, req.body.links ?? []));
+  });
   api.delete('/trackers/:id', async (req, res) => {
     await core.trackers.delete(req.params.id);
     res.status(204).end();
@@ -246,6 +252,11 @@ function errorHandler(
   }
   if (typeof e?.name === 'string' && e.name.endsWith('NotFoundError')) {
     res.status(404).json({ error: e.message });
+    return;
+  }
+  // Invalid derivation (self/missing/derived/duplicate source) is a bad request.
+  if (e?.name === 'DerivedTrackerError') {
+    res.status(400).json({ error: e.message });
     return;
   }
   console.error('[countroster] unhandled error:', err);

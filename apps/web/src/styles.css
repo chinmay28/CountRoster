@@ -394,6 +394,71 @@ a {
   justify-content: flex-end;
 }
 
+/* A checkbox field reads left-to-right, unlike the stacked label fields. */
+.field--checkbox {
+  grid-auto-flow: column;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  justify-content: start;
+  gap: 0.5rem;
+}
+.field--checkbox input {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Derived-tracker sources editor (a list of source + coefficient rows). */
+.derived-sources {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.6rem;
+}
+.derived-sources legend {
+  font-size: 0.85rem;
+  color: var(--muted);
+  padding: 0 0.35rem;
+}
+.derived-sources__row {
+  display: grid;
+  grid-template-columns: 1fr 6rem auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+.derived-sources__row select,
+.derived-sources__row input {
+  font: inherit;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* "Derived from" panel on the detail page. */
+.derivation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.derivation-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.derivation-item__op {
+  font-weight: 700;
+  color: var(--muted);
+}
+
 /* Detail page */
 .detail {
   display: grid;

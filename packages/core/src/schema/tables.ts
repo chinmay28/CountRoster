@@ -27,8 +27,32 @@ export interface Tracker {
   /** ISO 8601 timestamp, or null if active */
   archived_at: string | null;
   sort_order: number;
+  /**
+   * 1 if this tracker's value is computed from other trackers via
+   * `tracker_links` (a "derived" tracker), 0 for an ordinary, logged tracker.
+   * Derived trackers reject direct entry logging.
+   */
+  is_derived: 0 | 1;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * One operand of a derived tracker: a source tracker and the coefficient its
+ * values are multiplied by. A "Profit" tracker derived from Revenue (+1) and
+ * Expenses (-1) has two links. The derived value over any range is the sum of
+ * `coefficient × (source values in range)` across all links.
+ */
+export interface TrackerLink {
+  id: string;
+  /** The derived tracker this operand belongs to. */
+  tracker_id: string;
+  /** The source tracker whose entries feed the derivation. */
+  source_id: string;
+  /** Multiplier applied to the source's values (e.g. -1 to subtract). */
+  coefficient: number;
+  sort_order: number;
+  created_at: string;
 }
 
 export interface TrackerOption {

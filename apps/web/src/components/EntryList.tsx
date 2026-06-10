@@ -15,26 +15,38 @@ interface EntryListProps {
   /** Notes linked to an entry, keyed by `entry_id`. */
   notesByEntry?: Map<string, Note[]>;
   onChanged: () => void;
+  /**
+   * Render entries without edit/delete controls. Used for derived trackers,
+   * whose entries are virtual (computed from their sources) and not editable.
+   */
+  readOnly?: boolean;
 }
 
 /** Recent entries with a single inline edit (value, backdate, and the one note
  * describing the entry) and delete. The entry's note is shown right beneath it. */
-export function EntryList({ tracker, entries, notesByEntry, onChanged }: EntryListProps) {
+export function EntryList({
+  tracker,
+  entries,
+  notesByEntry,
+  onChanged,
+  readOnly = false,
+}: EntryListProps) {
   if (entries.length === 0) {
-    return <p className="muted">No entries yet. Log one above.</p>;
+    return <p className="muted">No entries yet.</p>;
   }
   return (
     <ul className="entry-list">
       {entries
         .slice()
         .reverse()
-        .map((entry) => (
+        .map((entry, i) => (
           <EntryRow
-            key={entry.id}
+            key={readOnly ? `${entry.id}-${i}` : entry.id}
             tracker={tracker}
             entry={entry}
             note={notesByEntry?.get(entry.id)?.[0] ?? null}
             onChanged={onChanged}
+            readOnly={readOnly}
           />
         ))}
     </ul>
@@ -46,12 +58,14 @@ function EntryRow({
   entry,
   note,
   onChanged,
+  readOnly,
 }: {
   tracker: Tracker;
   entry: Entry;
   /** The single note describing this entry, if any. */
   note: Note | null;
   onChanged: () => void;
+  readOnly: boolean;
 }) {
   const core = useCore();
   const [editing, setEditing] = useState(false);
@@ -161,14 +175,16 @@ function EntryRow({
       <div className="entry__main">
         <span className="entry__value">{formatValue(tracker, entry.value)}</span>
         <span className="entry__time muted">{formatDateTime(entry.occurred_at)}</span>
-        <div className="entry__actions">
-          <button className="btn btn--small" onClick={startEditing}>
-            Edit
-          </button>
-          <button className="btn btn--small btn--danger" onClick={remove} disabled={busy}>
-            Delete
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="entry__actions">
+            <button className="btn btn--small" onClick={startEditing}>
+              Edit
+            </button>
+            <button className="btn btn--small btn--danger" onClick={remove} disabled={busy}>
+              Delete
+            </button>
+          </div>
+        )}
       </div>
 
       {note && <p className="entry__note">{note.body}</p>}
