@@ -1022,6 +1022,14 @@ a {
     display: flex;
     position: absolute;
   }
+  /* While a quick-log ("quick add") form is open on a tracker card, reclaim the
+     bottom chrome — hide the tab bar and the FAB — so the value/when/note inputs
+     (and the keyboard) get the full screen. Both reappear the moment the form is
+     submitted or dismissed and the `--logging` class drops. */
+  .app:has(.tracker-card--logging) .tab-bar,
+  .app:has(.tracker-card--logging) .fab {
+    display: none;
+  }
   /* The "synced" footer is desktop-only chrome; hide it under the tab bar. */
   .app__footer {
     display: none;
