@@ -983,19 +983,20 @@ a {
   .app__nav {
     display: none;
   }
-  /* App-shell layout. iOS standalone PWAs report the viewport height too
-     small on first paint and only correct it after an interaction/resize,
-     which leaves a `position: fixed` bottom bar floating above the real
-     bottom until you navigate. dvh is mis-measured the same way. So instead
-     we size the shell from --app-height (set from window.innerHeight in JS,
-     and kept current on resize/visualViewport changes) and let the main
-     region scroll inside it. The tab bar is then a normal in-flow flex child
-     at the shell's bottom — when --app-height updates, it repositions
-     instantly, with no fixed-positioning quirk. */
+  /* App-shell layout. The shell is the full screen, with the tab bar as an
+     in-flow flex child at its bottom and `.app__main` scrolling inside it.
+     Height comes from the *large* viewport unit (lvh): on this app's target
+     (an installed Chrome PWA in standalone mode) the real screen height is
+     constant, but window.innerHeight / dvh / visualViewport under-report it at
+     rest and only jump to the true value after an interaction — so sizing from
+     them (as the old --app-height JS hack did) left the tab bar 60-ish px above
+     the real bottom, a gap that reappeared on every keyboard dismiss. lvh is
+     the full screen and stays stable across keyboard show/dismiss and Chrome's
+     small/large viewport switches, so the bar sits flush with no JS. */
   .app {
     position: relative;
-    height: 100dvh; /* fallback before the --app-height var is set */
-    height: var(--app-height, 100dvh);
+    height: 100vh; /* fallback for engines without the large-viewport unit */
+    height: 100lvh;
     min-height: 0;
     overflow: hidden;
   }
