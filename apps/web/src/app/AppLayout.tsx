@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useCoreContext } from './CoreContext.tsx';
+import { ViewportDebug } from '../components/ViewportDebug.tsx';
 
 /** Primary destinations, shown in the desktop header and the mobile tab bar. */
 const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
@@ -18,10 +19,28 @@ export function AppLayout() {
   // The FAB *is* the "new tracker" action, so don't show it on that form.
   const showFab = !pathname.startsWith('/trackers/new') && !pathname.endsWith('/edit');
 
+  // TEMP: tap the title 5× to toggle the viewport diagnostic overlay. Persisted
+  // so a reload captures first-load values. Remove once the gap bug is fixed.
+  const [debug, setDebug] = useState(
+    () => localStorage.getItem('vpdebug') === '1',
+  );
+  const taps = useRef<number[]>([]);
+  function onBrandTap() {
+    const now = Date.now();
+    taps.current = [...taps.current, now].filter((t) => now - t < 1500);
+    if (taps.current.length >= 5) {
+      taps.current = [];
+      const next = !debug;
+      setDebug(next);
+      localStorage.setItem('vpdebug', next ? '1' : '0');
+    }
+  }
+
   return (
     <div className="app">
+      {debug && <ViewportDebug />}
       <header className="app__header">
-        <Link to="/" className="app__brand">
+        <Link to="/" className="app__brand" onClick={onBrandTap}>
           <img className="app__brand-logo" src="/icon.svg" alt="" aria-hidden="true" />
           CountRoster
         </Link>
