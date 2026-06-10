@@ -34,8 +34,12 @@ export function HomePage() {
     const byId = new Map(trackers.map((t) => [t.id, t]));
     const grouped = new Set<string>();
     const sections: { key: string; title: string | null; trackers: Tracker[] }[] = [];
-    for (const g of groups) {
-      const members = await core.groups.trackersIn(g.id);
+    // Fetch every group's membership in parallel; Promise.all preserves order,
+    // so the sections still come out in group order below.
+    const memberships = await Promise.all(
+      groups.map(async (g) => [g, await core.groups.trackersIn(g.id)] as const),
+    );
+    for (const [g, members] of memberships) {
       const active = members.filter((m) => byId.has(m.id));
       if (active.length === 0) continue;
       for (const m of active) grouped.add(m.id);
