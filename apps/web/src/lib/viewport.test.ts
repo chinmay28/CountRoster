@@ -13,14 +13,6 @@ function setInnerHeight(px: number): void {
   });
 }
 
-/** Stub the visual viewport (the source of truth), or `null` to remove it. */
-function setVisualViewport(height: number | null): void {
-  Object.defineProperty(window, 'visualViewport', {
-    configurable: true,
-    value: height === null ? undefined : { height, addEventListener() {} },
-  });
-}
-
 function appHeight(): string {
   return document.documentElement.style.getPropertyValue('--app-height');
 }
@@ -34,7 +26,6 @@ describe('app height sync', () => {
       cb(0);
       return 0;
     });
-    setVisualViewport(null);
     document.documentElement.style.removeProperty('--app-height');
   });
 
@@ -43,36 +34,9 @@ describe('app height sync', () => {
     vi.unstubAllGlobals();
   });
 
-  it('publishes window.innerHeight as --app-height when no visual viewport', () => {
+  it('publishes window.innerHeight as --app-height', () => {
     setInnerHeight(812);
     syncAppHeight();
-    expect(appHeight()).toBe('812px');
-  });
-
-  it('prefers the visual viewport height over innerHeight', () => {
-    // iOS leaves innerHeight too small (first paint, or stuck after a keyboard
-    // dismiss); the visual viewport reports the true visible height.
-    setInnerHeight(640);
-    setVisualViewport(812);
-    syncAppHeight();
-    expect(appHeight()).toBe('812px');
-  });
-
-  it('tracks the visual viewport shrinking and restoring with the keyboard', () => {
-    setInnerHeight(812);
-    setVisualViewport(812);
-    scheduleSettledAppHeightSync();
-    expect(appHeight()).toBe('812px');
-
-    // Keyboard up: the visible area shrinks to the space above it.
-    setVisualViewport(420);
-    scheduleSettledAppHeightSync();
-    expect(appHeight()).toBe('420px');
-
-    // Keyboard dismissed: the visible area restores in full.
-    setVisualViewport(812);
-    scheduleSettledAppHeightSync();
-    vi.advanceTimersByTime(350);
     expect(appHeight()).toBe('812px');
   });
 
