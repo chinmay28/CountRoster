@@ -47,6 +47,19 @@ describe('GroupService', () => {
     expect(members.map((t) => t.id)).toEqual([a.id]);
   });
 
+  it('reorder() sets sort_order to match the given group order', async () => {
+    const { app } = await makeTestApp();
+    const a = await app.groups.create({ name: 'A' });
+    const b = await app.groups.create({ name: 'B' });
+    const c = await app.groups.create({ name: 'C' });
+
+    // Default order is creation order (all sort_order 0, tie-broken by created_at).
+    expect((await app.groups.list()).map((g) => g.id)).toEqual([a.id, b.id, c.id]);
+
+    await app.groups.reorder([c.id, a.id, b.id]);
+    expect((await app.groups.list()).map((g) => g.id)).toEqual([c.id, a.id, b.id]);
+  });
+
   it('delete() cascades memberships', async () => {
     const { app, storage } = await makeTestApp();
     const g = await app.groups.create({ name: 'Temp' });

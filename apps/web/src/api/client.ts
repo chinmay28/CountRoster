@@ -145,6 +145,8 @@ export function createApiClient(baseUrl = '/api'): ApiCore {
     create: (input: GroupInput) => request('POST', '/groups', input),
     update: (id, patch: GroupPatch) => request('PATCH', `/groups/${id}`, patch),
     delete: (id) => request('DELETE', `/groups/${id}`),
+    reorder: (orderedGroupIds) =>
+      request('POST', '/groups/reorder', { orderedGroupIds }),
     trackersIn: (groupId) => request('GET', `/groups/${groupId}/trackers`),
     addTracker: (groupId, trackerId) =>
       request('POST', `/groups/${groupId}/trackers`, { tracker_id: trackerId }),

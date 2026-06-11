@@ -15,6 +15,8 @@ export interface GroupService {
   delete(id: string): Promise<void>;
   get(id: string): Promise<TrackerGroup | null>;
   list(): Promise<TrackerGroup[]>;
+  /** Reorder all groups to match the given group-id order. */
+  reorder(orderedGroupIds: readonly string[]): Promise<void>;
   /** Trackers that belong to a group, in membership sort order. */
   trackersIn(groupId: string): Promise<Tracker[]>;
   /** Add a tracker to a group (idempotent). */
@@ -114,6 +116,18 @@ class GroupServiceImpl implements GroupService {
     return this.storage.query<TrackerGroup>(
       `SELECT * FROM tracker_groups ORDER BY sort_order ASC, created_at ASC`,
     );
+  }
+
+  async reorder(orderedGroupIds: readonly string[]): Promise<void> {
+    const now = this.clock.nowISO();
+    await this.storage.transaction(async (tx) => {
+      for (let i = 0; i < orderedGroupIds.length; i++) {
+        await tx.exec(
+          `UPDATE tracker_groups SET sort_order = ?, updated_at = ? WHERE id = ?`,
+          [i, now, orderedGroupIds[i]!],
+        );
+      }
+    });
   }
 
   async trackersIn(groupId: string): Promise<Tracker[]> {
