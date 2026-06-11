@@ -115,6 +115,10 @@ export function buildApp(
   api.post('/groups', async (req, res) => {
     res.status(201).json(await core.groups.create(req.body));
   });
+  api.post('/groups/reorder', async (req, res) => {
+    await core.groups.reorder(req.body.orderedGroupIds ?? []);
+    res.status(204).end();
+  });
   api.get('/groups/:id', async (req, res) => {
     const g = await core.groups.get(req.params.id);
     if (!g) return notFound(res, 'group');

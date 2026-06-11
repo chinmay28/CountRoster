@@ -1024,11 +1024,66 @@ a {
 .group-card__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.5rem;
 }
 .group-card__name {
   margin: 0;
   font-size: 1.1rem;
+  flex: 1;
+}
+.group-card__name-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.05rem;
+}
+.group-card__actions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.group-card__reorder-hint {
+  margin: 0;
+  font-size: 0.8rem;
+}
+.groups__hint {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+}
+
+/* Drag-to-reorder handle (mouse + touch). */
+.drag-handle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.35rem;
+  min-width: 1.6rem;
+  align-self: stretch;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: grab;
+  border-radius: 6px;
+  /* Stop touch scrolling from hijacking the drag. */
+  touch-action: none;
+  user-select: none;
+}
+.drag-handle:hover {
+  background: var(--surface-2, rgba(127, 127, 127, 0.12));
+  color: var(--text);
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+.is-dragging {
+  opacity: 0.7;
+}
+.is-dragging .card,
+.group-card__members .is-dragging {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 .group-card__members {
   list-style: none;
