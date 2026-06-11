@@ -17,7 +17,13 @@ const CalendarHeatmap = lazy(() =>
   })),
 );
 import { formatValue, formatNumber, KIND_LABELS } from '../lib/format.ts';
-import { sumValues, resetPeriodRange, RESET_PERIOD_LABEL } from '../lib/range.ts';
+import {
+  sumValues,
+  sumInRange,
+  resetPeriodRange,
+  windowStats,
+  RESET_PERIOD_LABEL,
+} from '../lib/range.ts';
 import { fromDatetimeLocalValue } from '../lib/format.ts';
 import { readableInk } from '../lib/color.ts';
 
@@ -88,17 +94,12 @@ export function TrackerDetailPage() {
   // absolute instant so it's correct regardless of the offset entries were
   // logged in. `null` range means the tracker never resets (cumulative).
   const periodRange = resetPeriodRange(tracker.reset_period, tracker.week_start);
-  const periodTotal = periodRange
-    ? sumValues(
-        entries.filter((e) => {
-          const t = new Date(e.occurred_at).getTime();
-          return (
-            t >= new Date(periodRange.start).getTime() &&
-            t < new Date(periodRange.end).getTime()
-          );
-        }),
-      )
-    : total;
+  const periodTotal = periodRange ? sumInRange(entries, periodRange) : total;
+
+  // Breakdown across the standard windows (this week / month / year / all-time),
+  // shown beneath the headline regardless of the reset period. Redundant
+  // windows are collapsed — see `windowStats`.
+  const breakdown = windowStats(entries, tracker.week_start);
 
   // Notes that describe a specific entry are shown inline with that entry;
   // the rest are general journal notes for the Notes section.
@@ -182,24 +183,23 @@ export function TrackerDetailPage() {
       {actionError && <p className="error">{actionError}</p>}
 
       <section className="detail__summary card">
-        {tracker.reset_period === 'never' ? (
-          <>
-            <span className="detail__total" style={{ color: tracker.color }}>
-              {formatValue(tracker, total)}
-            </span>
-            <span className="muted">all-time total · {entries.length} entries</span>
-          </>
-        ) : (
-          <>
-            <span className="detail__total" style={{ color: tracker.color }}>
-              {formatValue(tracker, periodTotal)}
-            </span>
-            <span className="muted">
-              {RESET_PERIOD_LABEL[tracker.reset_period]} ·{' '}
-              {formatValue(tracker, total)} all-time · {entries.length} entries
-            </span>
-          </>
-        )}
+        <span className="detail__total" style={{ color: tracker.color }}>
+          {formatValue(tracker, tracker.reset_period === 'never' ? total : periodTotal)}
+        </span>
+        <span className="muted">
+          {tracker.reset_period === 'never'
+            ? 'all-time total'
+            : RESET_PERIOD_LABEL[tracker.reset_period]}{' '}
+          · {entries.length} entries
+        </span>
+        <dl className="detail__stats">
+          {breakdown.map((stat) => (
+            <div key={stat.key} className="detail__stat">
+              <dt className="muted">{stat.label}</dt>
+              <dd style={{ color: tracker.color }}>{formatValue(tracker, stat.value)}</dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
       {isDerived && (
@@ -239,6 +239,7 @@ export function TrackerDetailPage() {
               <input
                 type="number"
                 step="any"
+                inputMode="decimal"
                 placeholder={String(tracker.default_value)}
                 value={customValue}
                 onChange={(e) => setCustomValue(e.target.value)}

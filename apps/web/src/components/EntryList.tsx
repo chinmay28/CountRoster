@@ -132,6 +132,7 @@ function EntryRow({
           <input
             type="number"
             step="any"
+            inputMode="decimal"
             value={value}
             onChange={(e) => setValue(e.target.value)}
           />

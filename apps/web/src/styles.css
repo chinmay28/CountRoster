@@ -484,6 +484,24 @@ a {
   font-size: 2rem;
   font-weight: 700;
 }
+/* Windowed breakdown (this week / month / year / all-time) under the headline. */
+.detail__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.5rem;
+  margin: 0.75rem 0 0;
+}
+.detail__stat {
+  display: flex;
+  flex-direction: column;
+}
+.detail__stat dt {
+  font-size: 0.8rem;
+}
+.detail__stat dd {
+  margin: 0;
+  font-weight: 600;
+}
 .detail__custom {
   display: grid;
   grid-template-columns: 1fr 1fr auto;

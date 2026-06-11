@@ -250,6 +250,7 @@ export function TrackerFormPage() {
             <input
               type="number"
               step="any"
+              inputMode="decimal"
               value={values.default_value}
               onChange={(e) => set('default_value', e.target.value)}
             />
@@ -275,6 +276,7 @@ export function TrackerFormPage() {
           <input
             type="number"
             step="any"
+            inputMode="decimal"
             placeholder="goal per period"
             value={values.target}
             onChange={(e) => set('target', e.target.value)}
@@ -351,6 +353,7 @@ function DerivedSourcesEditor({
           <input
             type="number"
             step="any"
+            inputMode="decimal"
             aria-label="Coefficient"
             value={link.coefficient}
             onChange={(e) => onChange(i, { coefficient: e.target.value })}
