@@ -350,10 +350,12 @@ function DerivedSourcesEditor({
               </option>
             ))}
           </select>
+          {/* No inputMode="decimal" here: coefficients are routinely negative
+              (−1 to subtract), and iOS's decimal keypad has no minus key. The
+              default number keyboard keeps a minus reachable. */}
           <input
             type="number"
             step="any"
-            inputMode="decimal"
             aria-label="Coefficient"
             value={link.coefficient}
             onChange={(e) => onChange(i, { coefficient: e.target.value })}
