@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useCoreContext } from './CoreContext.tsx';
+import { useKeyboardOpen } from './useKeyboardOpen.ts';
 
 /** Primary destinations, shown in the desktop header and the mobile tab bar. */
 const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
@@ -15,11 +16,14 @@ const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
 export function AppLayout() {
   const { connected } = useCoreContext();
   const { pathname } = useLocation();
+  // While the on-screen keyboard is up, drop the bottom chrome so it never
+  // floats over the keyboard; it comes back the moment the keyboard closes.
+  const keyboardOpen = useKeyboardOpen();
   // The FAB *is* the "new tracker" action, so don't show it on that form.
   const showFab = !pathname.startsWith('/trackers/new') && !pathname.endsWith('/edit');
 
   return (
-    <div className="app">
+    <div className={`app${keyboardOpen ? ' app--keyboard-open' : ''}`}>
       <header className="app__header">
         <Link to="/" className="app__brand">
           <img className="app__brand-logo" src="/icon.svg" alt="" aria-hidden="true" />

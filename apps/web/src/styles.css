@@ -1113,6 +1113,12 @@ a {
   .app:has(.tracker-card--logging) .fab {
     display: none;
   }
+  /* Dismiss the bottom chrome whenever the on-screen keyboard is up (for any
+     input across the app), and bring it back once the keyboard closes. */
+  .app--keyboard-open .tab-bar,
+  .app--keyboard-open .fab {
+    display: none;
+  }
   /* The "synced" footer is desktop-only chrome; hide it under the tab bar. */
   .app__footer {
     display: none;
