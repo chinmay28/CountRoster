@@ -62,8 +62,9 @@ describe('derived tracker detail', () => {
     const { profit } = await profitFixture();
     renderApp(test, `/trackers/${profit.id}`);
 
-    // Headline total is Revenue − Expenses = 150 − 30 = 120.
-    expect(await screen.findByText('120')).toBeInTheDocument();
+    // Headline total is Revenue − Expenses = 150 − 30 = 120 (also echoed in the
+    // all-time window of the breakdown).
+    expect((await screen.findAllByText('120')).length).toBeGreaterThan(0);
 
     // The derivation is spelled out with both source names.
     const derivation = screen.getByRole('heading', { name: /derived from/i });
@@ -114,7 +115,7 @@ describe('derived tracker creation', () => {
     await user.click(screen.getByRole('button', { name: /create tracker/i }));
 
     // Lands on the new tracker's detail with the computed total (70) shown.
-    expect(await screen.findByText('70')).toBeInTheDocument();
+    expect((await screen.findAllByText('70')).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: /derived from/i })).toBeInTheDocument();
 
     // And it is persisted as a derived tracker with two links.

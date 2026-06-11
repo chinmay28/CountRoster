@@ -250,6 +250,7 @@ export function TrackerFormPage() {
             <input
               type="number"
               step="any"
+              inputMode="decimal"
               value={values.default_value}
               onChange={(e) => set('default_value', e.target.value)}
             />
@@ -275,6 +276,7 @@ export function TrackerFormPage() {
           <input
             type="number"
             step="any"
+            inputMode="decimal"
             placeholder="goal per period"
             value={values.target}
             onChange={(e) => set('target', e.target.value)}
@@ -348,6 +350,9 @@ function DerivedSourcesEditor({
               </option>
             ))}
           </select>
+          {/* No inputMode="decimal" here: coefficients are routinely negative
+              (−1 to subtract), and iOS's decimal keypad has no minus key. The
+              default number keyboard keeps a minus reachable. */}
           <input
             type="number"
             step="any"
