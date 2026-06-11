@@ -32,6 +32,16 @@ const hexColor = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/, 'expected a 6-digit hex color like #4ECDC4');
 
+/**
+ * One operand of a derived tracker. A coefficient of -1 subtracts the source,
+ * +1 adds it, 0.5 takes half of it, etc.
+ */
+export const trackerLinkInputSchema = z.object({
+  source_id: z.string().min(1),
+  coefficient: z.number().finite().default(1),
+});
+export type TrackerLinkInput = z.infer<typeof trackerLinkInputSchema>;
+
 /** Input to TrackerService.create() */
 export const trackerInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -46,6 +56,12 @@ export const trackerInputSchema = z.object({
   day_start_minute: z.number().int().min(0).max(1439).default(0),
   default_value: z.number().finite().default(1),
   sort_order: z.number().int().default(0),
+  /**
+   * When present, the tracker is *derived*: its value is computed from these
+   * source trackers rather than logged directly. On update, the supplied list
+   * fully replaces the existing links (an empty list makes it ordinary again).
+   */
+  links: z.array(trackerLinkInputSchema).max(50).optional(),
 });
 
 export type TrackerInput = z.infer<typeof trackerInputSchema>;

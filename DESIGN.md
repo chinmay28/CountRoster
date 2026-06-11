@@ -67,6 +67,7 @@ The product ships on iOS, Android, and the desktop web. It is **local-first**: e
 ### 3.1 Concepts
 
 - **Tracker** — a named thing the user is tracking. Has a kind (count, number, duration, boolean, choice), a unit, a color, an optional target, and a reset period (never / daily / weekly / monthly / yearly).
+- **Derived tracker** — a tracker whose value is *computed* from other trackers rather than logged directly (e.g. `Profit = Revenue − Expenses`). It looks and behaves like any other tracker — totals, charts, target progress, streaks — but its entries are virtual, synthesized from its sources. See §6.5.
 - **Entry** — a single logged event for a tracker. Has a numeric value and a timestamp.
 - **Note** — a free-text journal entry attached to a tracker, and optionally to a specific entry.
 - **Group** — an optional collection of trackers for display organization.
@@ -295,6 +296,29 @@ The schema version lives in `app_meta` under key `schema_version`. Migrations ar
 3. Updates `schema_version`.
 
 Restores from a backup with a *lower* schema version are migrated forward before being adopted. Restores from a *higher* version are rejected with a clear error.
+
+### 6.5 Derived trackers (migration 002)
+
+A *derived* tracker computes its value from other trackers via a weighted linear combination. It is an ordinary `trackers` row with `is_derived = 1`, plus one `tracker_links` row per operand:
+
+```sql
+ALTER TABLE trackers ADD COLUMN is_derived INTEGER NOT NULL DEFAULT 0
+  CHECK (is_derived IN (0, 1));
+
+CREATE TABLE tracker_links (
+  id           TEXT PRIMARY KEY,
+  tracker_id   TEXT NOT NULL REFERENCES trackers (id) ON DELETE CASCADE,  -- the derived tracker
+  source_id    TEXT NOT NULL REFERENCES trackers (id) ON DELETE CASCADE,  -- a source tracker
+  coefficient  REAL NOT NULL DEFAULT 1,                                   -- e.g. -1 to subtract
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  created_at   TEXT NOT NULL,
+  UNIQUE (tracker_id, source_id)
+);
+```
+
+**Semantics.** A derived tracker has no `entries` of its own. Its *effective* entries are virtual: each source entry `(value v at time t)` contributes a row of `coefficient × v` at `t`. Because the app's aggregations are sums, the weighted combination falls out for free — `Profit = (+1 × ΣRevenue) + (−1 × ΣExpenses)` over any range, bucket, or reset period. `EntryService.forTracker` and the `StatsService` resolve a tracker's entry source through a single helper (`domain/derived.ts → effectiveEntrySource`) so neither has to special-case derivation beyond that.
+
+**Rules.** Direct logging on a derived tracker is rejected (`DerivedTrackerError → HTTP 400`). A source must exist, be ordinary (no derived-of-derived nesting), and not be the tracker itself; sources can't repeat. A source tracker **cannot be archived or deleted while a derivation still references it** — both are blocked with a `TrackerInUseError` (`HTTP 409`) that names the derived trackers in use, so the user removes or unlinks them first (`source_id` is `ON DELETE RESTRICT` as a DB-level backstop). Deleting a *derived* tracker is always fine: its own links cascade away (`tracker_id` is `ON DELETE CASCADE`). Links are part of the backup bundle, so derivations survive export/restore.
 
 ## 7. Core Domain: `@countroster/core`
 

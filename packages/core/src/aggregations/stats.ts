@@ -1,6 +1,7 @@
-import type { Storage } from '../storage/adapter.js';
+import type { SqlParam, Storage } from '../storage/adapter.js';
 import type { Clock } from '../time.js';
 import type { Tracker } from '../schema/tables.js';
+import { effectiveEntrySource } from '../domain/derived.js';
 import {
   bucketStart,
   bucketEnd,
@@ -68,11 +69,12 @@ class StatsServiceImpl implements StatsService {
     const tracker = await this.getTracker(trackerId);
     const weekStart = tracker?.week_start ?? 1;
 
+    const source = await effectiveEntrySource(this.storage, trackerId);
     const entries = await this.storage.query<{ occurred_at: string; value: number }>(
-      `SELECT occurred_at, value FROM entries
-        WHERE tracker_id = ? AND occurred_at >= ? AND occurred_at < ?
+      `SELECT occurred_at, value FROM ${source.sql}
+        WHERE occurred_at >= ? AND occurred_at < ?
         ORDER BY occurred_at ASC`,
-      [trackerId, range.start, range.end],
+      [...source.params, range.start, range.end],
     );
 
     // Pre-build the empty buckets spanning the range so gaps show as zeroes.
@@ -110,11 +112,12 @@ class StatsServiceImpl implements StatsService {
   }
 
   async streak(trackerId: string): Promise<{ current: number; longest: number }> {
+    const source = await effectiveEntrySource(this.storage, trackerId);
     const rows = await this.storage.query<{ occurred_at: string }>(
       `SELECT DISTINCT substr(occurred_at, 1, 10) AS occurred_at
-         FROM entries WHERE tracker_id = ?
+         FROM ${source.sql}
         ORDER BY occurred_at ASC`,
-      [trackerId],
+      source.params,
     );
     const days = rows.map((r) => r.occurred_at);
     if (days.length === 0) return { current: 0, longest: 0 };
@@ -166,14 +169,15 @@ class StatsServiceImpl implements StatsService {
       end = bucketEnd(instant, period, tracker.week_start).toISOString();
     }
 
-    const where = ['tracker_id = ?'];
-    const params: (string | number)[] = [trackerId];
+    const source = await effectiveEntrySource(this.storage, trackerId);
+    const params: SqlParam[] = [...source.params];
+    let whereSql = '';
     if (start !== null && end !== null) {
-      where.push('occurred_at >= ?', 'occurred_at < ?');
+      whereSql = ' WHERE occurred_at >= ? AND occurred_at < ?';
       params.push(start, end);
     }
     const rows = await this.storage.query<{ total: number | null }>(
-      `SELECT SUM(value) AS total FROM entries WHERE ${where.join(' AND ')}`,
+      `SELECT SUM(value) AS total FROM ${source.sql}${whereSql}`,
       params,
     );
     const current = rows[0]?.total ?? 0;

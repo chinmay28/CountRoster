@@ -35,6 +35,12 @@ const api = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     }),
+  put: (p: string, body: unknown) =>
+    fetch(base + p, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
   del: (p: string) => fetch(base + p, { method: 'DELETE' }),
 };
 
@@ -126,6 +132,55 @@ describe('CountRoster API', () => {
       await api.post(`/api/reminders/${reminder.id}/toggle`, { enabled: false })
     ).json();
     expect(toggled.enabled).toBe(0);
+  });
+
+  it('creates a derived tracker that computes its sources, and rejects logging', async () => {
+    const revenue = await (await api.post('/api/trackers', { name: 'Rev', kind: 'number' })).json();
+    const expenses = await (await api.post('/api/trackers', { name: 'Exp', kind: 'number' })).json();
+    await api.post(`/api/trackers/${revenue.id}/entries`, { value: 100 });
+    await api.post(`/api/trackers/${expenses.id}/entries`, { value: 30 });
+
+    const profit = await (
+      await api.post('/api/trackers', {
+        name: 'Profit',
+        kind: 'number',
+        links: [
+          { source_id: revenue.id, coefficient: 1 },
+          { source_id: expenses.id, coefficient: -1 },
+        ],
+      })
+    ).json();
+    expect(profit.is_derived).toBe(1);
+
+    // Links are readable back.
+    const links = await (await api.get(`/api/trackers/${profit.id}/links`)).json();
+    expect(links).toHaveLength(2);
+
+    // Its effective entries are the weighted combination of the sources.
+    const entries = await (await api.get(`/api/trackers/${profit.id}/entries`)).json();
+    const total = entries.reduce((s: number, e: { value: number }) => s + e.value, 0);
+    expect(total).toBe(70);
+
+    // Logging directly on a derived tracker is a 400.
+    const logged = await api.post(`/api/trackers/${profit.id}/entries`, { value: 5 });
+    expect(logged.status).toBe(400);
+
+    // A self-referential / invalid derivation is a 400.
+    const bad = await api.put(`/api/trackers/${profit.id}/links`, {
+      links: [{ source_id: profit.id, coefficient: 1 }],
+    });
+    expect(bad.status).toBe(400);
+
+    // A source in use can't be archived or deleted: 409 naming the dependent.
+    const archived = await api.post(`/api/trackers/${revenue.id}/archive`);
+    expect(archived.status).toBe(409);
+    expect((await archived.json()).error).toMatch(/Profit/);
+    const deleted = await api.del(`/api/trackers/${revenue.id}`);
+    expect(deleted.status).toBe(409);
+
+    // Once the derived tracker is gone, the source frees up.
+    expect((await api.del(`/api/trackers/${profit.id}`)).status).toBe(204);
+    expect((await api.del(`/api/trackers/${revenue.id}`)).status).toBe(204);
   });
 
   it('exports a backup bundle and reports a manifest', async () => {

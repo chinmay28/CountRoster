@@ -16,7 +16,7 @@ export const BACKUP_TABLES: ReadonlyArray<{
     columns: [
       'id', 'name', 'description', 'color', 'icon', 'kind', 'unit', 'target',
       'reset_period', 'week_start', 'day_start_minute', 'default_value',
-      'archived_at', 'sort_order', 'created_at', 'updated_at',
+      'archived_at', 'sort_order', 'is_derived', 'created_at', 'updated_at',
     ],
   },
   {
@@ -42,6 +42,12 @@ export const BACKUP_TABLES: ReadonlyArray<{
   {
     name: 'tracker_group_memberships',
     columns: ['tracker_id', 'group_id', 'sort_order'],
+  },
+  {
+    name: 'tracker_links',
+    columns: [
+      'id', 'tracker_id', 'source_id', 'coefficient', 'sort_order', 'created_at',
+    ],
   },
   {
     name: 'reminders',

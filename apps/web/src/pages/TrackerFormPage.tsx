@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { ResetPeriod, TrackerInput, TrackerKind } from '@countroster/core';
+import type { Tracker, TrackerInput, TrackerKind, ResetPeriod } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
 import { KIND_LABELS, TRACKER_KINDS, RESET_PERIOD_OPTIONS } from '../lib/format.ts';
+
+/** One row of the derived-sources editor. */
+interface LinkRow {
+  source_id: string;
+  coefficient: string;
+}
 
 interface FormValues {
   name: string;
@@ -13,6 +19,9 @@ interface FormValues {
   target: string;
   default_value: string;
   reset_period: ResetPeriod;
+  /** When true, the tracker is computed from `links` rather than logged. */
+  isDerived: boolean;
+  links: LinkRow[];
 }
 
 const DEFAULTS: FormValues = {
@@ -24,6 +33,8 @@ const DEFAULTS: FormValues = {
   target: '',
   default_value: '1',
   reset_period: 'never',
+  isDerived: false,
+  links: [],
 };
 
 /** Create a new tracker, or edit an existing one when `:id` is present. */
@@ -37,17 +48,36 @@ export function TrackerFormPage() {
   const [loading, setLoading] = useState(editing);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Candidate source trackers for a derivation (ordinary trackers, not self).
+  const [available, setAvailable] = useState<Tracker[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Sources can only be ordinary (non-derived) trackers, and never the
+    // tracker being edited (no self-reference).
+    core.trackers.list().then((all) => {
+      if (cancelled) return;
+      setAvailable(all.filter((t) => t.is_derived !== 1 && t.id !== id));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [core, id]);
 
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
-    core.trackers.get(id).then((t) => {
+    (async () => {
+      const t = await core.trackers.get(id);
       if (cancelled) return;
       if (!t) {
         setError('Tracker not found.');
         setLoading(false);
         return;
       }
+      const isDerived = t.is_derived === 1;
+      const linkRows = isDerived ? await core.trackers.links(id) : [];
+      if (cancelled) return;
       setValues({
         name: t.name,
         description: t.description ?? '',
@@ -57,9 +87,14 @@ export function TrackerFormPage() {
         target: t.target == null ? '' : String(t.target),
         default_value: String(t.default_value),
         reset_period: t.reset_period,
+        isDerived,
+        links: linkRows.map((l) => ({
+          source_id: l.source_id,
+          coefficient: String(l.coefficient),
+        })),
       });
       setLoading(false);
-    });
+    })();
     return () => {
       cancelled = true;
     };
@@ -69,17 +104,44 @@ export function TrackerFormPage() {
     setValues((v) => ({ ...v, [key]: value }));
   }
 
+  function setLink(index: number, patch: Partial<LinkRow>) {
+    setValues((v) => ({
+      ...v,
+      links: v.links.map((l, i) => (i === index ? { ...l, ...patch } : l)),
+    }));
+  }
+
+  function addLink() {
+    setValues((v) => ({ ...v, links: [...v.links, { source_id: '', coefficient: '1' }] }));
+  }
+
+  function removeLink(index: number) {
+    setValues((v) => ({ ...v, links: v.links.filter((_, i) => i !== index) }));
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
+
+    // Collapse the source rows into validated link operands.
+    const links = values.links
+      .filter((l) => l.source_id)
+      .map((l) => ({ source_id: l.source_id, coefficient: Number(l.coefficient) || 0 }));
+
+    if (values.isDerived && links.length === 0) {
+      setError('A derived tracker needs at least one source.');
+      setSaving(false);
+      return;
+    }
+
     try {
-      // Build a clean input; omit optional fields rather than sending ""/NaN.
+      // A derived tracker holds a computed number; it is never tapped to log.
       const input: TrackerInput = {
         name: values.name.trim(),
         color: values.color,
-        kind: values.kind,
-        default_value: Number(values.default_value) || 0,
+        kind: values.isDerived ? 'number' : values.kind,
+        default_value: values.isDerived ? 0 : Number(values.default_value) || 0,
         reset_period: values.reset_period,
         // Zod fills the rest of the required defaults.
       } as TrackerInput;
@@ -88,6 +150,7 @@ export function TrackerFormPage() {
       const unit = values.unit.trim();
       if (unit) input.unit = unit;
       if (values.target.trim()) input.target = Number(values.target);
+      if (values.isDerived) input.links = links;
 
       if (editing && id) {
         await core.trackers.update(id, {
@@ -96,6 +159,8 @@ export function TrackerFormPage() {
           description: description || null,
           unit: unit || null,
           target: values.target.trim() ? Number(values.target) : null,
+          // Always send links so toggling derived off clears any prior ones.
+          links: values.isDerived ? links : [],
         });
         navigate(`/trackers/${id}`);
       } else {
@@ -126,19 +191,38 @@ export function TrackerFormPage() {
           />
         </label>
 
-        <label className="field">
-          <span>Kind</span>
-          <select
-            value={values.kind}
-            onChange={(e) => set('kind', e.target.value as TrackerKind)}
-          >
-            {TRACKER_KINDS.map((k) => (
-              <option key={k} value={k}>
-                {KIND_LABELS[k]}
-              </option>
-            ))}
-          </select>
+        <label className="field field--checkbox">
+          <input
+            type="checkbox"
+            checked={values.isDerived}
+            onChange={(e) => set('isDerived', e.target.checked)}
+          />
+          <span>Derived tracker (computed from other trackers)</span>
         </label>
+
+        {values.isDerived ? (
+          <DerivedSourcesEditor
+            links={values.links}
+            available={available}
+            onAdd={addLink}
+            onRemove={removeLink}
+            onChange={setLink}
+          />
+        ) : (
+          <label className="field">
+            <span>Kind</span>
+            <select
+              value={values.kind}
+              onChange={(e) => set('kind', e.target.value as TrackerKind)}
+            >
+              {TRACKER_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {KIND_LABELS[k]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className="field">
           <span>Color</span>
@@ -160,15 +244,17 @@ export function TrackerFormPage() {
           />
         </label>
 
-        <label className="field">
-          <span>Default value (per tap)</span>
-          <input
-            type="number"
-            step="any"
-            value={values.default_value}
-            onChange={(e) => set('default_value', e.target.value)}
-          />
-        </label>
+        {!values.isDerived && (
+          <label className="field">
+            <span>Default value (per tap)</span>
+            <input
+              type="number"
+              step="any"
+              value={values.default_value}
+              onChange={(e) => set('default_value', e.target.value)}
+            />
+          </label>
+        )}
 
         <label className="field">
           <span>Reset every</span>
@@ -222,5 +308,71 @@ export function TrackerFormPage() {
         </div>
       </form>
     </section>
+  );
+}
+
+/** The editable list of (source tracker, coefficient) operands for a derivation. */
+function DerivedSourcesEditor({
+  links,
+  available,
+  onAdd,
+  onRemove,
+  onChange,
+}: {
+  links: LinkRow[];
+  available: Tracker[];
+  onAdd: () => void;
+  onRemove: (index: number) => void;
+  onChange: (index: number, patch: Partial<LinkRow>) => void;
+}) {
+  return (
+    <fieldset className="field derived-sources">
+      <legend>Sources</legend>
+      <p className="muted">
+        The value is the sum of each source multiplied by its coefficient. Use −1
+        to subtract (e.g. Profit = Revenue × 1 + Expenses × −1).
+      </p>
+      {available.length === 0 && (
+        <p className="muted">Create some ordinary trackers first to link them here.</p>
+      )}
+      {links.map((link, i) => (
+        <div className="derived-sources__row" key={i}>
+          <select
+            value={link.source_id}
+            onChange={(e) => onChange(i, { source_id: e.target.value })}
+          >
+            <option value="">Choose a tracker…</option>
+            {available.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            step="any"
+            aria-label="Coefficient"
+            value={link.coefficient}
+            onChange={(e) => onChange(i, { coefficient: e.target.value })}
+          />
+          <button
+            type="button"
+            className="btn btn--small btn--danger"
+            onClick={() => onRemove(i)}
+            aria-label="Remove source"
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="btn btn--small"
+        onClick={onAdd}
+        disabled={available.length === 0}
+      >
+        Add source
+      </button>
+    </fieldset>
   );
 }

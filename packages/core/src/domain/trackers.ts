@@ -1,13 +1,15 @@
 import type { Storage } from '../storage/adapter.js';
 import { newId } from '../ids.js';
 import type { Clock } from '../time.js';
-import type { Tracker } from '../schema/tables.js';
+import type { Tracker, TrackerLink } from '../schema/tables.js';
 import {
   trackerInputSchema,
   trackerPatchSchema,
   type TrackerInput,
+  type TrackerLinkInput,
   type TrackerPatch,
 } from '../schema/validators.js';
+import { DerivedTrackerError } from './derived.js';
 
 export interface TrackerService {
   create(input: TrackerInput): Promise<Tracker>;
@@ -18,12 +20,39 @@ export interface TrackerService {
   reorder(orderedIds: readonly string[]): Promise<void>;
   get(id: string): Promise<Tracker | null>;
   list(opts?: { includeArchived?: boolean }): Promise<Tracker[]>;
+  /** The source operands of a derived tracker, in order. Empty for ordinary ones. */
+  links(trackerId: string): Promise<TrackerLink[]>;
+  /** Replace a tracker's derivation operands (also toggles its derived flag). */
+  setLinks(trackerId: string, links: readonly TrackerLinkInput[]): Promise<TrackerLink[]>;
 }
 
 export class TrackerNotFoundError extends Error {
   constructor(id: string) {
     super(`Tracker not found: ${id}`);
     this.name = 'TrackerNotFoundError';
+  }
+}
+
+/**
+ * Thrown when archiving or deleting a tracker that one or more derived trackers
+ * still use as a source. The message names them so the user knows what to
+ * remove first. (Archiving counts as removal here: an archived source would
+ * leave its derivations silently depending on a tracker that's off the roster.)
+ */
+export class TrackerInUseError extends Error {
+  constructor(
+    readonly trackerId: string,
+    readonly dependents: ReadonlyArray<{ id: string; name: string }>,
+    action: 'archive' | 'delete' = 'delete',
+  ) {
+    const names = dependents.map((d) => `"${d.name}"`).join(', ');
+    const plural = dependents.length === 1 ? '' : 's';
+    const them = dependents.length === 1 ? 'it' : 'them';
+    super(
+      `Cannot ${action} this tracker: it is a source for derived tracker${plural} ` +
+        `${names}. Delete or unlink ${them} first.`,
+    );
+    this.name = 'TrackerInUseError';
   }
 }
 
@@ -44,31 +73,37 @@ class TrackerServiceImpl implements TrackerService {
     const input = trackerInputSchema.parse(rawInput);
     const id = newId();
     const now = this.clock.nowISO();
+    const links = input.links ?? [];
+    const isDerived = links.length > 0 ? 1 : 0;
 
-    await this.storage.exec(
-      `INSERT INTO trackers (
-        id, name, description, color, icon, kind, unit, target,
-        reset_period, week_start, day_start_minute, default_value,
-        archived_at, sort_order, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
-      [
-        id,
-        input.name,
-        input.description ?? null,
-        input.color,
-        input.icon ?? null,
-        input.kind,
-        input.unit ?? null,
-        input.target ?? null,
-        input.reset_period,
-        input.week_start,
-        input.day_start_minute,
-        input.default_value,
-        input.sort_order,
-        now,
-        now,
-      ],
-    );
+    await this.storage.transaction(async (tx) => {
+      await tx.exec(
+        `INSERT INTO trackers (
+          id, name, description, color, icon, kind, unit, target,
+          reset_period, week_start, day_start_minute, default_value,
+          archived_at, sort_order, is_derived, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+        [
+          id,
+          input.name,
+          input.description ?? null,
+          input.color,
+          input.icon ?? null,
+          input.kind,
+          input.unit ?? null,
+          input.target ?? null,
+          input.reset_period,
+          input.week_start,
+          input.day_start_minute,
+          input.default_value,
+          input.sort_order,
+          isDerived,
+          now,
+          now,
+        ],
+      );
+      if (links.length > 0) await this.replaceLinks(tx, id, links, now);
+    });
 
     const created = await this.get(id);
     if (!created) throw new Error(`Tracker insert succeeded but row not found: ${id}`);
@@ -104,16 +139,25 @@ class TrackerServiceImpl implements TrackerService {
     assign('default_value', 'default_value');
     assign('sort_order', 'sort_order');
 
+    // A supplied `links` list replaces the derivation wholesale and re-derives
+    // the `is_derived` flag from whether any operands remain.
+    const replacingLinks = 'links' in patch && patch.links !== undefined;
+    if (replacingLinks) {
+      sets.push('is_derived = ?');
+      params.push(patch.links!.length > 0 ? 1 : 0);
+    }
+
     if (sets.length === 0) return existing;
 
+    const now = this.clock.nowISO();
     sets.push('updated_at = ?');
-    params.push(this.clock.nowISO());
+    params.push(now);
     params.push(id);
 
-    await this.storage.exec(
-      `UPDATE trackers SET ${sets.join(', ')} WHERE id = ?`,
-      params,
-    );
+    await this.storage.transaction(async (tx) => {
+      await tx.exec(`UPDATE trackers SET ${sets.join(', ')} WHERE id = ?`, params);
+      if (replacingLinks) await this.replaceLinks(tx, id, patch.links!, now);
+    });
 
     const updated = await this.get(id);
     if (!updated) throw new TrackerNotFoundError(id);
@@ -121,6 +165,9 @@ class TrackerServiceImpl implements TrackerService {
   }
 
   async archive(id: string): Promise<void> {
+    // Archiving a source hides it from the roster while its derivations still
+    // depend on it — treat it like deletion and block it the same way.
+    await this.assertNotUsedAsSource(id, 'archive');
     const now = this.clock.nowISO();
     await this.storage.exec(
       `UPDATE trackers SET archived_at = ?, updated_at = ? WHERE id = ?`,
@@ -137,9 +184,32 @@ class TrackerServiceImpl implements TrackerService {
   }
 
   async delete(id: string): Promise<void> {
+    // A tracker that feeds a derivation can't be deleted out from under it —
+    // the derived tracker would silently lose an operand. Block with a clear,
+    // named error so the user deletes the derived tracker(s) first. (Deleting a
+    // derived tracker is fine: its own links cascade away.)
+    await this.assertNotUsedAsSource(id, 'delete');
+
     // Permanent, unlike archive(). Entries, notes (and their edit log),
-    // options, reminders, and group memberships cascade via ON DELETE CASCADE.
+    // options, reminders, group memberships, and this tracker's own derivation
+    // links cascade via ON DELETE CASCADE.
     await this.storage.exec(`DELETE FROM trackers WHERE id = ?`, [id]);
+  }
+
+  /** Throw TrackerInUseError if any derived tracker references `id` as a source. */
+  private async assertNotUsedAsSource(
+    id: string,
+    action: 'archive' | 'delete',
+  ): Promise<void> {
+    const dependents = await this.storage.query<{ id: string; name: string }>(
+      `SELECT DISTINCT t.id, t.name
+         FROM tracker_links l
+         JOIN trackers t ON t.id = l.tracker_id
+        WHERE l.source_id = ?
+        ORDER BY t.name ASC`,
+      [id],
+    );
+    if (dependents.length > 0) throw new TrackerInUseError(id, dependents, action);
   }
 
   async reorder(orderedIds: readonly string[]): Promise<void> {
@@ -169,5 +239,89 @@ class TrackerServiceImpl implements TrackerService {
       : `SELECT * FROM trackers WHERE archived_at IS NULL
          ORDER BY sort_order ASC, created_at ASC`;
     return this.storage.query<Tracker>(sql);
+  }
+
+  async links(trackerId: string): Promise<TrackerLink[]> {
+    return this.storage.query<TrackerLink>(
+      `SELECT * FROM tracker_links WHERE tracker_id = ?
+        ORDER BY sort_order ASC, created_at ASC`,
+      [trackerId],
+    );
+  }
+
+  async setLinks(
+    trackerId: string,
+    links: readonly TrackerLinkInput[],
+  ): Promise<TrackerLink[]> {
+    const existing = await this.get(trackerId);
+    if (!existing) throw new TrackerNotFoundError(trackerId);
+
+    const now = this.clock.nowISO();
+    await this.storage.transaction(async (tx) => {
+      await tx.exec(
+        `UPDATE trackers SET is_derived = ?, updated_at = ? WHERE id = ?`,
+        [links.length > 0 ? 1 : 0, now, trackerId],
+      );
+      await this.replaceLinks(tx, trackerId, links, now);
+    });
+    return this.links(trackerId);
+  }
+
+  /**
+   * Validate and (re)write a derived tracker's operands inside a transaction.
+   * Each source must exist, be ordinary (no derived-of-derived nesting), and
+   * not be the tracker itself. Replaces any prior links.
+   */
+  private async replaceLinks(
+    tx: Storage,
+    trackerId: string,
+    links: readonly TrackerLinkInput[],
+    now: string,
+  ): Promise<void> {
+    await tx.exec(`DELETE FROM tracker_links WHERE tracker_id = ?`, [trackerId]);
+    if (links.length === 0) return;
+
+    // Reject duplicate sources up front — the table's UNIQUE constraint would
+    // otherwise fail mid-insert with an opaque error.
+    const seen = new Set<string>();
+    for (const link of links) {
+      if (link.source_id === trackerId) {
+        throw new DerivedTrackerError('A derived tracker cannot reference itself.');
+      }
+      if (seen.has(link.source_id)) {
+        throw new DerivedTrackerError(
+          `Duplicate source tracker in derivation: ${link.source_id}`,
+        );
+      }
+      seen.add(link.source_id);
+    }
+
+    const sources = await tx.query<{ id: string; is_derived: number }>(
+      `SELECT id, is_derived FROM trackers
+        WHERE id IN (${links.map(() => '?').join(', ')})`,
+      links.map((l) => l.source_id),
+    );
+    const byId = new Map(sources.map((s) => [s.id, s]));
+    for (const link of links) {
+      const source = byId.get(link.source_id);
+      if (!source) {
+        throw new DerivedTrackerError(`Source tracker not found: ${link.source_id}`);
+      }
+      if (source.is_derived === 1) {
+        throw new DerivedTrackerError(
+          `A derived tracker cannot be a source of another derived tracker: ${link.source_id}`,
+        );
+      }
+    }
+
+    for (let i = 0; i < links.length; i++) {
+      const link = links[i]!;
+      await tx.exec(
+        `INSERT INTO tracker_links
+           (id, tracker_id, source_id, coefficient, sort_order, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [newId(), trackerId, link.source_id, link.coefficient, i, now],
+      );
+    }
   }
 }
