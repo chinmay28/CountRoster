@@ -318,7 +318,7 @@ CREATE TABLE tracker_links (
 
 **Semantics.** A derived tracker has no `entries` of its own. Its *effective* entries are virtual: each source entry `(value v at time t)` contributes a row of `coefficient × v` at `t`. Because the app's aggregations are sums, the weighted combination falls out for free — `Profit = (+1 × ΣRevenue) + (−1 × ΣExpenses)` over any range, bucket, or reset period. `EntryService.forTracker` and the `StatsService` resolve a tracker's entry source through a single helper (`domain/derived.ts → effectiveEntrySource`) so neither has to special-case derivation beyond that.
 
-**Rules.** Direct logging on a derived tracker is rejected (`DerivedTrackerError → HTTP 400`). A source must exist, be ordinary (no derived-of-derived nesting), and not be the tracker itself; sources can't repeat. Deleting a source tracker cascades its links away (the derived tracker simply drops that operand). Links are part of the backup bundle, so derivations survive export/restore.
+**Rules.** Direct logging on a derived tracker is rejected (`DerivedTrackerError → HTTP 400`). A source must exist, be ordinary (no derived-of-derived nesting), and not be the tracker itself; sources can't repeat. A source tracker **cannot be archived or deleted while a derivation still references it** — both are blocked with a `TrackerInUseError` (`HTTP 409`) that names the derived trackers in use, so the user removes or unlinks them first (`source_id` is `ON DELETE RESTRICT` as a DB-level backstop). Deleting a *derived* tracker is always fine: its own links cascade away (`tracker_id` is `ON DELETE CASCADE`). Links are part of the backup bundle, so derivations survive export/restore.
 
 ## 7. Core Domain: `@countroster/core`
 

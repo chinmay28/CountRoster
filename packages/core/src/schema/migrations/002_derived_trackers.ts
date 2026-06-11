@@ -9,6 +9,11 @@
  * - `trackers.is_derived` flags such a tracker (and blocks direct logging).
  * - `tracker_links` holds the (source tracker, coefficient) operands.
  *
+ * A link is removed with its derived tracker (`tracker_id` cascades), but a
+ * *source* tracker cannot be deleted while a derivation still references it
+ * (`source_id` restricts) — `TrackerService.delete` turns that into a clear
+ * error naming the derived trackers in use.
+ *
  * Each source entry `(value v at time t)` behaves like a virtual derived entry
  * of `coefficient × v` at `t`, so the existing sum-based aggregations
  * (home totals, stat buckets, target progress, streaks) compose unchanged.
@@ -24,7 +29,7 @@ export const M002_DERIVED_TRACKERS = {
     CREATE TABLE IF NOT EXISTS tracker_links (
       id           TEXT PRIMARY KEY,
       tracker_id   TEXT NOT NULL REFERENCES trackers (id) ON DELETE CASCADE,
-      source_id    TEXT NOT NULL REFERENCES trackers (id) ON DELETE CASCADE,
+      source_id    TEXT NOT NULL REFERENCES trackers (id) ON DELETE RESTRICT,
       coefficient  REAL NOT NULL DEFAULT 1,
       sort_order   INTEGER NOT NULL DEFAULT 0,
       created_at   TEXT NOT NULL,

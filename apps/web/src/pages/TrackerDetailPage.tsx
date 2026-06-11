@@ -56,6 +56,9 @@ export function TrackerDetailPage() {
   const [customWhen, setCustomWhen] = useState('');
   const [customNote, setCustomNote] = useState('');
   const [logging, setLogging] = useState(false);
+  // Surfaces failures from header actions like archive (e.g. a tracker still in
+  // use by a derived tracker).
+  const [actionError, setActionError] = useState<string | null>(null);
   // Bumped on any write so the stats panel re-fetches alongside the entry list.
   const [statsKey, setStatsKey] = useState(0);
 
@@ -140,8 +143,13 @@ export function TrackerDetailPage() {
 
   async function archive() {
     if (!confirm(`Archive "${tracker!.name}"? You can restore it later from the Data page.`)) return;
-    await core.trackers.archive(tracker!.id);
-    navigate('/');
+    setActionError(null);
+    try {
+      await core.trackers.archive(tracker!.id);
+      navigate('/');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   return (
@@ -170,6 +178,8 @@ export function TrackerDetailPage() {
           </button>
         </div>
       </header>
+
+      {actionError && <p className="error">{actionError}</p>}
 
       <section className="detail__summary card">
         {tracker.reset_period === 'never' ? (

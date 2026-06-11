@@ -52,6 +52,7 @@ export {
 export {
   type TrackerService,
   TrackerNotFoundError,
+  TrackerInUseError,
 } from './domain/trackers.js';
 export { DerivedTrackerError } from './domain/derived.js';
 export {

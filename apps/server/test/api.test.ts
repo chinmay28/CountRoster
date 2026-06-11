@@ -170,6 +170,17 @@ describe('CountRoster API', () => {
       links: [{ source_id: profit.id, coefficient: 1 }],
     });
     expect(bad.status).toBe(400);
+
+    // A source in use can't be archived or deleted: 409 naming the dependent.
+    const archived = await api.post(`/api/trackers/${revenue.id}/archive`);
+    expect(archived.status).toBe(409);
+    expect((await archived.json()).error).toMatch(/Profit/);
+    const deleted = await api.del(`/api/trackers/${revenue.id}`);
+    expect(deleted.status).toBe(409);
+
+    // Once the derived tracker is gone, the source frees up.
+    expect((await api.del(`/api/trackers/${profit.id}`)).status).toBe(204);
+    expect((await api.del(`/api/trackers/${revenue.id}`)).status).toBe(204);
   });
 
   it('exports a backup bundle and reports a manifest', async () => {

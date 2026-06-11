@@ -259,6 +259,11 @@ function errorHandler(
     res.status(400).json({ error: e.message });
     return;
   }
+  // Deleting a tracker still in use by a derived tracker is a conflict.
+  if (e?.name === 'TrackerInUseError') {
+    res.status(409).json({ error: e.message });
+    return;
+  }
   console.error('[countroster] unhandled error:', err);
   res.status(500).json({ error: e?.message ?? 'Internal server error' });
 }

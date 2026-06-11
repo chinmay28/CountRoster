@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeTestApp } from './setup.js';
 import { DerivedTrackerError } from '../src/domain/derived.js';
+import { TrackerInUseError } from '../src/domain/trackers.js';
 
 /**
  * A derived "Profit" tracker = Revenue (+1) − Expenses (−1). Builds the two
@@ -131,13 +132,55 @@ describe('Derived trackers', () => {
     expect(entries.reduce((s, e) => s + e.value, 0)).toBe(-60);
   });
 
-  it('drops a link when its source tracker is deleted (cascade)', async () => {
+  it('refuses to delete a source tracker still used by a derivation', async () => {
     const { app, expenses, profit } = await profitSetup();
+    await expect(app.trackers.delete(expenses.id)).rejects.toBeInstanceOf(
+      TrackerInUseError,
+    );
+    // The source — and the derivation — are left intact.
+    expect(await app.trackers.get(expenses.id)).not.toBeNull();
+    expect(await app.trackers.links(profit.id)).toHaveLength(2);
+    void profit;
+  });
+
+  it('refuses to archive a source tracker still used by a derivation', async () => {
+    const { app, revenue } = await profitSetup();
+    await expect(app.trackers.archive(revenue.id)).rejects.toBeInstanceOf(
+      TrackerInUseError,
+    );
+    // It stays active (not archived).
+    const refreshed = await app.trackers.get(revenue.id);
+    expect(refreshed!.archived_at).toBeNull();
+  });
+
+  it('still lets a derived tracker itself be archived', async () => {
+    const { app, profit } = await profitSetup();
+    await app.trackers.archive(profit.id);
+    const refreshed = await app.trackers.get(profit.id);
+    expect(refreshed!.archived_at).not.toBeNull();
+  });
+
+  it('names the dependent derived trackers in the error message', async () => {
+    const { app, revenue } = await profitSetup();
+    // A second derivation also referencing Revenue.
+    await app.trackers.create({
+      name: 'Double revenue',
+      kind: 'number',
+      links: [{ source_id: revenue.id, coefficient: 2 }],
+    });
+    await expect(app.trackers.delete(revenue.id)).rejects.toThrow(
+      /Profit.*Double revenue|Double revenue.*Profit/,
+    );
+  });
+
+  it('allows deleting the source once the derived tracker is gone', async () => {
+    const { app, expenses, profit } = await profitSetup();
+    // Deleting the derived tracker is fine — its own links cascade away.
+    await app.trackers.delete(profit.id);
+    expect(await app.trackers.get(profit.id)).toBeNull();
+    // Now the former source is free to delete.
     await app.trackers.delete(expenses.id);
-    const links = await app.trackers.links(profit.id);
-    expect(links).toHaveLength(1); // only revenue remains
-    const entries = await app.entries.forTracker(profit.id);
-    expect(entries.reduce((s, e) => s + e.value, 0)).toBe(150); // revenue only
+    expect(await app.trackers.get(expenses.id)).toBeNull();
   });
 
   it('rejects a self-referential derivation', async () => {

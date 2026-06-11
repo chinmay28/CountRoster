@@ -33,6 +33,29 @@ export class TrackerNotFoundError extends Error {
   }
 }
 
+/**
+ * Thrown when archiving or deleting a tracker that one or more derived trackers
+ * still use as a source. The message names them so the user knows what to
+ * remove first. (Archiving counts as removal here: an archived source would
+ * leave its derivations silently depending on a tracker that's off the roster.)
+ */
+export class TrackerInUseError extends Error {
+  constructor(
+    readonly trackerId: string,
+    readonly dependents: ReadonlyArray<{ id: string; name: string }>,
+    action: 'archive' | 'delete' = 'delete',
+  ) {
+    const names = dependents.map((d) => `"${d.name}"`).join(', ');
+    const plural = dependents.length === 1 ? '' : 's';
+    const them = dependents.length === 1 ? 'it' : 'them';
+    super(
+      `Cannot ${action} this tracker: it is a source for derived tracker${plural} ` +
+        `${names}. Delete or unlink ${them} first.`,
+    );
+    this.name = 'TrackerInUseError';
+  }
+}
+
 export function createTrackerService(
   storage: Storage,
   clock: Clock,
@@ -142,6 +165,9 @@ class TrackerServiceImpl implements TrackerService {
   }
 
   async archive(id: string): Promise<void> {
+    // Archiving a source hides it from the roster while its derivations still
+    // depend on it — treat it like deletion and block it the same way.
+    await this.assertNotUsedAsSource(id, 'archive');
     const now = this.clock.nowISO();
     await this.storage.exec(
       `UPDATE trackers SET archived_at = ?, updated_at = ? WHERE id = ?`,
@@ -158,9 +184,32 @@ class TrackerServiceImpl implements TrackerService {
   }
 
   async delete(id: string): Promise<void> {
+    // A tracker that feeds a derivation can't be deleted out from under it —
+    // the derived tracker would silently lose an operand. Block with a clear,
+    // named error so the user deletes the derived tracker(s) first. (Deleting a
+    // derived tracker is fine: its own links cascade away.)
+    await this.assertNotUsedAsSource(id, 'delete');
+
     // Permanent, unlike archive(). Entries, notes (and their edit log),
-    // options, reminders, and group memberships cascade via ON DELETE CASCADE.
+    // options, reminders, group memberships, and this tracker's own derivation
+    // links cascade via ON DELETE CASCADE.
     await this.storage.exec(`DELETE FROM trackers WHERE id = ?`, [id]);
+  }
+
+  /** Throw TrackerInUseError if any derived tracker references `id` as a source. */
+  private async assertNotUsedAsSource(
+    id: string,
+    action: 'archive' | 'delete',
+  ): Promise<void> {
+    const dependents = await this.storage.query<{ id: string; name: string }>(
+      `SELECT DISTINCT t.id, t.name
+         FROM tracker_links l
+         JOIN trackers t ON t.id = l.tracker_id
+        WHERE l.source_id = ?
+        ORDER BY t.name ASC`,
+      [id],
+    );
+    if (dependents.length > 0) throw new TrackerInUseError(id, dependents, action);
   }
 
   async reorder(orderedIds: readonly string[]): Promise<void> {
