@@ -193,6 +193,73 @@ export const API_BASE = '/api';
 export const backupBundleUrl = (baseUrl = API_BASE) => `${baseUrl}/backup/bundle`;
 export const backupSqliteUrl = (baseUrl = API_BASE) => `${baseUrl}/backup/sqlite`;
 
+function filenameFromDisposition(header: string | null, fallback: string): string {
+  const match = header?.match(/filename="?([^";]+)"?/i);
+  return match?.[1] ?? fallback;
+}
+
+/** True when running as an installed app (no browser chrome to recover with). */
+function isStandaloneDisplay(): boolean {
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
+/**
+ * Fetch a backup file and hand it to the user without navigating. A plain
+ * `<a href download>` navigates the webview to the file URL, which strands an
+ * installed PWA (no back button). Instead we fetch the bytes ourselves: in
+ * standalone mode the native share sheet is the reliable save path (iOS
+ * home-screen apps can't download via anchors); everywhere else a transient
+ * object-URL anchor saves the file with the page left untouched.
+ */
+export async function downloadBackup(url: string, fallbackName: string): Promise<void> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    let data: unknown;
+    try {
+      data = JSON.parse(await res.text());
+    } catch {
+      data = undefined;
+    }
+    const message =
+      data && typeof data === 'object' && 'error' in data
+        ? String((data as { error: unknown }).error)
+        : `Download failed (${res.status})`;
+    throw new ApiError(message, res.status, data);
+  }
+  const blob = await res.blob();
+  const filename = filenameFromDisposition(
+    res.headers.get('content-disposition'),
+    fallbackName,
+  );
+
+  if (isStandaloneDisplay() && typeof navigator.canShare === 'function') {
+    const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file] });
+        return;
+      } catch (err) {
+        // User dismissed the share sheet — done, don't also force a download.
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        // Share failed for another reason; fall through to the anchor path.
+      }
+    }
+  }
+
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Give the browser a beat to start the save before releasing the blob.
+  setTimeout(() => URL.revokeObjectURL(href), 30_000);
+}
+
 /** Upload a .countroster.zip to replace the server's data. */
 export async function importBackup(
   file: Blob,
