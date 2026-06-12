@@ -105,6 +105,28 @@ describe('CountRoster API', () => {
     expect(gone.map((t: { id: string }) => t.id)).not.toContain(tracker.id);
   });
 
+  it('hides hidden trackers from the list unless includeHidden=1', async () => {
+    const tracker = await (
+      await api.post('/api/trackers', { name: 'Covert', is_hidden: 1 })
+    ).json();
+    expect(tracker.is_hidden).toBe(1);
+
+    const def = await (await api.get('/api/trackers')).json();
+    expect(def.map((t: { id: string }) => t.id)).not.toContain(tracker.id);
+
+    const withHidden = await (await api.get('/api/trackers?includeHidden=1')).json();
+    expect(withHidden.map((t: { id: string }) => t.id)).toContain(tracker.id);
+
+    // Mixing visibilities in a derivation is rejected.
+    const visible = await (await api.post('/api/trackers', { name: 'Overt' })).json();
+    const mixed = await api.post('/api/trackers', {
+      name: 'Mixed',
+      is_hidden: 1,
+      links: [{ source_id: visible.id, coefficient: 1 }],
+    });
+    expect(mixed.status).toBe(400);
+  });
+
   it('batch-logs entries atomically across trackers', async () => {
     const a = await (await api.post('/api/trackers', { name: 'Batch A' })).json();
     const b = await (await api.post('/api/trackers', { name: 'Batch B', default_value: 4 })).json();

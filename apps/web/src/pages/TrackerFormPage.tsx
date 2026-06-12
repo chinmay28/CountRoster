@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { Tracker, TrackerInput, TrackerKind, ResetPeriod } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
+import { useHiddenMode } from '../app/HiddenMode.tsx';
 import { KIND_LABELS, TRACKER_KINDS, RESET_PERIOD_OPTIONS } from '../lib/format.ts';
 
 /** One row of the derived-sources editor. */
@@ -21,6 +22,8 @@ interface FormValues {
   reset_period: ResetPeriod;
   /** When true, the tracker is computed from `links` rather than logged. */
   isDerived: boolean;
+  /** When true, the tracker only shows while hidden mode is unlocked. */
+  isHidden: boolean;
   links: LinkRow[];
 }
 
@@ -34,6 +37,7 @@ const DEFAULTS: FormValues = {
   default_value: '1',
   reset_period: 'never',
   isDerived: false,
+  isHidden: false,
   links: [],
 };
 
@@ -43,6 +47,7 @@ export function TrackerFormPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const editing = Boolean(id);
+  const { enabled: hiddenMode } = useHiddenMode();
 
   const [values, setValues] = useState<FormValues>(DEFAULTS);
   const [loading, setLoading] = useState(editing);
@@ -55,14 +60,14 @@ export function TrackerFormPage() {
     let cancelled = false;
     // Sources can only be ordinary (non-derived) trackers, and never the
     // tracker being edited (no self-reference).
-    core.trackers.list().then((all) => {
+    core.trackers.list({ includeHidden: hiddenMode }).then((all) => {
       if (cancelled) return;
       setAvailable(all.filter((t) => t.is_derived !== 1 && t.id !== id));
     });
     return () => {
       cancelled = true;
     };
-  }, [core, id]);
+  }, [core, id, hiddenMode]);
 
   useEffect(() => {
     if (!id) return;
@@ -88,6 +93,7 @@ export function TrackerFormPage() {
         default_value: String(t.default_value),
         reset_period: t.reset_period,
         isDerived,
+        isHidden: t.is_hidden === 1,
         links: linkRows.map((l) => ({
           source_id: l.source_id,
           coefficient: String(l.coefficient),
@@ -151,6 +157,10 @@ export function TrackerFormPage() {
       if (unit) input.unit = unit;
       if (values.target.trim()) input.target = Number(values.target);
       if (values.isDerived) input.links = links;
+      // Only send the hidden flag while hidden mode is unlocked — the
+      // checkbox isn't rendered otherwise, and omitting it keeps a locked
+      // session from ever flipping a tracker's visibility.
+      if (hiddenMode) input.is_hidden = values.isHidden ? 1 : 0;
 
       if (editing && id) {
         await core.trackers.update(id, {
@@ -191,6 +201,26 @@ export function TrackerFormPage() {
           />
         </label>
 
+        {hiddenMode && (
+          <label className="field field--checkbox">
+            <input
+              type="checkbox"
+              checked={values.isHidden}
+              onChange={(e) => {
+                const isHidden = e.target.checked;
+                // Sources must match the tracker's visibility, so previously
+                // chosen ones no longer qualify — clear the selections.
+                setValues((v) => ({
+                  ...v,
+                  isHidden,
+                  links: v.links.map((l) => ({ ...l, source_id: '' })),
+                }));
+              }}
+            />
+            <span>Hidden tracker (only visible while hidden mode is unlocked)</span>
+          </label>
+        )}
+
         <label className="field field--checkbox">
           <input
             type="checkbox"
@@ -203,7 +233,11 @@ export function TrackerFormPage() {
         {values.isDerived ? (
           <DerivedSourcesEditor
             links={values.links}
-            available={available}
+            // A derivation can't mix hidden and visible trackers, so only
+            // offer sources that match this tracker's own visibility.
+            available={available.filter(
+              (t) => t.is_hidden === (values.isHidden ? 1 : 0),
+            )}
             onAdd={addLink}
             onRemove={removeLink}
             onChange={setLink}

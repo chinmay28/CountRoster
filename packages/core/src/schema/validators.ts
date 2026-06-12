@@ -56,6 +56,8 @@ export const trackerInputSchema = z.object({
   day_start_minute: z.number().int().min(0).max(1439).default(0),
   default_value: z.number().finite().default(1),
   sort_order: z.number().int().default(0),
+  /** Hidden trackers are omitted from list() unless `includeHidden` is set. */
+  is_hidden: z.union([z.literal(0), z.literal(1)]).default(0),
   /**
    * When present, the tracker is *derived*: its value is computed from these
    * source trackers rather than logged directly. On update, the supplied list

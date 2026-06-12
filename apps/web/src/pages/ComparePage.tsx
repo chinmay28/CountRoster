@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import * as Plot from '@observablehq/plot';
 import type { BucketPeriod, Tracker } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
+import { useHiddenMode } from '../app/HiddenMode.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import { PlotFigure } from '../components/PlotFigure.tsx';
 import { lastNBuckets } from '../lib/range.ts';
@@ -21,7 +22,11 @@ interface Point {
 /** Compare several trackers' totals over time on one multi-series chart. */
 export function ComparePage() {
   const core = useCore();
-  const trackers = useAsync(() => core.trackers.list(), []);
+  const { enabled: hiddenMode } = useHiddenMode();
+  const trackers = useAsync(
+    () => core.trackers.list({ includeHidden: hiddenMode }),
+    [hiddenMode],
+  );
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [period, setPeriod] = useState<BucketPeriod>('week');

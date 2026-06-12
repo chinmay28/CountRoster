@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { Tracker } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
+import { useHiddenMode } from '../app/HiddenMode.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import { TrackerCard } from '../components/TrackerCard.tsx';
 import { resetPeriodRange, sumValues } from '../lib/range.ts';
@@ -12,10 +13,11 @@ import { resetPeriodRange, sumValues } from '../lib/range.ts';
  */
 export function HomePage() {
   const core = useCore();
+  const { enabled: hiddenMode } = useHiddenMode();
 
   const { data, loading, error, reload } = useAsync(async () => {
     const [trackers, groups] = await Promise.all([
-      core.trackers.list(),
+      core.trackers.list({ includeHidden: hiddenMode }),
       core.groups.list(),
     ]);
     // Each tracker's headline total covers its own reset window (today / this
@@ -55,7 +57,7 @@ export function HomePage() {
     }
 
     return { trackers, totals, sections };
-  }, []);
+  }, [hiddenMode]);
 
   if (loading) return <p className="muted">Loading trackers…</p>;
   if (error) return <p className="error">Failed to load: {error.message}</p>;

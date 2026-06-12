@@ -152,16 +152,22 @@ class BackupServiceImpl implements BackupService {
       for (let i = BACKUP_TABLES.length - 1; i >= 0; i--) {
         await tx.exec(`DELETE FROM ${BACKUP_TABLES[i]!.name}`);
       }
-      // Insert parents before children.
+      // Insert parents before children. Only bind columns the bundle actually
+      // carries — older bundles predate later ALTER TABLEs (is_derived,
+      // is_hidden, …), and omitting those columns lets their SQL defaults
+      // apply instead of binding NULL into a NOT NULL column.
       for (const { name, columns } of BACKUP_TABLES) {
         const rows = doc.tables[name] ?? [];
-        const placeholders = columns.map(() => '?').join(', ');
-        const sql = `INSERT INTO ${name} (${columns.join(', ')}) VALUES (${placeholders})`;
-        for (const row of rows) {
-          await tx.exec(
-            sql,
-            columns.map((c) => normalizeParam(row[c])),
-          );
+        if (rows.length > 0) {
+          const present = columns.filter((c) => c in rows[0]!);
+          const placeholders = present.map(() => '?').join(', ');
+          const sql = `INSERT INTO ${name} (${present.join(', ')}) VALUES (${placeholders})`;
+          for (const row of rows) {
+            await tx.exec(
+              sql,
+              present.map((c) => normalizeParam(row[c])),
+            );
+          }
         }
         imported_rows[name] = rows.length;
       }

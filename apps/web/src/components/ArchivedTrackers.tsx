@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useCore } from '../app/CoreContext.tsx';
+import { useHiddenMode } from '../app/HiddenMode.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import { KIND_LABELS } from '../lib/format.ts';
 
@@ -11,13 +12,17 @@ import { KIND_LABELS } from '../lib/format.ts';
  */
 export function ArchivedTrackers() {
   const core = useCore();
+  const { enabled: hiddenMode } = useHiddenMode();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const { data, loading, reload } = useAsync(async () => {
-    const all = await core.trackers.list({ includeArchived: true });
+    const all = await core.trackers.list({
+      includeArchived: true,
+      includeHidden: hiddenMode,
+    });
     return all.filter((t) => t.archived_at != null);
-  }, []);
+  }, [hiddenMode]);
 
   async function run(id: string, action: () => Promise<void>) {
     setBusyId(id);

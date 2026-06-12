@@ -19,7 +19,7 @@ export interface TrackerService {
   delete(id: string): Promise<void>;
   reorder(orderedIds: readonly string[]): Promise<void>;
   get(id: string): Promise<Tracker | null>;
-  list(opts?: { includeArchived?: boolean }): Promise<Tracker[]>;
+  list(opts?: { includeArchived?: boolean; includeHidden?: boolean }): Promise<Tracker[]>;
   /** The source operands of a derived tracker, in order. Empty for ordinary ones. */
   links(trackerId: string): Promise<TrackerLink[]>;
   /** Replace a tracker's derivation operands (also toggles its derived flag). */
@@ -81,8 +81,8 @@ class TrackerServiceImpl implements TrackerService {
         `INSERT INTO trackers (
           id, name, description, color, icon, kind, unit, target,
           reset_period, week_start, day_start_minute, default_value,
-          archived_at, sort_order, is_derived, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+          archived_at, sort_order, is_derived, is_hidden, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
         [
           id,
           input.name,
@@ -98,11 +98,12 @@ class TrackerServiceImpl implements TrackerService {
           input.default_value,
           input.sort_order,
           isDerived,
+          input.is_hidden,
           now,
           now,
         ],
       );
-      if (links.length > 0) await this.replaceLinks(tx, id, links, now);
+      if (links.length > 0) await this.replaceLinks(tx, id, links, now, input.is_hidden);
     });
 
     const created = await this.get(id);
@@ -138,6 +139,7 @@ class TrackerServiceImpl implements TrackerService {
     assign('day_start_minute', 'day_start_minute');
     assign('default_value', 'default_value');
     assign('sort_order', 'sort_order');
+    assign('is_hidden', 'is_hidden');
 
     // A supplied `links` list replaces the derivation wholesale and re-derives
     // the `is_derived` flag from whether any operands remain.
@@ -149,6 +151,16 @@ class TrackerServiceImpl implements TrackerService {
 
     if (sets.length === 0) return existing;
 
+    // Flipping visibility must not split a derivation across the hidden
+    // boundary; check against the operands this tracker keeps (replaced links
+    // are validated in replaceLinks below) and against its dependents.
+    const nextHidden = patch.is_hidden ?? existing.is_hidden;
+    if (nextHidden !== existing.is_hidden) {
+      await this.assertHiddenMatchesDerivations(id, nextHidden, {
+        checkSources: !replacingLinks,
+      });
+    }
+
     const now = this.clock.nowISO();
     sets.push('updated_at = ?');
     params.push(now);
@@ -156,7 +168,7 @@ class TrackerServiceImpl implements TrackerService {
 
     await this.storage.transaction(async (tx) => {
       await tx.exec(`UPDATE trackers SET ${sets.join(', ')} WHERE id = ?`, params);
-      if (replacingLinks) await this.replaceLinks(tx, id, patch.links!, now);
+      if (replacingLinks) await this.replaceLinks(tx, id, patch.links!, now, nextHidden);
     });
 
     const updated = await this.get(id);
@@ -232,12 +244,16 @@ class TrackerServiceImpl implements TrackerService {
     return rows[0] ?? null;
   }
 
-  async list(opts: { includeArchived?: boolean } = {}): Promise<Tracker[]> {
-    const includeArchived = opts.includeArchived ?? false;
-    const sql = includeArchived
-      ? `SELECT * FROM trackers ORDER BY sort_order ASC, created_at ASC`
-      : `SELECT * FROM trackers WHERE archived_at IS NULL
-         ORDER BY sort_order ASC, created_at ASC`;
+  async list(
+    opts: { includeArchived?: boolean; includeHidden?: boolean } = {},
+  ): Promise<Tracker[]> {
+    const where: string[] = [];
+    if (!opts.includeArchived) where.push('archived_at IS NULL');
+    if (!opts.includeHidden) where.push('is_hidden = 0');
+    const sql =
+      `SELECT * FROM trackers` +
+      (where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '') +
+      ` ORDER BY sort_order ASC, created_at ASC`;
     return this.storage.query<Tracker>(sql);
   }
 
@@ -262,21 +278,65 @@ class TrackerServiceImpl implements TrackerService {
         `UPDATE trackers SET is_derived = ?, updated_at = ? WHERE id = ?`,
         [links.length > 0 ? 1 : 0, now, trackerId],
       );
-      await this.replaceLinks(tx, trackerId, links, now);
+      await this.replaceLinks(tx, trackerId, links, now, existing.is_hidden);
     });
     return this.links(trackerId);
   }
 
   /**
+   * Throw DerivedTrackerError if giving `id` the visibility `hidden` would
+   * split a derivation across the hidden boundary — i.e. any derived tracker
+   * using it as a source (or, with `checkSources`, any of its own sources)
+   * has the other visibility.
+   */
+  private async assertHiddenMatchesDerivations(
+    id: string,
+    hidden: 0 | 1,
+    opts: { checkSources: boolean },
+  ): Promise<void> {
+    const dependents = await this.storage.query<{ name: string }>(
+      `SELECT DISTINCT t.name
+         FROM tracker_links l
+         JOIN trackers t ON t.id = l.tracker_id
+        WHERE l.source_id = ? AND t.is_hidden != ?`,
+      [id, hidden],
+    );
+    if (dependents.length > 0) {
+      throw new DerivedTrackerError(
+        `Hidden and visible trackers cannot share a derivation: this tracker ` +
+          `is a source for ${dependents.map((d) => `"${d.name}"`).join(', ')}.`,
+      );
+    }
+    if (opts.checkSources) {
+      const sources = await this.storage.query<{ name: string }>(
+        `SELECT DISTINCT s.name
+           FROM tracker_links l
+           JOIN trackers s ON s.id = l.source_id
+          WHERE l.tracker_id = ? AND s.is_hidden != ?`,
+        [id, hidden],
+      );
+      if (sources.length > 0) {
+        throw new DerivedTrackerError(
+          `Hidden and visible trackers cannot share a derivation: this tracker ` +
+            `is derived from ${sources.map((s) => `"${s.name}"`).join(', ')}.`,
+        );
+      }
+    }
+  }
+
+  /**
    * Validate and (re)write a derived tracker's operands inside a transaction.
-   * Each source must exist, be ordinary (no derived-of-derived nesting), and
-   * not be the tracker itself. Replaces any prior links.
+   * Each source must exist, be ordinary (no derived-of-derived nesting), not
+   * be the tracker itself, and have the derived tracker's own visibility — a
+   * derivation is either entirely hidden or entirely visible, never mixed.
+   * Replaces any prior links.
    */
   private async replaceLinks(
     tx: Storage,
     trackerId: string,
     links: readonly TrackerLinkInput[],
     now: string,
+    trackerHidden: 0 | 1,
   ): Promise<void> {
     await tx.exec(`DELETE FROM tracker_links WHERE tracker_id = ?`, [trackerId]);
     if (links.length === 0) return;
@@ -296,8 +356,13 @@ class TrackerServiceImpl implements TrackerService {
       seen.add(link.source_id);
     }
 
-    const sources = await tx.query<{ id: string; is_derived: number }>(
-      `SELECT id, is_derived FROM trackers
+    const sources = await tx.query<{
+      id: string;
+      name: string;
+      is_derived: number;
+      is_hidden: number;
+    }>(
+      `SELECT id, name, is_derived, is_hidden FROM trackers
         WHERE id IN (${links.map(() => '?').join(', ')})`,
       links.map((l) => l.source_id),
     );
@@ -310,6 +375,13 @@ class TrackerServiceImpl implements TrackerService {
       if (source.is_derived === 1) {
         throw new DerivedTrackerError(
           `A derived tracker cannot be a source of another derived tracker: ${link.source_id}`,
+        );
+      }
+      if (source.is_hidden !== trackerHidden) {
+        throw new DerivedTrackerError(
+          `Hidden and visible trackers cannot share a derivation: source ` +
+            `"${source.name}" is ${source.is_hidden ? 'hidden' : 'visible'} but ` +
+            `the derived tracker is ${trackerHidden ? 'hidden' : 'visible'}.`,
         );
       }
     }

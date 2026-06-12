@@ -1,6 +1,7 @@
 import { Suspense, lazy, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCore } from '../app/CoreContext.tsx';
+import { useHiddenMode } from '../app/HiddenMode.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import { EntryList } from '../components/EntryList.tsx';
 import { MultiLogPanel } from '../components/MultiLogPanel.tsx';
@@ -33,11 +34,15 @@ export function TrackerDetailPage() {
   const core = useCore();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { enabled: hiddenMode } = useHiddenMode();
 
   const { data, loading, error, reload } = useAsync(async () => {
     if (!id) return null;
     const tracker = await core.trackers.get(id);
-    if (!tracker) {
+    // A hidden tracker reached by direct URL while hidden mode is off behaves
+    // exactly like a missing one — it doesn't exist as far as this session
+    // can tell.
+    if (!tracker || (tracker.is_hidden === 1 && !hiddenMode)) {
       return { tracker: null, entries: [], notes: [], links: [], sourceNames: new Map() };
     }
     const [entries, notes] = await Promise.all([
@@ -51,13 +56,13 @@ export function TrackerDetailPage() {
     if (tracker.is_derived) {
       const [linkRows, all] = await Promise.all([
         core.trackers.links(id),
-        core.trackers.list({ includeArchived: true }),
+        core.trackers.list({ includeArchived: true, includeHidden: hiddenMode }),
       ]);
       links = linkRows;
       sourceNames = new Map(all.map((t) => [t.id, t.name]));
     }
     return { tracker, entries, notes, links, sourceNames };
-  }, [id]);
+  }, [id, hiddenMode]);
 
   const [customValue, setCustomValue] = useState('');
   const [customWhen, setCustomWhen] = useState('');
