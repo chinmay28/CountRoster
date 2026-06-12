@@ -77,6 +77,10 @@ export function buildApp(
   api.post('/trackers/:id/entries', async (req, res) => {
     res.status(201).json(await core.entries.log(req.params.id, req.body));
   });
+  // Atomic batch log (body: EntryLogManyInput array, items across trackers).
+  api.post('/entries/batch', async (req, res) => {
+    res.status(201).json(await core.entries.logMany(req.body));
+  });
   api.get('/entries/:id', async (req, res) => {
     const e = await core.entries.get(req.params.id);
     if (!e) return notFound(res, 'entry');

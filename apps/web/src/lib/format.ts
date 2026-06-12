@@ -117,6 +117,37 @@ export function toDatetimeLocalValue(iso: string): string {
   );
 }
 
+/** The local calendar day of `d` as an <input type="date"> value. */
+export function toDateInputValue(d: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Step a date-input value by whole days (negative = back). */
+export function shiftDateInputValue(value: string, days: number): string {
+  // Anchor at noon so a DST shift inside the step can't slip a day.
+  const d = new Date(`${value}T12:00`);
+  d.setDate(d.getDate() + days);
+  return toDateInputValue(d);
+}
+
+/**
+ * Friendly label for a date-input value relative to today: "Today",
+ * "Yesterday", a near date as "Tue, Jun 9", or a far one with the year.
+ */
+export function dateInputLabel(value: string, now: Date = new Date()): string {
+  if (value === toDateInputValue(now)) return 'Today';
+  if (value === shiftDateInputValue(toDateInputValue(now), -1)) return 'Yesterday';
+  const d = new Date(`${value}T12:00`);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
+  });
+}
+
 /**
  * Convert a <input type="datetime-local"> value back to ISO 8601 with the
  * local timezone offset — the format the core stores (never UTC "Z").
