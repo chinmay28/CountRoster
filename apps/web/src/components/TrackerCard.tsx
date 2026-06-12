@@ -68,7 +68,10 @@ export function TrackerCard({ tracker, todayTotal, onLogged }: TrackerCardProps)
           <span className="tracker-card__total" style={{ color: tracker.color }}>
             {formatValue(tracker, todayTotal)}
           </span>
-          <span className="tracker-card__sub">{RESET_PERIOD_LABEL[tracker.reset_period]}</span>
+          <span className="tracker-card__sub">
+            {RESET_PERIOD_LABEL[tracker.reset_period]}
+            {tracker.is_hidden === 1 ? ' · hidden' : ''}
+          </span>
         </Link>
         <div className="tracker-card__actions">
           <button

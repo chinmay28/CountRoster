@@ -33,6 +33,13 @@ export interface Tracker {
    * Derived trackers reject direct entry logging.
    */
   is_derived: 0 | 1;
+  /**
+   * 1 if this tracker is *hidden*: excluded from list() unless the caller
+   * opts in with `includeHidden` (the UI only does so while the user has
+   * unlocked hidden mode). Orthogonal to archiving. Derivations cannot mix
+   * hidden and visible trackers.
+   */
+  is_hidden: 0 | 1;
   created_at: string;
   updated_at: string;
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Tracker, TrackerGroup } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
+import { useHiddenMode } from '../app/HiddenMode.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import {
   SortableList,
@@ -11,19 +12,26 @@ import {
 /** Create groups and organize trackers into them. */
 export function GroupsPage() {
   const core = useCore();
+  const { enabled: hiddenMode } = useHiddenMode();
   const { data, loading, error, reload } = useAsync(async () => {
     const [groups, trackers] = await Promise.all([
       core.groups.list(),
-      core.trackers.list(),
+      core.trackers.list({ includeHidden: hiddenMode }),
     ]);
     const members = new Map<string, Tracker[]>();
     await Promise.all(
       groups.map(async (g) => {
-        members.set(g.id, await core.groups.trackersIn(g.id));
+        // Membership rows come back unfiltered; keep hidden members out of
+        // sight unless hidden mode is on.
+        const inGroup = await core.groups.trackersIn(g.id);
+        members.set(
+          g.id,
+          inGroup.filter((t) => hiddenMode || t.is_hidden === 0),
+        );
       }),
     );
     return { groups, trackers, members };
-  }, []);
+  }, [hiddenMode]);
 
   const [name, setName] = useState('');
   const [color, setColor] = useState('#4ECDC4');

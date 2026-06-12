@@ -34,7 +34,8 @@ export function buildApp(
   // ---- Trackers -----------------------------------------------------------
   api.get('/trackers', async (req, res) => {
     const includeArchived = req.query.includeArchived === '1';
-    res.json(await core.trackers.list({ includeArchived }));
+    const includeHidden = req.query.includeHidden === '1';
+    res.json(await core.trackers.list({ includeArchived, includeHidden }));
   });
   api.post('/trackers', async (req, res) => {
     res.status(201).json(await core.trackers.create(req.body));

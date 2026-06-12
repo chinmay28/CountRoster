@@ -107,7 +107,13 @@ export function createApiClient(baseUrl = '/api'): ApiCore {
 
   const trackers: TrackerService = {
     list: (opts) =>
-      request('GET', `/trackers${qs({ includeArchived: opts?.includeArchived ? '1' : undefined })}`),
+      request(
+        'GET',
+        `/trackers${qs({
+          includeArchived: opts?.includeArchived ? '1' : undefined,
+          includeHidden: opts?.includeHidden ? '1' : undefined,
+        })}`,
+      ),
     get: (id) => getOrNull<Tracker>(`/trackers/${id}`),
     create: (input: TrackerInput) => request('POST', '/trackers', input),
     update: (id, patch: TrackerPatch) => request('PATCH', `/trackers/${id}`, patch),

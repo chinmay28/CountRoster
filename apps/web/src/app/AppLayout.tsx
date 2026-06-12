@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useCoreContext } from './CoreContext.tsx';
+import { HiddenModeProvider, useHiddenMode } from './HiddenMode.tsx';
 import { useKeyboardOpen } from './useKeyboardOpen.ts';
 
 /** Primary destinations, shown in the desktop header and the mobile tab bar. */
@@ -14,7 +15,19 @@ const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
 /** App chrome: header, connectivity banner, the routed page outlet, and a
  * mobile bottom tab bar with a floating "new tracker" action. */
 export function AppLayout() {
+  // Hidden-tracker mode is provided here (not in main.tsx) so the routed
+  // pages in the Outlet — and component tests that mount AppLayout — all see
+  // the same session-only state the header brand toggles.
+  return (
+    <HiddenModeProvider>
+      <AppShell />
+    </HiddenModeProvider>
+  );
+}
+
+function AppShell() {
   const { connected } = useCoreContext();
+  const { enabled: hiddenMode, registerTap } = useHiddenMode();
   const { pathname } = useLocation();
   // While the on-screen keyboard is up, drop the bottom chrome so it never
   // floats over the keyboard; it comes back the moment the keyboard closes.
@@ -25,9 +38,19 @@ export function AppLayout() {
   return (
     <div className={`app${keyboardOpen ? ' app--keyboard-open' : ''}`}>
       <header className="app__header">
-        <Link to="/" className="app__brand">
+        <Link to="/" className="app__brand" onClick={registerTap}>
           <img className="app__brand-logo" src="/icon.svg" alt="" aria-hidden="true" />
           CountRoster
+          {hiddenMode && (
+            <span
+              className="app__brand-hidden"
+              role="status"
+              title="Hidden trackers visible — tap 3× to hide"
+              aria-label="Hidden trackers visible"
+            >
+              <EyeIcon />
+            </span>
+          )}
         </Link>
         {/* Desktop / wide-screen navigation. The mobile tab bar mirrors it. */}
         <nav className="app__nav" aria-label="Primary">
@@ -150,6 +173,16 @@ function PlusIcon() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="2.5" />
     </svg>
   );
 }

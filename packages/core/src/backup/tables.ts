@@ -16,7 +16,7 @@ export const BACKUP_TABLES: ReadonlyArray<{
     columns: [
       'id', 'name', 'description', 'color', 'icon', 'kind', 'unit', 'target',
       'reset_period', 'week_start', 'day_start_minute', 'default_value',
-      'archived_at', 'sort_order', 'is_derived', 'created_at', 'updated_at',
+      'archived_at', 'sort_order', 'is_derived', 'is_hidden', 'created_at', 'updated_at',
     ],
   },
   {

@@ -25,6 +25,7 @@ function makeTracker(patch: Partial<Tracker>): Tracker {
     archived_at: null,
     sort_order: 0,
     is_derived: 0,
+    is_hidden: 0,
     created_at: '2026-05-25T12:00:00.000-07:00',
     updated_at: '2026-05-25T12:00:00.000-07:00',
     ...patch,
