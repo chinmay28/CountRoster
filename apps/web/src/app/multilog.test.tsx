@@ -4,20 +4,20 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { CoreValueProvider } from './CoreContext.tsx';
 import { AppLayout } from './AppLayout.tsx';
-import { MultiLogPage } from '../pages/MultiLogPage.tsx';
+import { TrackerDetailPage } from '../pages/TrackerDetailPage.tsx';
 import { toDateInputValue, shiftDateInputValue } from '../lib/format.ts';
 import { makeTestCore, type TestCore } from '../test/makeTestCore.ts';
 
-function renderMultiLog(test: TestCore) {
+function renderDetail(test: TestCore, trackerId: string) {
   const router = createMemoryRouter(
     [
       {
         path: '/',
         element: <AppLayout />,
-        children: [{ path: 'log', element: <MultiLogPage /> }],
+        children: [{ path: 'trackers/:id', element: <TrackerDetailPage /> }],
       },
     ],
-    { initialEntries: ['/log'] },
+    { initialEntries: [`/trackers/${trackerId}`] },
   );
   return render(
     <CoreValueProvider value={{ core: test.core, connected: true }}>
@@ -31,101 +31,111 @@ beforeEach(async () => {
   test = await makeTestCore();
 });
 
-describe('MultiLogPage', () => {
-  it('shows a value row per loggable tracker, excluding derived ones', async () => {
-    await test.createTracker({ name: 'Coffee' });
-    const water = await test.createTracker({ name: 'Water', unit: 'cups' });
-    await test.createTracker({
-      name: 'Net',
-      links: [{ source_id: water.id, coefficient: 1 }],
-    });
+/** Open the tracker detail page and switch to the "Log multiple" tab. */
+async function openMultiTab(test: TestCore, trackerId: string) {
+  const user = userEvent.setup();
+  renderDetail(test, trackerId);
+  await user.click(await screen.findByRole('tab', { name: /log multiple/i }));
+  return user;
+}
 
-    renderMultiLog(test);
+describe('Log multiple tab', () => {
+  it('sits next to the single-entry form and shows the batch sheet', async () => {
+    const t = await test.createTracker({ name: 'Coffee', unit: 'cups' });
+    const user = userEvent.setup();
+    renderDetail(test, t.id);
 
-    expect(await screen.findByRole('spinbutton', { name: /coffee/i })).toBeInTheDocument();
-    expect(screen.getByRole('spinbutton', { name: /water/i })).toBeInTheDocument();
-    // The derived tracker has no input row (only ordinary trackers do).
-    expect(screen.queryByRole('spinbutton', { name: /^net/i })).not.toBeInTheDocument();
+    // The single-entry form is the default tab.
+    const singleTab = await screen.findByRole('tab', { name: /log an entry/i });
+    expect(singleTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: 'Log entry' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: /log multiple/i }));
+    expect(screen.getByRole('spinbutton', { name: /entry 1/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Today' })).toBeInTheDocument();
+    // Switching back restores the detailed form.
+    await user.click(screen.getByRole('tab', { name: /log an entry/i }));
+    expect(screen.getByRole('button', { name: 'Log entry' })).toBeInTheDocument();
   });
 
-  it('logs only the filled rows in one batch and clears the sheet', async () => {
-    const user = userEvent.setup();
-    const coffee = await test.createTracker({ name: 'Coffee' });
-    const water = await test.createTracker({ name: 'Water' });
-    const meds = await test.createTracker({ name: 'Meds' });
+  it('Enter on a filled last row grows the sheet and focuses the new row', async () => {
+    const t = await test.createTracker({ name: 'Coffee' });
+    const user = await openMultiTab(test, t.id);
 
-    renderMultiLog(test);
+    await user.click(screen.getByRole('spinbutton', { name: /entry 1/i }));
+    await user.keyboard('3{Enter}');
 
-    await user.type(await screen.findByRole('spinbutton', { name: /coffee/i }), '3');
-    await user.type(screen.getByRole('spinbutton', { name: /water/i }), '2.5');
-    // Meds left blank — skipped, not logged with a default.
+    await waitFor(() =>
+      expect(screen.getByRole('spinbutton', { name: /entry 2/i })).toHaveFocus(),
+    );
+    // Enter on the new, blank last row does NOT add a third — it's "done".
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('spinbutton', { name: /entry 3/i })).not.toBeInTheDocument();
+  });
+
+  it('logs all filled rows as one batch and resets the sheet', async () => {
+    const t = await test.createTracker({ name: 'Coffee' });
+    const user = await openMultiTab(test, t.id);
+
+    await user.click(screen.getByRole('spinbutton', { name: /entry 1/i }));
+    await user.keyboard('1{Enter}');
+    await waitFor(() =>
+      expect(screen.getByRole('spinbutton', { name: /entry 2/i })).toHaveFocus(),
+    );
+    await user.keyboard('2.5{Enter}');
+    // Third row spawned but left blank — skipped, so the batch is two entries.
     await user.click(screen.getByRole('button', { name: /log 2 entries/i }));
 
     await waitFor(async () => {
-      expect(await test.core.entries.forTracker(coffee.id)).toHaveLength(1);
+      const entries = await test.core.entries.forTracker(t.id);
+      expect(entries.map((e) => e.value).sort()).toEqual([1, 2.5]);
     });
-    expect((await test.core.entries.forTracker(coffee.id))[0]!.value).toBe(3);
-    expect((await test.core.entries.forTracker(water.id))[0]!.value).toBe(2.5);
-    expect(await test.core.entries.forTracker(meds.id)).toHaveLength(0);
-
-    // The sheet resets for the next round.
-    expect(screen.getByRole('spinbutton', { name: /coffee/i })).toHaveValue(null);
     expect(screen.getByText(/logged 2 entries/i)).toBeInTheDocument();
+    // The sheet collapses back to a single empty row for the next round.
+    expect(screen.getByRole('spinbutton', { name: /entry 1/i })).toHaveValue(null);
+    expect(screen.queryByRole('spinbutton', { name: /entry 2/i })).not.toBeInTheDocument();
   });
 
-  it('backdates entries to noon of the pinned day', async () => {
-    const user = userEvent.setup();
-    const coffee = await test.createTracker({ name: 'Coffee' });
+  it('backdates the whole batch to noon of the pinned day', async () => {
+    const t = await test.createTracker({ name: 'Coffee' });
+    const user = await openMultiTab(test, t.id);
 
-    renderMultiLog(test);
-
-    await user.click(await screen.findByRole('button', { name: 'Yesterday' }));
-    await user.type(screen.getByRole('spinbutton', { name: /coffee/i }), '1');
+    await user.click(screen.getByRole('button', { name: 'Yesterday' }));
+    await user.type(screen.getByRole('spinbutton', { name: /entry 1/i }), '1');
     await user.click(screen.getByRole('button', { name: /log 1 entry/i }));
 
     const yesterday = shiftDateInputValue(toDateInputValue(), -1);
     await waitFor(async () => {
-      const entries = await test.core.entries.forTracker(coffee.id);
+      const entries = await test.core.entries.forTracker(t.id);
       expect(entries).toHaveLength(1);
       expect(entries[0]!.occurred_at.startsWith(`${yesterday}T12:00`)).toBe(true);
     });
   });
 
-  it('Enter advances focus to the next tracker row', async () => {
-    const user = userEvent.setup();
-    await test.createTracker({ name: 'Coffee' });
-    await test.createTracker({ name: 'Water' });
+  it('rows can be added with the button and removed again', async () => {
+    const t = await test.createTracker({ name: 'Coffee' });
+    const user = await openMultiTab(test, t.id);
 
-    renderMultiLog(test);
+    // A lone row has no remove button — there must always be one row.
+    expect(screen.queryByRole('button', { name: /remove entry/i })).not.toBeInTheDocument();
 
-    const coffee = await screen.findByRole('spinbutton', { name: /coffee/i });
-    await user.click(coffee);
-    await user.keyboard('3{Enter}');
+    await user.click(screen.getByRole('button', { name: /add a row/i }));
+    expect(screen.getByRole('spinbutton', { name: /entry 2/i })).toBeInTheDocument();
 
-    expect(screen.getByRole('spinbutton', { name: /water/i })).toHaveFocus();
+    await user.click(screen.getByRole('button', { name: /remove entry 2/i }));
+    expect(screen.queryByRole('spinbutton', { name: /entry 2/i })).not.toBeInTheDocument();
   });
 
-  it('"+" duplicates a row so the same tracker can be logged twice', async () => {
-    const user = userEvent.setup();
-    const coffee = await test.createTracker({ name: 'Coffee' });
-
-    renderMultiLog(test);
-
-    await user.click(
-      await screen.findByRole('button', { name: /add another coffee entry/i }),
-    );
-    const inputs = screen.getAllByRole('spinbutton', { name: /coffee/i });
-    expect(inputs).toHaveLength(2);
-
-    await user.type(inputs[0]!, '1');
-    await user.type(inputs[1]!, '2');
-    await user.click(screen.getByRole('button', { name: /log 2 entries/i }));
-
-    await waitFor(async () => {
-      const entries = await test.core.entries.forTracker(coffee.id);
-      expect(entries.map((e) => e.value).sort()).toEqual([1, 2]);
+  it('does not offer logging tabs on a derived tracker', async () => {
+    const source = await test.createTracker({ name: 'Source' });
+    const derived = await test.createTracker({
+      name: 'Net',
+      links: [{ source_id: source.id, coefficient: 1 }],
     });
-    // Extra rows collapse after a successful submit.
-    expect(screen.getAllByRole('spinbutton', { name: /coffee/i })).toHaveLength(1);
+
+    renderDetail(test, derived.id);
+
+    await screen.findByRole('heading', { name: 'Net' });
+    expect(screen.queryByRole('tab', { name: /log multiple/i })).not.toBeInTheDocument();
   });
 });
