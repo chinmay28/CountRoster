@@ -63,8 +63,8 @@ describe('mobile tab bar', () => {
 
     const tabBar = document.querySelector('.tab-bar') as HTMLElement;
     expect(tabBar).toBeInTheDocument();
-    // All five primary destinations are present as tabs.
-    for (const label of ['Home', 'Log', 'Compare', 'Groups', 'Data']) {
+    // All four primary destinations are present as tabs.
+    for (const label of ['Home', 'Compare', 'Groups', 'Data']) {
       expect(within(tabBar).getByText(label)).toBeInTheDocument();
     }
     // On "/", the Home tab is the active one.

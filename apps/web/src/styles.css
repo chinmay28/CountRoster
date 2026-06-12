@@ -1246,13 +1246,37 @@ a {
 }
 
 /* ------------------------------------------------------------------ *
- * Multi-log: pin a date, then rapid-fire values down the roster. The
- * keypad's "next" key walks the rows, so layout keeps each row one
- * thumb-height tall and the submit bar sticky at the bottom.
+ * "Log multiple" (tracker detail): pin a date, then rapid-fire entry
+ * values. The keypad's "next" key walks (and grows) the rows, so the
+ * layout keeps each row one thumb-height tall.
  * ------------------------------------------------------------------ */
+.logtabs {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin-bottom: 0.85rem;
+}
+.logtabs__tab {
+  font: inherit;
+  font-size: 0.95rem;
+  border: none;
+  background: none;
+  color: var(--muted);
+  padding: 0.4rem 0.85rem;
+  border-radius: calc(var(--radius) - 4px);
+  cursor: pointer;
+}
+.logtabs__tab--active {
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-weight: 600;
+}
+
 .multilog {
-  max-width: 560px;
-  margin: 0 auto;
+  max-width: 480px;
 }
 .multilog__datebar {
   display: flex;
@@ -1325,10 +1349,6 @@ a {
   box-shadow: var(--shadow);
   padding: 0.45rem 0.6rem;
 }
-/* Duplicate rows read as children of the tracker above them. */
-.multilog__row--extra {
-  margin-left: 1.4rem;
-}
 .multilog__swatch {
   width: 0.7rem;
   height: 0.7rem;
@@ -1377,8 +1397,12 @@ a {
   line-height: 1;
   cursor: pointer;
 }
+.multilog__add {
+  margin-top: 0.6rem;
+  color: var(--muted);
+}
 /* Pinned inside the scrolling main, above the tab bar, so "Log N entries"
-   stays reachable however long the roster gets. */
+   stays reachable however long the sheet grows. */
 .multilog__submitbar {
   position: sticky;
   bottom: 0;
@@ -1411,6 +1435,12 @@ a {
   .multilog__row-btn {
     width: 2.5rem;
     height: 2.5rem;
+  }
+  .multilog {
+    max-width: none;
+  }
+  .logtabs__tab {
+    min-height: 2.5rem;
   }
 }
 

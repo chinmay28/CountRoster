@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCore } from '../app/CoreContext.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import { EntryList } from '../components/EntryList.tsx';
+import { MultiLogPanel } from '../components/MultiLogPanel.tsx';
 import { NotesSection } from '../components/NotesSection.tsx';
 import { RemindersSection } from '../components/RemindersSection.tsx';
 
@@ -62,6 +63,8 @@ export function TrackerDetailPage() {
   const [customWhen, setCustomWhen] = useState('');
   const [customNote, setCustomNote] = useState('');
   const [logging, setLogging] = useState(false);
+  // Which logging mode the user is in: one detailed entry, or a batch sheet.
+  const [logTab, setLogTab] = useState<'single' | 'multi'>('single');
   // Surfaces failures from header actions like archive (e.g. a tracker still in
   // use by a derived tracker).
   const [actionError, setActionError] = useState<string | null>(null);
@@ -232,8 +235,44 @@ export function TrackerDetailPage() {
 
       {!isDerived && (
         <section className="detail__log">
-          <h2>Log an entry</h2>
-          <form className="detail__custom" onSubmit={customLog}>
+          {/* One detailed entry (value/when/note) or a rapid batch sheet. */}
+          <div className="logtabs" role="tablist" aria-label="Log entries">
+            <button
+              type="button"
+              role="tab"
+              id="logtab-single"
+              aria-selected={logTab === 'single'}
+              aria-controls="logpanel-single"
+              className={`logtabs__tab${logTab === 'single' ? ' logtabs__tab--active' : ''}`}
+              onClick={() => setLogTab('single')}
+            >
+              Log an entry
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="logtab-multi"
+              aria-selected={logTab === 'multi'}
+              aria-controls="logpanel-multi"
+              className={`logtabs__tab${logTab === 'multi' ? ' logtabs__tab--active' : ''}`}
+              onClick={() => setLogTab('multi')}
+            >
+              Log multiple
+            </button>
+          </div>
+
+          {logTab === 'multi' ? (
+            <div role="tabpanel" id="logpanel-multi" aria-labelledby="logtab-multi">
+              <MultiLogPanel tracker={tracker} onLogged={refresh} />
+            </div>
+          ) : (
+          <form
+            className="detail__custom"
+            onSubmit={customLog}
+            role="tabpanel"
+            id="logpanel-single"
+            aria-labelledby="logtab-single"
+          >
             <label className="field">
               <span>Value</span>
               <input
@@ -271,6 +310,7 @@ export function TrackerDetailPage() {
               Log entry
             </button>
           </form>
+          )}
         </section>
       )}
 

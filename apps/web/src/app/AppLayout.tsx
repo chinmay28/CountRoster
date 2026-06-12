@@ -6,7 +6,6 @@ import { useKeyboardOpen } from './useKeyboardOpen.ts';
 /** Primary destinations, shown in the desktop header and the mobile tab bar. */
 const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
   { to: '/', label: 'Home', icon: <HomeIcon /> },
-  { to: '/log', label: 'Log', icon: <LogIcon /> },
   { to: '/compare', label: 'Compare', icon: <CompareIcon /> },
   { to: '/groups', label: 'Groups', icon: <GroupsIcon /> },
   { to: '/data', label: 'Data', icon: <DataIcon /> },
@@ -20,12 +19,8 @@ export function AppLayout() {
   // While the on-screen keyboard is up, drop the bottom chrome so it never
   // floats over the keyboard; it comes back the moment the keyboard closes.
   const keyboardOpen = useKeyboardOpen();
-  // The FAB *is* the "new tracker" action, so don't show it on that form —
-  // nor on Multi-log, where it would float over the sticky submit bar.
-  const showFab =
-    !pathname.startsWith('/trackers/new') &&
-    !pathname.endsWith('/edit') &&
-    pathname !== '/log';
+  // The FAB *is* the "new tracker" action, so don't show it on that form.
+  const showFab = !pathname.startsWith('/trackers/new') && !pathname.endsWith('/edit');
 
   return (
     <div className={`app${keyboardOpen ? ' app--keyboard-open' : ''}`}>
@@ -111,20 +106,6 @@ function HomeIcon() {
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M3 10.5 12 3l9 7.5" />
       <path d="M5 9.5V21h14V9.5" />
-    </svg>
-  );
-}
-
-function LogIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M9 6h12" />
-      <path d="M9 12h12" />
-      <path d="M9 18h12" />
-      <path d="m3 6 1.2 1.2L6.5 4.9" />
-      <path d="m3 12 1.2 1.2 2.3-2.3" />
-      <path d="m3 18 1.2 1.2 2.3-2.3" />
     </svg>
   );
 }
