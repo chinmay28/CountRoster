@@ -96,6 +96,48 @@ describe('Log multiple tab', () => {
     expect(screen.queryByRole('spinbutton', { name: /entry 2/i })).not.toBeInTheDocument();
   });
 
+  it('stores an optional batch note once, tracker-level, with the batch date', async () => {
+    const t = await test.createTracker({ name: 'Coffee' });
+    const user = await openMultiTab(test, t.id);
+
+    await user.click(screen.getByRole('button', { name: 'Yesterday' }));
+    await user.click(screen.getByRole('spinbutton', { name: /entry 1/i }));
+    await user.keyboard('1{Enter}');
+    await waitFor(() =>
+      expect(screen.getByRole('spinbutton', { name: /entry 2/i })).toHaveFocus(),
+    );
+    await user.keyboard('2');
+    const noteBox = screen.getByLabelText(/note \(optional/i);
+    await user.type(noteBox, 'Backfilled from memory');
+    await user.click(screen.getByRole('button', { name: /log 2 entries/i }));
+
+    const yesterday = shiftDateInputValue(toDateInputValue(), -1);
+    await waitFor(async () => {
+      expect(await test.core.entries.forTracker(t.id)).toHaveLength(2);
+    });
+    // One note for the whole batch — standalone (no entry_id), dated with it.
+    const notes = await test.core.notes.forTracker(t.id);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.body).toBe('Backfilled from memory');
+    expect(notes[0]!.entry_id).toBeNull();
+    expect(notes[0]!.occurred_at.startsWith(`${yesterday}T12:00`)).toBe(true);
+    // The note field clears with the rest of the sheet.
+    expect(screen.getByLabelText(/note \(optional/i)).toHaveValue('');
+  });
+
+  it('creates no note when the note field is left blank', async () => {
+    const t = await test.createTracker({ name: 'Coffee' });
+    const user = await openMultiTab(test, t.id);
+
+    await user.type(screen.getByRole('spinbutton', { name: /entry 1/i }), '1');
+    await user.click(screen.getByRole('button', { name: /log 1 entry/i }));
+
+    await waitFor(async () => {
+      expect(await test.core.entries.forTracker(t.id)).toHaveLength(1);
+    });
+    expect(await test.core.notes.forTracker(t.id)).toHaveLength(0);
+  });
+
   it('backdates the whole batch to noon of the pinned day', async () => {
     const t = await test.createTracker({ name: 'Coffee' });
     const user = await openMultiTab(test, t.id);

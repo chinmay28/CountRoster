@@ -1401,6 +1401,9 @@ a {
   margin-top: 0.6rem;
   color: var(--muted);
 }
+.multilog__note {
+  margin-top: 0.85rem;
+}
 /* Pinned inside the scrolling main, above the tab bar, so "Log N entries"
    stays reachable however long the sheet grows. */
 .multilog__submitbar {

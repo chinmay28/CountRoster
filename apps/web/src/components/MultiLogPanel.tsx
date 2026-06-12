@@ -29,6 +29,7 @@ export function MultiLogPanel({ tracker, onLogged }: MultiLogPanelProps) {
   const seq = useRef(1);
   const [rows, setRows] = useState<string[]>(['row-0']);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -101,11 +102,22 @@ export function MultiLogPanel({ tracker, onLogged }: MultiLogPanelProps) {
           ...(occurredAt ? { occurred_at: occurredAt } : {}),
         })),
       );
+      // One note can't point at N entries (a note links to at most one), so a
+      // batch note is stored tracker-level with the batch's timestamp — it
+      // describes the whole sheet and lands in the Notes section.
+      if (note.trim()) {
+        await core.notes.create({
+          tracker_id: tracker.id,
+          body: note.trim(),
+          ...(occurredAt ? { occurred_at: occurredAt } : {}),
+        });
+      }
       setStatus(
         `Logged ${logged.length} ${logged.length === 1 ? 'entry' : 'entries'} · ${dateInputLabel(date)}`,
       );
       setRows([`row-${seq.current++}`]);
       setValues({});
+      setNote('');
       onLogged();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : String(err));
@@ -219,6 +231,19 @@ export function MultiLogPanel({ tracker, onLogged }: MultiLogPanelProps) {
         >
           + Add a row
         </button>
+
+        <label className="field multilog__note">
+          <span>Note (optional, covers all entries in this batch)</span>
+          <textarea
+            rows={2}
+            placeholder="Describe these entries…"
+            value={note}
+            onChange={(e) => {
+              setNote(e.target.value);
+              setStatus(null);
+            }}
+          />
+        </label>
 
         <div className="multilog__submitbar">
           {status && (
