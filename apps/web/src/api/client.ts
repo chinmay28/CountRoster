@@ -19,6 +19,7 @@ import type {
   TrackerInput,
   TrackerPatch,
   EntryLogInput,
+  EntryLogManyInput,
   EntryPatch,
   NoteInput,
   NotePatch,
@@ -123,6 +124,8 @@ export function createApiClient(baseUrl = '/api'): ApiCore {
       request('GET', `/trackers/${trackerId}/entries${rangeQuery(range)}`),
     log: (trackerId, input?: EntryLogInput) =>
       request('POST', `/trackers/${trackerId}/entries`, input ?? {}),
+    logMany: (inputs: EntryLogManyInput) =>
+      request('POST', '/entries/batch', inputs),
     get: (id) => getOrNull<Entry>(`/entries/${id}`),
     update: (id, patch: EntryPatch) => request('PATCH', `/entries/${id}`, patch),
     delete: (id) => request('DELETE', `/entries/${id}`),

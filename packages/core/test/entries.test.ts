@@ -32,6 +32,54 @@ describe('EntryService', () => {
     );
   });
 
+  it('logMany() inserts a batch across trackers and returns it in input order', async () => {
+    const { app } = await makeTestApp();
+    const coffee = await app.trackers.create({ name: 'Coffee', default_value: 1 });
+    const water = await app.trackers.create({ name: 'Water', default_value: 2 });
+
+    const entries = await app.entries.logMany([
+      { tracker_id: water.id, value: 3 },
+      { tracker_id: coffee.id }, // falls back to coffee's default_value
+      { tracker_id: water.id, occurred_at: '2026-05-24T12:00:00.000-07:00' },
+    ]);
+
+    expect(entries.map((e) => e.tracker_id)).toEqual([water.id, coffee.id, water.id]);
+    expect(entries.map((e) => e.value)).toEqual([3, 1, 2]);
+    expect(entries[2]!.occurred_at).toBe('2026-05-24T12:00:00.000-07:00');
+    expect(await app.entries.forTracker(water.id)).toHaveLength(2);
+  });
+
+  it('logMany() rolls the whole batch back when any tracker is unknown', async () => {
+    const { app } = await makeTestApp();
+    const t = await app.trackers.create({ name: 'Coffee' });
+
+    await expect(
+      app.entries.logMany([
+        { tracker_id: t.id, value: 1 },
+        { tracker_id: 'does-not-exist', value: 2 },
+      ]),
+    ).rejects.toBeInstanceOf(TrackerNotFoundError);
+
+    // Nothing persisted — the valid item rolled back with the bad one.
+    expect(await app.entries.forTracker(t.id)).toHaveLength(0);
+  });
+
+  it('logMany() rejects derived trackers and empty batches', async () => {
+    const { app } = await makeTestApp();
+    const source = await app.trackers.create({ name: 'Source' });
+    const derived = await app.trackers.create({
+      name: 'Derived',
+      links: [{ source_id: source.id, coefficient: 1 }],
+    });
+
+    await expect(
+      app.entries.logMany([{ tracker_id: derived.id, value: 1 }]),
+    ).rejects.toMatchObject({ name: 'DerivedTrackerError' });
+    await expect(app.entries.logMany([])).rejects.toMatchObject({
+      name: 'ZodError',
+    });
+  });
+
   it('update() patches value and occurred_at', async () => {
     const { app, setTime } = await makeTestApp('2026-05-25T12:00:00.000-07:00');
     const t = await app.trackers.create({ name: 'Coffee' });

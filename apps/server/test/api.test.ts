@@ -105,6 +105,28 @@ describe('CountRoster API', () => {
     expect(gone.map((t: { id: string }) => t.id)).not.toContain(tracker.id);
   });
 
+  it('batch-logs entries atomically across trackers', async () => {
+    const a = await (await api.post('/api/trackers', { name: 'Batch A' })).json();
+    const b = await (await api.post('/api/trackers', { name: 'Batch B', default_value: 4 })).json();
+
+    const res = await api.post('/api/entries/batch', [
+      { tracker_id: a.id, value: 2, occurred_at: '2026-05-24T12:00:00.000-07:00' },
+      { tracker_id: b.id }, // uses b's default_value
+    ]);
+    expect(res.status).toBe(201);
+    const logged = await res.json();
+    expect(logged.map((e: { value: number }) => e.value)).toEqual([2, 4]);
+
+    // A bad item rolls back the whole batch.
+    const bad = await api.post('/api/entries/batch', [
+      { tracker_id: a.id, value: 9 },
+      { tracker_id: 'does-not-exist' },
+    ]);
+    expect(bad.status).toBe(404);
+    const entries = await (await api.get(`/api/trackers/${a.id}/entries`)).json();
+    expect(entries).toHaveLength(1);
+  });
+
   it('returns 404 for an unknown tracker', async () => {
     const res = await api.get('/api/trackers/does-not-exist');
     expect(res.status).toBe(404);

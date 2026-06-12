@@ -4,8 +4,10 @@ import type { Clock } from '../time.js';
 import type { Entry } from '../schema/tables.js';
 import {
   entryLogInputSchema,
+  entryLogManyInputSchema,
   entryPatchSchema,
   type EntryLogInput,
+  type EntryLogManyInput,
   type EntryPatch,
 } from '../schema/validators.js';
 import { TrackerNotFoundError } from './trackers.js';
@@ -24,6 +26,13 @@ export interface EntryService {
    * Throws TrackerNotFoundError if the tracker doesn't exist.
    */
   log(trackerId: string, input?: EntryLogInput): Promise<Entry>;
+  /**
+   * Log a batch of entries — possibly across different trackers — atomically:
+   * either every item is inserted or none are. Per-item defaults match log()
+   * (value = tracker.default_value, occurred_at = now). Returns the persisted
+   * entries in input order.
+   */
+  logMany(inputs: EntryLogManyInput): Promise<Entry[]>;
   update(id: string, patch: EntryPatch): Promise<Entry>;
   delete(id: string): Promise<void>;
   get(id: string): Promise<Entry | null>;
@@ -82,6 +91,63 @@ class EntryServiceImpl implements EntryService {
     const created = await this.get(id);
     if (!created) throw new Error(`Entry insert succeeded but row not found: ${id}`);
     return created;
+  }
+
+  async logMany(rawInputs: EntryLogManyInput): Promise<Entry[]> {
+    const inputs = entryLogManyInputSchema.parse(rawInputs);
+
+    const ids = await this.storage.transaction(async (tx) => {
+      // Validate every distinct tracker up front so a bad item rolls back the
+      // whole batch before any row lands.
+      const defaults = new Map<string, number>();
+      for (const trackerId of new Set(inputs.map((i) => i.tracker_id))) {
+        const rows = await tx.query<{
+          default_value: number;
+          is_derived: number;
+        }>(
+          `SELECT default_value, is_derived FROM trackers WHERE id = ?`,
+          [trackerId],
+        );
+        if (rows.length === 0) throw new TrackerNotFoundError(trackerId);
+        if (rows[0]!.is_derived === 1) {
+          throw new DerivedTrackerError(
+            'Cannot log entries on a derived tracker; its value is computed from its sources.',
+          );
+        }
+        defaults.set(trackerId, rows[0]!.default_value);
+      }
+
+      const now = this.clock.nowISO();
+      const inserted: string[] = [];
+      for (const input of inputs) {
+        const id = newId();
+        await tx.exec(
+          `INSERT INTO entries (id, tracker_id, value, occurred_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            id,
+            input.tracker_id,
+            input.value ?? defaults.get(input.tracker_id)!,
+            input.occurred_at ?? now,
+            now,
+            now,
+          ],
+        );
+        inserted.push(id);
+      }
+      return inserted;
+    });
+
+    const rows = await this.storage.query<Entry>(
+      `SELECT * FROM entries WHERE id IN (${ids.map(() => '?').join(', ')})`,
+      ids,
+    );
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    return ids.map((id) => {
+      const entry = byId.get(id);
+      if (!entry) throw new Error(`Entry insert succeeded but row not found: ${id}`);
+      return entry;
+    });
   }
 
   async update(id: string, rawPatch: EntryPatch): Promise<Entry> {

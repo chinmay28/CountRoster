@@ -77,6 +77,26 @@ export const entryLogInputSchema = z.object({
 });
 export type EntryLogInput = z.infer<typeof entryLogInputSchema>;
 
+/**
+ * One item of EntryService.logMany() — an entry log targeted at a tracker.
+ * `value`/`occurred_at` default exactly like single log() (tracker default /
+ * now).
+ */
+export const entryLogManyItemSchema = entryLogInputSchema.extend({
+  tracker_id: z.string().min(1),
+});
+export type EntryLogManyItem = z.infer<typeof entryLogManyItemSchema>;
+
+/**
+ * Input to EntryService.logMany(). Capped well under SQLite's bound-parameter
+ * limit so the returning SELECT ... IN (...) stays a single statement.
+ */
+export const entryLogManyInputSchema = z
+  .array(entryLogManyItemSchema)
+  .min(1)
+  .max(500);
+export type EntryLogManyInput = z.infer<typeof entryLogManyInputSchema>;
+
 export const entryPatchSchema = z.object({
   value: z.number().finite().optional(),
   occurred_at: z.string().datetime({ offset: true }).optional(),
