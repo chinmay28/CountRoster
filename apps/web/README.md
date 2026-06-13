@@ -83,6 +83,6 @@ Visualizations & organization:
 
 ## License
 
-`AGPL-3.0-or-later`, like the rest of CountRoster — see [`LICENSE`](../../LICENSE).
+`AGPL-3.0-only`, like the rest of CountRoster — see [`LICENSE`](../../LICENSE).
 Contributions are taken under the [CLA](../../CLA.md); see
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md).

@@ -5,8 +5,8 @@ request.
 
 ## License and the CLA
 
-CountRoster is licensed under the **GNU Affero General Public License v3.0 or
-later** (`AGPL-3.0-or-later`). See [`LICENSE`](./LICENSE).
+CountRoster is licensed under the **GNU Affero General Public License v3.0**
+(`AGPL-3.0-only`). See [`LICENSE`](./LICENSE).
 
 By contributing, you agree to the [Contributor License Agreement](./CLA.md). In
 short: you keep ownership of your work, but you grant the maintainer a broad

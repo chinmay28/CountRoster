@@ -6,7 +6,7 @@ maintained by Chinmay Manjunath ("the Maintainer").
 This Contributor License Agreement ("Agreement") clarifies the intellectual
 property rights granted with Contributions from any person or entity to the
 Project. It exists so that the Project can be distributed under the GNU Affero
-General Public License v3.0-or-later **and** so that the Maintainer retains the
+General Public License v3.0 **and** so that the Maintainer retains the
 ability to offer the Project under separate terms (for example, a commercial or
 dual license). You retain ownership of your Contributions; this Agreement only
 grants the Maintainer a license to them.
@@ -41,7 +41,7 @@ sublicense, and distribute Your Contributions and such derivative works.
 
 You expressly agree that the Maintainer may **license and relicense Your
 Contributions under any license terms**, including the GNU Affero General Public
-License v3.0-or-later, other open-source licenses, and proprietary or commercial
+License v3.0, other open-source licenses, and proprietary or commercial
 license terms, and may sublicense these rights through multiple tiers of
 sublicensees. This right is what enables the Project to be offered under a dual
 or commercial license in addition to the AGPL.

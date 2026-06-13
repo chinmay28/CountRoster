@@ -103,7 +103,7 @@ npm run typecheck # tsc --noEmit everywhere
 ## License
 
 CountRoster is free software licensed under the **GNU Affero General Public
-License v3.0 or later** (`AGPL-3.0-or-later`). See [LICENSE](./LICENSE) for the
+License v3.0** (`AGPL-3.0-only`). See [LICENSE](./LICENSE) for the
 full text.
 
 The AGPL is a strong copyleft license: anyone who distributes CountRoster — or

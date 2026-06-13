@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "CountRoster web client — a mobile-friendly, installable PWA (Vite + React) that talks to the CountRoster server over a REST API.",
-  "license": "AGPL-3.0-or-later",
+  "license": "AGPL-3.0-only",
   "author": "Chinmay Manjunath",
   "type": "module",
   "scripts": {

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "description": "A local-first anything-tracker. iOS + Android + Web from a shared TypeScript core.",
-  "license": "AGPL-3.0-or-later",
+  "license": "AGPL-3.0-only",
   "author": "Chinmay Manjunath",
   "workspaces": [
     "packages/*",

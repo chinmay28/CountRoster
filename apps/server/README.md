@@ -54,7 +54,7 @@ accepts a bundle (`?confirmOverwrite=1` to replace non-empty data).
 
 ## License
 
-`AGPL-3.0-or-later`, like the rest of CountRoster — see [`LICENSE`](../../LICENSE).
+`AGPL-3.0-only`, like the rest of CountRoster — see [`LICENSE`](../../LICENSE).
 Note AGPL §13: if you run a **modified** server over a network for others, you
 must offer them its source. Contributions are taken under the
 [CLA](../../CLA.md); see [`CONTRIBUTING.md`](../../CONTRIBUTING.md).

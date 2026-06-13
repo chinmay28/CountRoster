@@ -664,8 +664,8 @@ Weekly buckets respect `week_start`. Monthly buckets are calendar months. Yearly
 
 ## Appendix C — License
 
-CountRoster is licensed under the **GNU Affero General Public License v3.0 or
-later** (`AGPL-3.0-or-later`); see [`LICENSE`](./LICENSE).
+CountRoster is licensed under the **GNU Affero General Public License v3.0**
+(`AGPL-3.0-only`); see [`LICENSE`](./LICENSE).
 
 The AGPL was chosen deliberately over a permissive license (e.g. MIT). Because
 CountRoster is a **network-served** application, the AGPL's §13 closes the "SaaS

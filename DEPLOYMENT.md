@@ -32,7 +32,7 @@
 >   tailnet IP / MagicDNS `*.ts.net` name, already in the dev/preview allowlist),
 >   a VPN, or a reverse proxy that adds its own access control. Do **not** put it
 >   on the open internet unauthenticated.
-> - **License obligation (AGPL §13).** CountRoster is `AGPL-3.0-or-later`. If you
+> - **License obligation (AGPL §13).** CountRoster is `AGPL-3.0-only`. If you
 >   deploy a **modified** version that other people use over a network, you must
 >   offer those users the complete corresponding source of your modified version
 >   (for example, a "Source" link to your fork). Running an *unmodified* build for

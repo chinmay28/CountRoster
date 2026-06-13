@@ -107,7 +107,7 @@ All services are now fully implemented: `trackers`, `entries`, `notes`, `groups`
 
 ## Licensing & contributions
 
-- CountRoster is licensed **`AGPL-3.0-or-later`** (`LICENSE` is the canonical GNU AGPL-3.0 text). Every workspace `package.json` carries `"license": "AGPL-3.0-or-later"`; keep that field on any new package you add.
+- CountRoster is licensed **`AGPL-3.0-only`** (`LICENSE` is the canonical GNU AGPL-3.0 text). Every workspace `package.json` carries `"license": "AGPL-3.0-only"`; keep that field on any new package you add.
 - **Dependencies must be AGPL-compatible.** The current tree is entirely permissive (MIT/ISC/Apache-2.0/BSD/BlueOak). Do **not** add a dependency under a GPL-incompatible or proprietary license without flagging it — it can taint the whole project. Permissive licenses (MIT/Apache-2.0/BSD/ISC) are fine; another copyleft license needs review.
 - **Contributions run through the CLA** (`CLA.md`), accepted via a DCO `Signed-off-by` line — commit with `git commit -s`. The CLA grants the maintainer relicensing rights so the project can be dual-licensed commercially later; preserve that intent in any contribution tooling.
 - It's a network app, so **AGPL §13 applies to operators**: a modified server offered over a network must make its source available. Keep that note in the user-facing docs (`README.md`, `DEPLOYMENT.md`).
