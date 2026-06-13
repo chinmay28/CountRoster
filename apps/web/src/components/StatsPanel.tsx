@@ -37,6 +37,10 @@ export function StatsPanel({ tracker, refreshKey }: StatsPanelProps) {
     return { buckets, streak, target };
   }, [tracker.id, period, count, refreshKey]);
 
+  // The streak only makes sense for daily logging. For coarser periods,
+  // summarize the bucket totals (mean / median / range) instead.
+  const summary = data ? summarizeBuckets(data.buckets) : null;
+
   return (
     <section className="stats">
       <div className="stats__head">
@@ -62,12 +66,27 @@ export function StatsPanel({ tracker, refreshKey }: StatsPanelProps) {
       {data && (
         <>
           <div className="stat-cards">
-            <div className="stat-card">
-              <span className="stat-card__value">🔥 {data.streak.current}</span>
-              <span className="stat-card__label">
-                day streak · best {data.streak.longest}
-              </span>
-            </div>
+            {period === 'day' ? (
+              <div className="stat-card">
+                <span className="stat-card__value">🔥 {data.streak.current}</span>
+                <span className="stat-card__label">
+                  day streak · best {data.streak.longest}
+                </span>
+              </div>
+            ) : (
+              summary && (
+                <div className="stat-card">
+                  <span className="stat-card__value">
+                    {formatValue(tracker, summary.mean)}
+                  </span>
+                  <span className="stat-card__label">
+                    mean per {period} · median {formatValue(tracker, summary.median)} ·
+                    range {formatValue(tracker, summary.min)}–
+                    {formatValue(tracker, summary.max)}
+                  </span>
+                </div>
+              )
+            )}
             {data.target.target != null && (
               <div className="stat-card">
                 <span className="stat-card__value">
@@ -102,6 +121,32 @@ export function StatsPanel({ tracker, refreshKey }: StatsPanelProps) {
       )}
     </section>
   );
+}
+
+interface BucketSummary {
+  mean: number;
+  median: number;
+  min: number;
+  max: number;
+}
+
+/**
+ * Descriptive stats over the *non-empty* buckets in a range. Empty buckets
+ * (periods with nothing logged) are excluded so the min–max range stays
+ * meaningful — otherwise the minimum would almost always be zero. Returns null
+ * when nothing was logged in the range.
+ */
+function summarizeBuckets(buckets: { value: number; count: number }[]): BucketSummary | null {
+  const values = buckets
+    .filter((b) => b.count > 0)
+    .map((b) => b.value)
+    .sort((a, b) => a - b);
+  const n = values.length;
+  if (n === 0) return null;
+  const mean = values.reduce((sum, v) => sum + v, 0) / n;
+  const mid = Math.floor(n / 2);
+  const median = n % 2 === 0 ? (values[mid - 1]! + values[mid]!) / 2 : values[mid]!;
+  return { mean, median, min: values[0]!, max: values[n - 1]! };
 }
 
 interface BucketChartProps {
