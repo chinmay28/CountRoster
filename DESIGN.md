@@ -661,3 +661,23 @@ For a tracker with `reset_period = 'daily'` and `day_start_minute = 240` (4:00 A
 - This is computed in the tracker's local timezone at `occurred_at`; backdated entries use their original local time.
 
 Weekly buckets respect `week_start`. Monthly buckets are calendar months. Yearly buckets are calendar years.
+
+## Appendix C — License
+
+CountRoster is licensed under the **GNU Affero General Public License v3.0**
+(`AGPL-3.0-only`); see [`LICENSE`](./LICENSE).
+
+The AGPL was chosen deliberately over a permissive license (e.g. MIT). Because
+CountRoster is a **network-served** application, the AGPL's §13 closes the "SaaS
+loophole": anyone who runs a *modified* CountRoster server that others interact
+with over a network must make the corresponding source of their modifications
+available under the same license. A plain GPL would not impose this; a permissive
+license would impose nothing.
+
+Copyright is held by Chinmay Manjunath. Contributions are taken under a
+Contributor License Agreement ([`CLA.md`](./CLA.md)) that grants the maintainer
+relicensing rights — so the project can additionally be offered under separate
+commercial terms (open-core / dual-license) without tracking down every
+contributor. The dependency tree is kept entirely permissive
+(MIT/ISC/Apache-2.0/BSD) so nothing constrains either the AGPL distribution or a
+future commercial edition. See [`CONTRIBUTING.md`](./CONTRIBUTING.md).

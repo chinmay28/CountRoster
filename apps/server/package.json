@@ -3,6 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "description": "CountRoster backend — Express REST API over @countroster/core with a node:sqlite file adapter. The single shared source of truth for all clients.",
+  "license": "AGPL-3.0-only",
+  "author": "Chinmay Manjunath",
   "type": "module",
   "main": "./dist/server.js",
   "scripts": {

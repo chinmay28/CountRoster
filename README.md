@@ -99,3 +99,26 @@ npm run typecheck # tsc --noEmit everywhere
 - [apps/server/README.md](./apps/server/README.md) — the backend API
 - [apps/web/README.md](./apps/web/README.md) — the PWA client
 - [DEPLOYMENT.md](./DEPLOYMENT.md) — deploying the server + PWA
+
+## License
+
+CountRoster is free software licensed under the **GNU Affero General Public
+License v3.0** (`AGPL-3.0-only`). See [LICENSE](./LICENSE) for the
+full text.
+
+The AGPL is a strong copyleft license: anyone who distributes CountRoster — or
+**runs a modified version as a network service** — must make the complete
+corresponding source available under the same license. Copyright in the project
+is held by Chinmay Manjunath, who may also offer CountRoster under separate
+commercial terms.
+
+> **Note for operators (AGPL §13):** if you run a modified CountRoster server
+> that other people interact with over a network, you must offer those users the
+> corresponding source of your modified version.
+
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md). By
+contributing you agree to the [Contributor License Agreement](./CLA.md), which
+lets the project be offered under both the AGPL and possible future commercial
+terms. Sign off your commits with `git commit -s`.

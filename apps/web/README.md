@@ -80,3 +80,9 @@ Visualizations & organization:
   them under group headings.
 - **Reminders** — per-tracker reminder schedules (time + days), on the detail page.
 - **Data** (`/data`) — backup export (bundle / raw SQLite) and restore.
+
+## License
+
+`AGPL-3.0-only`, like the rest of CountRoster — see [`LICENSE`](../../LICENSE).
+Contributions are taken under the [CLA](../../CLA.md); see
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md).
