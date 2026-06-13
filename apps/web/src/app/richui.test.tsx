@@ -82,6 +82,27 @@ describe('stats panel', () => {
     });
   });
 
+  it('repurposes the streak box for mean/median/range on coarser periods', async () => {
+    const t = await test.createTracker({ name: 'Water', kind: 'number' });
+    // Three months with one entry each (mid-month, well inside the bucket).
+    await test.core.entries.log(t.id, { value: 10, occurred_at: '2026-05-15T12:00:00.000-07:00' });
+    await test.core.entries.log(t.id, { value: 20, occurred_at: '2026-04-15T12:00:00.000-07:00' });
+    await test.core.entries.log(t.id, { value: 30, occurred_at: '2026-03-15T12:00:00.000-07:00' });
+
+    renderApp(test, `/trackers/${t.id}`);
+
+    // Default (Day) period shows the streak.
+    expect(await screen.findByText(/day streak/i)).toBeInTheDocument();
+
+    // Switching to Month replaces the streak with mean/median/range:
+    // values [10, 20, 30] → mean 20, median 20, range 10–30.
+    await userEvent.click(await screen.findByRole('button', { name: 'Month' }));
+    expect(await screen.findByText(/mean per month/i)).toBeInTheDocument();
+    expect(screen.getByText(/median 20/i)).toBeInTheDocument();
+    expect(screen.getByText(/range 10.30/i)).toBeInTheDocument();
+    expect(screen.queryByText(/day streak/i)).not.toBeInTheDocument();
+  });
+
   it('shows target progress when the tracker has a target', async () => {
     const t = await test.createTracker({
       name: 'Steps',
