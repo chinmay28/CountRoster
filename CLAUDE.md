@@ -10,9 +10,9 @@ CountRoster is an "anything tracker" (habits, meds, symptoms, spending, moods). 
 - `apps/server` (`@countroster/server`) — an Express REST API that wires the core over a `node:sqlite` file adapter. This SQLite file is the single shared source of truth.
 - `apps/web` (`@countroster/web`) — a mobile-friendly, installable **PWA** (Vite + React) that talks to the server over HTTP and behaves like an app.
 
-> **History:** this project began *local-first* (per-device SQLite; web via sqlite-wasm/OPFS; Expo mobile shells). It was deliberately pivoted to client-server so all clients share one dataset. Parts of `DESIGN.md`/`DEPLOYMENT.md` still describe the old model — they're marked where superseded. There is **no auth** by design: the server is meant to run on a trusted network (LAN/Tailscale/VPN).
+> **History:** this project began *local-first* (per-device SQLite; web via sqlite-wasm/OPFS; Expo mobile shells). It was deliberately pivoted to client-server so all clients share one dataset. `docs/DESIGN.md`/`docs/DEPLOYMENT.md` describe the app *as built* (client-server) and keep only short historical notes about the old model. There is **no auth** by design: the server is meant to run on a trusted network (LAN/Tailscale/VPN).
 
-See `DESIGN.md` for architecture, `apps/server/README.md` and `apps/web/README.md` for shell specifics.
+See `docs/DESIGN.md` for architecture, `apps/server/README.md` and `apps/web/README.md` for shell specifics.
 
 ## Commands
 
@@ -90,7 +90,7 @@ All services are now fully implemented: `trackers`, `entries`, `notes`, `groups`
 
 ### Aggregations
 
-`src/aggregations/periods.ts` (`bucketStart`/`bucketEnd`/`bucketLabel`) is implemented and tested for day/week/month/year bucketing. It currently uses host-local-time JS `Date` math and does **not yet** honor per-tracker `day_start_minute` or custom timezones — that work belongs in this module when added (see DESIGN.md Appendix B).
+`src/aggregations/periods.ts` (`bucketStart`/`bucketEnd`/`bucketLabel`) is implemented and tested for day/week/month/year bucketing. It currently uses host-local-time JS `Date` math and does **not yet** honor per-tracker `day_start_minute` or custom timezones — that work belongs in this module when added (see docs/DESIGN.md Appendix B).
 
 ## Testing conventions
 
@@ -110,5 +110,5 @@ All services are now fully implemented: `trackers`, `entries`, `notes`, `groups`
 - CountRoster is licensed **`AGPL-3.0-only`** (`LICENSE` is the canonical GNU AGPL-3.0 text). Every workspace `package.json` carries `"license": "AGPL-3.0-only"`; keep that field on any new package you add.
 - **Dependencies must be AGPL-compatible.** The current tree is entirely permissive (MIT/ISC/Apache-2.0/BSD/BlueOak). Do **not** add a dependency under a GPL-incompatible or proprietary license without flagging it — it can taint the whole project. Permissive licenses (MIT/Apache-2.0/BSD/ISC) are fine; another copyleft license needs review.
 - **Contributions run through the CLA** (`CLA.md`), accepted via a DCO `Signed-off-by` line — commit with `git commit -s`. The CLA grants the maintainer relicensing rights so the project can be dual-licensed commercially later; preserve that intent in any contribution tooling.
-- It's a network app, so **AGPL §13 applies to operators**: a modified server offered over a network must make its source available. Keep that note in the user-facing docs (`README.md`, `DEPLOYMENT.md`).
+- It's a network app, so **AGPL §13 applies to operators**: a modified server offered over a network must make its source available. Keep that note in the user-facing docs (`README.md`, `docs/DEPLOYMENT.md`).
 - See `CONTRIBUTING.md` for the contributor workflow.

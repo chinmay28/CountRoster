@@ -18,7 +18,7 @@ built as a **client-server** app so every device shares one dataset:
 
 ```
 countroster/
-├── DESIGN.md                 # architecture & design document
+├── docs/                     # architecture & deployment docs (DESIGN.md, DEPLOYMENT.md)
 ├── packages/
 │   └── core/                 # @countroster/core — platform-agnostic TS domain (runs on the server)
 └── apps/
@@ -95,10 +95,10 @@ npm run typecheck # tsc --noEmit everywhere
 
 ## Documentation
 
-- [DESIGN.md](./DESIGN.md) — architecture, schema, `@countroster/core` API
+- [docs/DESIGN.md](./docs/DESIGN.md) — architecture, schema, `@countroster/core` API
 - [apps/server/README.md](./apps/server/README.md) — the backend API
 - [apps/web/README.md](./apps/web/README.md) — the PWA client
-- [DEPLOYMENT.md](./DEPLOYMENT.md) — deploying the server + PWA
+- [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) — deploying the server + PWA
 
 ## License
 

@@ -335,5 +335,5 @@ ${C_GREEN}CountRoster $verb and running.${C_OFF}
 ${C_DIM}
   No auth by design — keep this on a trusted network (LAN / Tailscale / VPN).
   For HTTPS + "Add to Home Screen", front it with Tailscale Serve or a reverse
-  proxy (Caddy/nginx). See DEPLOYMENT.md.${C_OFF}
+  proxy (Caddy/nginx). See docs/DEPLOYMENT.md.${C_OFF}
 DONE

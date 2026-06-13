@@ -45,7 +45,7 @@ git push --force-with-lease
 
 ## Development
 
-See [`CLAUDE.md`](./CLAUDE.md) and [`DESIGN.md`](./DESIGN.md) for architecture,
+See [`CLAUDE.md`](./CLAUDE.md) and [`docs/DESIGN.md`](./docs/DESIGN.md) for architecture,
 and the per-package READMEs under `apps/` for shell specifics. Before opening a
 PR:
 

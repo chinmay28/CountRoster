@@ -41,7 +41,7 @@ npm run typecheck  --workspace @countroster/web
 ## Using it on a phone
 
 Point your phone at the running web app (the dev server over your LAN/Tailscale, or
-a deployed instance — see [DEPLOYMENT.md](../../DEPLOYMENT.md)) and use the browser's
+a deployed instance — see [DEPLOYMENT.md](../../docs/DEPLOYMENT.md)) and use the browser's
 **Add to Home Screen** / **Install** affordance. It launches in a standalone window
 with no browser chrome, respects notch safe-areas, and behaves like a native app.
 Because the data is on the server, there's nothing to migrate when you reinstall —
