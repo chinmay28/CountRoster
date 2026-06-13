@@ -96,6 +96,7 @@ npm run typecheck # tsc --noEmit everywhere
 ## Documentation
 
 - [docs/DESIGN.md](./docs/DESIGN.md) — architecture, schema, `@countroster/core` API
+- [docs/USER_GUIDE.md](./docs/USER_GUIDE.md) — feature guide + exhaustive REST API reference
 - [apps/server/README.md](./apps/server/README.md) — the backend API
 - [apps/web/README.md](./apps/web/README.md) — the PWA client
 - [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) — deploying the server + PWA
