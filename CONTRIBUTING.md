@@ -34,6 +34,15 @@ Signed-off-by: Your Name <your.email@example.com>
 The name and email must match your real identity and your git configuration
 (`git config user.name` / `git config user.email`).
 
+A CI check (`.github/workflows/dco.yml`) verifies that **every** commit in a pull
+request is signed off, and the PR cannot merge until it passes. If you forgot,
+sign off your existing commits in one go:
+
+```bash
+git rebase --signoff <base-branch>   # e.g. origin/main
+git push --force-with-lease
+```
+
 ## Development
 
 See [`CLAUDE.md`](./CLAUDE.md) and [`DESIGN.md`](./DESIGN.md) for architecture,
