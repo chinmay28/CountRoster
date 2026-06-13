@@ -3,6 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "description": "Shared domain layer for countroster: schema, services, aggregations, backup. Platform-agnostic.",
+  "license": "AGPL-3.0-or-later",
+  "author": "Chinmay Manjunath",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
