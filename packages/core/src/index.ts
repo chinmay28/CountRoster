@@ -19,7 +19,6 @@ export type {
   Note,
   NoteEdit,
   TrackerGroup,
-  Reminder,
 } from './schema/tables.js';
 
 // Input shapes
@@ -35,8 +34,6 @@ export {
   notePatchSchema,
   groupInputSchema,
   groupPatchSchema,
-  reminderInputSchema,
-  reminderPatchSchema,
   type TrackerInput,
   type TrackerPatch,
   type TrackerLinkInput,
@@ -48,8 +45,6 @@ export {
   type NotePatch,
   type GroupInput,
   type GroupPatch,
-  type ReminderInput,
-  type ReminderPatch,
 } from './schema/validators.js';
 
 // Services
@@ -72,10 +67,6 @@ export {
   type GroupService,
   GroupNotFoundError,
 } from './domain/groups.js';
-export {
-  type ReminderService,
-  ReminderNotFoundError,
-} from './domain/reminders.js';
 export type {
   StatsService,
   StatBucket,

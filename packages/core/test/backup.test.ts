@@ -14,7 +14,6 @@ async function seed() {
   await t.app.notes.edit(note.id, 'second');
   const group = await t.app.groups.create({ name: 'Morning' });
   await t.app.groups.addTracker(group.id, tracker.id);
-  await t.app.reminders.create({ tracker_id: tracker.id, time_minute: 480 });
   return { ...t, tracker };
 }
 

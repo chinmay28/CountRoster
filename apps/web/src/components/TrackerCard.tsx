@@ -8,7 +8,10 @@ import { readableInk } from '../lib/color.ts';
 
 interface TrackerCardProps {
   tracker: Tracker;
-  /** Sum of today's entry values for this tracker. */
+  /**
+   * The card's headline number: the reset-window total, or the latest
+   * reading for a snapshot tracker.
+   */
   todayTotal: number;
   /** Called after a successful quick-log so the parent can refresh. */
   onLogged: () => void;
@@ -69,7 +72,9 @@ export function TrackerCard({ tracker, todayTotal, onLogged }: TrackerCardProps)
             {formatValue(tracker, todayTotal)}
           </span>
           <span className="tracker-card__sub">
-            {RESET_PERIOD_LABEL[tracker.reset_period]}
+            {tracker.is_snapshot === 1
+              ? 'current'
+              : RESET_PERIOD_LABEL[tracker.reset_period]}
             {tracker.is_hidden === 1 ? ' · hidden' : ''}
           </span>
         </Link>

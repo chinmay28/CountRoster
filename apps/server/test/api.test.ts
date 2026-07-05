@@ -160,22 +160,13 @@ describe('CountRoster API', () => {
     expect((await res.json()).error).toMatch(/Validation/);
   });
 
-  it('groups and reminders endpoints work', async () => {
+  it('groups endpoints work', async () => {
     const tracker = await (await api.post('/api/trackers', { name: 'Meds' })).json();
     const group = await (await api.post('/api/groups', { name: 'Health' })).json();
-    let r = await api.post(`/api/groups/${group.id}/trackers`, { tracker_id: tracker.id });
+    const r = await api.post(`/api/groups/${group.id}/trackers`, { tracker_id: tracker.id });
     expect(r.status).toBe(204);
     const members = await (await api.get(`/api/groups/${group.id}/trackers`)).json();
     expect(members.map((t: { id: string }) => t.id)).toEqual([tracker.id]);
-
-    const reminder = await (
-      await api.post('/api/reminders', { tracker_id: tracker.id, time_minute: 480 })
-    ).json();
-    expect(reminder.enabled).toBe(1);
-    const toggled = await (
-      await api.post(`/api/reminders/${reminder.id}/toggle`, { enabled: false })
-    ).json();
-    expect(toggled.enabled).toBe(0);
   });
 
   it('creates a derived tracker that computes its sources, and rejects logging', async () => {

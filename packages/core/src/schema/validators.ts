@@ -59,6 +59,12 @@ export const trackerInputSchema = z.object({
   /** Hidden trackers are omitted from list() unless `includeHidden` is set. */
   is_hidden: z.union([z.literal(0), z.literal(1)]).default(0),
   /**
+   * Snapshot trackers record point-in-time levels (net worth, weight) rather
+   * than amounts: aggregations take the latest entry, not a sum. A snapshot
+   * tracker has no reset window, so `reset_period` must stay 'never'.
+   */
+  is_snapshot: z.union([z.literal(0), z.literal(1)]).default(0),
+  /**
    * When present, the tracker is *derived*: its value is computed from these
    * source trackers rather than logged directly. On update, the supplied list
    * fully replaces the existing links (an empty list makes it ordinary again).
@@ -132,18 +138,3 @@ export type GroupInput = z.infer<typeof groupInputSchema>;
 /** Input to GroupService.update() — every field optional. */
 export const groupPatchSchema = groupInputSchema.partial();
 export type GroupPatch = z.infer<typeof groupPatchSchema>;
-
-/** Input to ReminderService.create() */
-export const reminderInputSchema = z.object({
-  tracker_id: z.string().min(1),
-  time_minute: z.number().int().min(0).max(1439),
-  days_mask: z.number().int().min(0).max(127).default(127),
-  enabled: z.union([z.literal(0), z.literal(1)]).default(1),
-});
-export type ReminderInput = z.infer<typeof reminderInputSchema>;
-
-/** Input to ReminderService.update() — tracker_id is immutable, so omitted. */
-export const reminderPatchSchema = reminderInputSchema
-  .omit({ tracker_id: true })
-  .partial();
-export type ReminderPatch = z.infer<typeof reminderPatchSchema>;

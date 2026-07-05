@@ -7,7 +7,7 @@ the server, so every device that points at the same server sees the same data.
 - **Vite + React**, browser (history) routing. The server serves `index.html` for
   any non-API route (SPA fallback), so deep links and refreshes work.
 - **API client** (`src/api/client.ts`): `createApiClient()` returns an object whose
-  `trackers / entries / notes / groups / reminders / stats` services mirror the
+  `trackers / entries / notes / groups / stats` services mirror the
   interfaces in `@countroster/core` — each method is a `fetch` against `/api`. The
   React pages call `core.trackers.list()` etc. and don't know they're hitting HTTP.
 - **PWA** via [`vite-plugin-pwa`](https://vite-pwa-org.netlify.app): web app
@@ -67,18 +67,21 @@ src/
 ## What's implemented
 
 Tracker list / create / edit / archive, tap-to-log and custom/backdated logging,
-entry edit & delete, and editable journal notes with per-note edit history.
+entry edit & delete (paginated, searchable by an entry's note), and editable
+journal notes with per-note edit history. A tracker's "Reset every" can also be
+"Not applicable — snapshot stat" for point-in-time levels like net worth: the
+latest reading is the headline, stats show the all-time high/low, and trends
+draw a level line instead of bars.
 
 Visualizations & organization:
 
-- **Trends** — a bucketed bar chart (day/week/month/year) with axes and tooltips,
-  a current/longest day-streak card, and a target-progress bar, on each tracker.
-- **Calendar heatmap** — a GitHub-style daily-activity grid for the last ~year.
+- **Trends** — a bucketed chart (day/week/month/year) with axes and tooltips —
+  bars of totals, or a level line for snapshot stats — plus a day-streak or
+  all-time high/low card and a target-progress bar, on each tracker.
 - **Compare** (`/compare`) — a multi-series line chart comparing several trackers
   over time, with a tracker picker and period toggle.
 - **Groups** (`/groups`) — organize trackers into groups; the home screen renders
   them under group headings.
-- **Reminders** — per-tracker reminder schedules (time + days), on the detail page.
 - **Data** (`/data`) — backup export (bundle / raw SQLite) and restore.
 
 ## License

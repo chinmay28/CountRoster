@@ -4,7 +4,7 @@ import { useCore } from '../app/CoreContext.tsx';
 import { useHiddenMode } from '../app/HiddenMode.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import { TrackerCard } from '../components/TrackerCard.tsx';
-import { resetPeriodRange, sumValues } from '../lib/range.ts';
+import { latestValue, resetPeriodRange, sumValues } from '../lib/range.ts';
 
 /**
  * Home: the roster of active trackers, each showing today's total with a
@@ -21,13 +21,15 @@ export function HomePage() {
       core.groups.list(),
     ]);
     // Each tracker's headline total covers its own reset window (today / this
-    // week / month / year), or all-time when it never resets.
+    // week / month / year), or all-time when it never resets. A snapshot
+    // tracker instead shows its most recent reading — levels don't add up.
     const totals = new Map(
       await Promise.all(
         trackers.map(async (t) => {
           const range = resetPeriodRange(t.reset_period, t.week_start);
           const entries = await core.entries.forTracker(t.id, range ?? undefined);
-          return [t.id, sumValues(entries)] as const;
+          const value = t.is_snapshot === 1 ? latestValue(entries) : sumValues(entries);
+          return [t.id, value] as const;
         }),
       ),
     );

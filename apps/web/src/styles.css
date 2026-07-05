@@ -528,6 +528,26 @@ a {
 }
 
 /* Entries */
+.entry-browser {
+  display: grid;
+  gap: 0.75rem;
+}
+.entry-browser__search {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+}
+.entry-browser__pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
 .entry-list,
 .notes__list,
 .note__history {
@@ -785,32 +805,6 @@ a {
   --plot-background: var(--surface);
 }
 
-/* Calendar heatmap (wide; scrolls horizontally on small screens) */
-.heatmap {
-  margin: 1.25rem 0;
-}
-.heatmap__title {
-  font-size: 1rem;
-  margin: 0 0 0.4rem;
-}
-.heatmap__scroll {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-.heatmap__legend {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.4rem;
-  font-size: 0.75rem;
-}
-.heatmap__ramp {
-  width: 80px;
-  height: 10px;
-  border-radius: 3px;
-  background: linear-gradient(to right, #ebedf0, #9be9a8, #40c463, #216e39);
-}
-
 /* Compare-page tracker picker */
 .compare__picker {
   display: flex;
@@ -938,78 +932,6 @@ a {
 }
 .chart__empty {
   padding: 1.5rem 0;
-}
-
-/* Reminders */
-.reminders {
-  margin: 1.5rem 0;
-}
-.reminders__note {
-  font-size: 0.85rem;
-  margin-top: 0;
-}
-.reminders__add {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 0.75rem;
-}
-.reminders__days {
-  display: flex;
-  gap: 0.25rem;
-}
-.day-toggle {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-.day-toggle--on {
-  background: var(--primary);
-  color: var(--primary-ink);
-  border-color: transparent;
-  font-weight: 600;
-}
-.reminders__list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 0.5rem;
-}
-.reminder {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.6rem 0.85rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-.reminder--off {
-  opacity: 0.6;
-}
-.reminder__time {
-  font-weight: 700;
-  min-width: 5rem;
-}
-.reminder__actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-.reminder__enabled {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.85rem;
 }
 
 /* Groups */

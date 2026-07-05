@@ -5,7 +5,6 @@ import { createTrackerService, type TrackerService } from './domain/trackers.js'
 import { createEntryService, type EntryService } from './domain/entries.js';
 import { createNoteService, type NoteService } from './domain/notes.js';
 import { createGroupService, type GroupService } from './domain/groups.js';
-import { createReminderService, type ReminderService } from './domain/reminders.js';
 import { createStatsService, type StatsService } from './aggregations/stats.js';
 import { createBackupService, type BackupService } from './backup/bundle.js';
 
@@ -18,7 +17,6 @@ export interface CountRosterCore {
   entries: EntryService;
   notes: NoteService;
   groups: GroupService;
-  reminders: ReminderService;
   stats: StatsService;
   backup: BackupService;
   migrations: MigrationRunner;
@@ -40,7 +38,6 @@ export function createApp(
     entries: createEntryService(storage, clock),
     notes: createNoteService(storage, clock),
     groups: createGroupService(storage, clock),
-    reminders: createReminderService(storage, clock),
     stats: createStatsService(storage, clock),
     backup: createBackupService(storage, clock),
     migrations: createMigrationRunner(storage),

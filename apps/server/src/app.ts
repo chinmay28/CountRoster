@@ -152,29 +152,6 @@ export function buildApp(
     res.status(204).end();
   });
 
-  // ---- Reminders ----------------------------------------------------------
-  api.get('/trackers/:id/reminders', async (req, res) => {
-    res.json(await core.reminders.forTracker(req.params.id));
-  });
-  api.post('/reminders', async (req, res) => {
-    res.status(201).json(await core.reminders.create(req.body));
-  });
-  api.get('/reminders/:id', async (req, res) => {
-    const r = await core.reminders.get(req.params.id);
-    if (!r) return notFound(res, 'reminder');
-    res.json(r);
-  });
-  api.patch('/reminders/:id', async (req, res) => {
-    res.json(await core.reminders.update(req.params.id, req.body));
-  });
-  api.post('/reminders/:id/toggle', async (req, res) => {
-    res.json(await core.reminders.toggleEnabled(req.params.id, Boolean(req.body.enabled)));
-  });
-  api.delete('/reminders/:id', async (req, res) => {
-    await core.reminders.delete(req.params.id);
-    res.status(204).end();
-  });
-
   // ---- Stats --------------------------------------------------------------
   api.get('/trackers/:id/stats/buckets', async (req, res) => {
     const start = String(req.query.start ?? '');
