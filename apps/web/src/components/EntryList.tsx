@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Entry, Note, Tracker } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
 import { NoteHistory } from './NoteItem.tsx';
@@ -22,8 +22,13 @@ interface EntryListProps {
   readOnly?: boolean;
 }
 
+/** How many entries are shown per page. */
+const PAGE_SIZE = 10;
+
 /** Recent entries with a single inline edit (value, backdate, and the one note
- * describing the entry) and delete. The entry's note is shown right beneath it. */
+ * describing the entry) and delete. The entry's note is shown right beneath it.
+ * The list is paginated (newest first) and searchable by the note attached to
+ * an entry. */
 export function EntryList({
   tracker,
   entries,
@@ -31,25 +36,87 @@ export function EntryList({
   onChanged,
   readOnly = false,
 }: EntryListProps) {
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
+
+  // Newest first, then narrowed to entries whose linked note matches the
+  // search. An empty query keeps everything (including note-less entries).
+  const filtered = useMemo(() => {
+    const newestFirst = entries.slice().reverse();
+    const q = query.trim().toLowerCase();
+    if (!q) return newestFirst;
+    return newestFirst.filter((entry) =>
+      (notesByEntry?.get(entry.id) ?? []).some((n) =>
+        n.body.toLowerCase().includes(q),
+      ),
+    );
+  }, [entries, notesByEntry, query]);
+
+  // Deleting the last entry of a trailing page (or narrowing the search) can
+  // leave `page` past the end — clamp rather than showing an empty page.
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const current = Math.min(page, pageCount - 1);
+  const visible = filtered.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
+
   if (entries.length === 0) {
     return <p className="muted">No entries yet.</p>;
   }
+
   return (
-    <ul className="entry-list">
-      {entries
-        .slice()
-        .reverse()
-        .map((entry, i) => (
-          <EntryRow
-            key={readOnly ? `${entry.id}-${i}` : entry.id}
-            tracker={tracker}
-            entry={entry}
-            note={notesByEntry?.get(entry.id)?.[0] ?? null}
-            onChanged={onChanged}
-            readOnly={readOnly}
-          />
-        ))}
-    </ul>
+    <div className="entry-browser">
+      <input
+        type="search"
+        className="entry-browser__search"
+        placeholder="Search entries by note…"
+        aria-label="Search entries by note"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setPage(0);
+        }}
+      />
+
+      {filtered.length === 0 ? (
+        <p className="muted">No entries match “{query.trim()}”.</p>
+      ) : (
+        <ul className="entry-list">
+          {visible.map((entry, i) => (
+            <EntryRow
+              key={readOnly ? `${entry.id}-${current * PAGE_SIZE + i}` : entry.id}
+              tracker={tracker}
+              entry={entry}
+              note={notesByEntry?.get(entry.id)?.[0] ?? null}
+              onChanged={onChanged}
+              readOnly={readOnly}
+            />
+          ))}
+        </ul>
+      )}
+
+      {pageCount > 1 && (
+        <nav className="entry-browser__pager" aria-label="Entry pages">
+          <button
+            type="button"
+            className="btn btn--small"
+            onClick={() => setPage(current - 1)}
+            disabled={current === 0}
+          >
+            Newer
+          </button>
+          <span className="muted">
+            Page {current + 1} of {pageCount}
+          </span>
+          <button
+            type="button"
+            className="btn btn--small"
+            onClick={() => setPage(current + 1)}
+            disabled={current >= pageCount - 1}
+          >
+            Older
+          </button>
+        </nav>
+      )}
+    </div>
   );
 }
 

@@ -6,17 +6,11 @@ import { useAsync } from '../app/useAsync.ts';
 import { EntryList } from '../components/EntryList.tsx';
 import { MultiLogPanel } from '../components/MultiLogPanel.tsx';
 import { NotesSection } from '../components/NotesSection.tsx';
-import { RemindersSection } from '../components/RemindersSection.tsx';
 
 // Charts pull in Observable Plot (~100KB gzip); load them on demand so the
 // home screen and first paint stay light on mobile.
 const StatsPanel = lazy(() =>
   import('../components/StatsPanel.tsx').then((m) => ({ default: m.StatsPanel })),
-);
-const CalendarHeatmap = lazy(() =>
-  import('../components/CalendarHeatmap.tsx').then((m) => ({
-    default: m.CalendarHeatmap,
-  })),
 );
 import { formatValue, formatNumber, KIND_LABELS } from '../lib/format.ts';
 import {
@@ -24,6 +18,8 @@ import {
   sumInRange,
   resetPeriodRange,
   windowStats,
+  snapshotStats,
+  latestValue,
   RESET_PERIOD_LABEL,
 } from '../lib/range.ts';
 import { fromDatetimeLocalValue } from '../lib/format.ts';
@@ -96,6 +92,7 @@ export function TrackerDetailPage() {
 
   const { tracker, entries, notes, links, sourceNames } = data;
   const isDerived = tracker.is_derived === 1;
+  const isSnapshot = tracker.is_snapshot === 1;
   const total = sumValues(entries);
 
   // Total for the current reset window (today / this week / …). Compared by
@@ -104,10 +101,25 @@ export function TrackerDetailPage() {
   const periodRange = resetPeriodRange(tracker.reset_period, tracker.week_start);
   const periodTotal = periodRange ? sumInRange(entries, periodRange) : total;
 
-  // Breakdown across the standard windows (this week / month / year / all-time),
-  // shown beneath the headline regardless of the reset period. Redundant
-  // windows are collapsed — see `windowStats`.
-  const breakdown = windowStats(entries, tracker.week_start);
+  // The headline: a snapshot tracker shows its most recent reading (levels
+  // don't add up); otherwise the reset-window total or the all-time total.
+  const headline = isSnapshot
+    ? latestValue(entries)
+    : tracker.reset_period === 'never'
+      ? total
+      : periodTotal;
+  const headlineLabel = isSnapshot
+    ? 'current value'
+    : tracker.reset_period === 'never'
+      ? 'all-time total'
+      : RESET_PERIOD_LABEL[tracker.reset_period];
+
+  // Breakdown beneath the headline: windowed totals (this week / month / year
+  // / all-time, redundant ones collapsed — see `windowStats`), or the all-time
+  // high and low readings for a snapshot stat.
+  const breakdown = isSnapshot
+    ? snapshotStats(entries)
+    : windowStats(entries, tracker.week_start);
 
   // Notes that describe a specific entry are shown inline with that entry;
   // the rest are general journal notes for the Notes section.
@@ -172,9 +184,11 @@ export function TrackerDetailPage() {
             {tracker.target != null
               ? ` · target ${formatNumber(tracker.target, tracker.unit)}`
               : ''}
-            {tracker.reset_period !== 'never'
-              ? ` · resets ${tracker.reset_period}`
-              : ''}
+            {isSnapshot
+              ? ' · snapshot stat'
+              : tracker.reset_period !== 'never'
+                ? ` · resets ${tracker.reset_period}`
+                : ''}
           </p>
           {tracker.description && <p>{tracker.description}</p>}
         </div>
@@ -192,13 +206,10 @@ export function TrackerDetailPage() {
 
       <section className="detail__summary card">
         <span className="detail__total" style={{ color: tracker.color }}>
-          {formatValue(tracker, tracker.reset_period === 'never' ? total : periodTotal)}
+          {formatValue(tracker, headline)}
         </span>
         <span className="muted">
-          {tracker.reset_period === 'never'
-            ? 'all-time total'
-            : RESET_PERIOD_LABEL[tracker.reset_period]}{' '}
-          · {entries.length} entries
+          {headlineLabel} · {entries.length} entries
         </span>
         <dl className="detail__stats">
           {breakdown.map((stat) => (
@@ -235,7 +246,6 @@ export function TrackerDetailPage() {
 
       <Suspense fallback={<p className="muted">Loading charts…</p>}>
         <StatsPanel tracker={tracker} refreshKey={statsKey} />
-        <CalendarHeatmap tracker={tracker} refreshKey={statsKey} />
       </Suspense>
 
       {!isDerived && (
@@ -329,8 +339,6 @@ export function TrackerDetailPage() {
           readOnly={isDerived}
         />
       </section>
-
-      {!isDerived && <RemindersSection trackerId={tracker.id} />}
 
       <NotesSection
         trackerId={tracker.id}

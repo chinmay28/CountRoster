@@ -57,7 +57,7 @@ The client holds **no business logic** — it's a typed HTTP client whose servic
 
 ### Composition root
 
-`createApp(storage, { clock? })` in `src/createApp.ts` wires every service over one `Storage` and returns a `CountRosterCore` (`trackers`, `entries`, `notes`, `groups`, `reminders`, `stats`, `backup`, `migrations`). Call it once at startup **after opening the adapter**, then call `app.migrations.run()` to apply pending migrations. The server's `boot()` (`apps/server/src/boot.ts`) does exactly this. `src/index.ts` is the curated public API — anything the server/client need must be re-exported there.
+`createApp(storage, { clock? })` in `src/createApp.ts` wires every service over one `Storage` and returns a `CountRosterCore` (`trackers`, `entries`, `notes`, `groups`, `stats`, `backup`, `migrations`). Call it once at startup **after opening the adapter**, then call `app.migrations.run()` to apply pending migrations. The server's `boot()` (`apps/server/src/boot.ts`) does exactly this. `src/index.ts` is the curated public API — anything the server/client need must be re-exported there.
 
 ### Server (`apps/server`)
 
@@ -65,7 +65,7 @@ Express 5, ESM, `NodeNext` module resolution (so the compiled `dist/` runs under
 
 ### Client (`apps/web`)
 
-A thin PWA. `src/api/client.ts` builds an `ApiCore` whose `trackers/entries/notes/groups/reminders/stats` objects implement the same interfaces the core exports, each method a `fetch`. `.get(id)` lookups return `null` on 404. `CoreContext` provides this client (production) or a real `MemoryAdapter`-backed core (tests) — they're interchangeable because both satisfy `ApiCore`. **Keep the client's method signatures in lockstep with the core service interfaces**, or the swap breaks. Backup is not part of `ApiCore` (binary streams); it's exposed via standalone helpers (`backupBundleUrl`, `importBackup`). vite-plugin-pwa supplies the manifest/service worker; the SW must **not** cache `/api`.
+A thin PWA. `src/api/client.ts` builds an `ApiCore` whose `trackers/entries/notes/groups/stats` objects implement the same interfaces the core exports, each method a `fetch`. `.get(id)` lookups return `null` on 404. `CoreContext` provides this client (production) or a real `MemoryAdapter`-backed core (tests) — they're interchangeable because both satisfy `ApiCore`. **Keep the client's method signatures in lockstep with the core service interfaces**, or the swap breaks. Backup is not part of `ApiCore` (binary streams); it's exposed via standalone helpers (`backupBundleUrl`, `importBackup`). vite-plugin-pwa supplies the manifest/service worker; the SW must **not** cache `/api`.
 
 ### Service layer (`src/domain/`)
 
@@ -76,7 +76,7 @@ Each service is `createXService(storage, clock)` returning a small interface. Pa
 - IDs come from `newId()` (`src/ids.ts`, UUIDv7 — timestamp-sortable).
 - **Never call `Date.now()` / `new Date()` for persisted timestamps.** Go through the injected `Clock` (`src/time.ts`) so tests are deterministic. Timestamps are stored as **ISO 8601 with a local offset** (`toLocalISO`), not UTC `Z` — the offset is needed for correct local-day bucketing.
 
-All services are now fully implemented: `trackers`, `entries`, `notes`, `groups` (CRUD + membership), `reminders` (CRUD + toggle), `stats` (`src/aggregations/stats.ts`: `bucket`/`streak`/`targetProgress`), and `backup` (`src/backup/`). The interfaces in each module are the spec.
+All services are now fully implemented: `trackers`, `entries`, `notes`, `groups` (CRUD + membership), `stats` (`src/aggregations/stats.ts`: `bucket`/`streak`/`targetProgress`), and `backup` (`src/backup/`). The interfaces in each module are the spec. (Reminders were removed as a feature; the `reminders` table remains in the schema because migrations are append-only and old backups must round-trip.)
 
 ### Notes carry an append-only edit log
 

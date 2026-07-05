@@ -12,7 +12,11 @@ import {
 
 /** A period bucket with its aggregated value. */
 export interface StatBucket extends Bucket {
-  /** Sum of entry values that fall in this bucket. */
+  /**
+   * Sum of entry values that fall in this bucket — or, for a snapshot
+   * tracker, the value of the *last* entry in the bucket (snapshots record
+   * levels, not amounts, so they never add up).
+   */
   value: number;
   /** Number of entries in this bucket. */
   count: number;
@@ -68,6 +72,7 @@ class StatsServiceImpl implements StatsService {
   ): Promise<StatBucket[]> {
     const tracker = await this.getTracker(trackerId);
     const weekStart = tracker?.week_start ?? 1;
+    const isSnapshot = tracker?.is_snapshot === 1;
 
     const source = await effectiveEntrySource(this.storage, trackerId);
     const entries = await this.storage.query<{ occurred_at: string; value: number }>(
@@ -103,7 +108,9 @@ class StatsServiceImpl implements StatsService {
       );
       const b = index.get(label);
       if (b) {
-        b.value += e.value;
+        // Snapshots are levels, not amounts: the bucket takes the latest
+        // reading (entries arrive in occurred_at order) instead of a sum.
+        b.value = isSnapshot ? e.value : b.value + e.value;
         b.count += 1;
       }
     }
@@ -161,6 +168,20 @@ class StatsServiceImpl implements StatsService {
     const target = tracker.target;
     const instant = new Date(at ?? this.clock.nowISO());
 
+    const source = await effectiveEntrySource(this.storage, trackerId);
+
+    // A snapshot tracker's "current" is its most recent reading — there is
+    // no window to sum over.
+    if (tracker.is_snapshot === 1) {
+      const rows = await this.storage.query<{ value: number }>(
+        `SELECT value FROM ${source.sql}
+          ORDER BY occurred_at DESC, id DESC LIMIT 1`,
+        source.params,
+      );
+      const current = rows[0]?.value ?? 0;
+      return { target, current, ratio: ratioFor(target, current) };
+    }
+
     let start: string | null = null;
     let end: string | null = null;
     if (tracker.reset_period !== 'never') {
@@ -169,7 +190,6 @@ class StatsServiceImpl implements StatsService {
       end = bucketEnd(instant, period, tracker.week_start).toISOString();
     }
 
-    const source = await effectiveEntrySource(this.storage, trackerId);
     const params: SqlParam[] = [...source.params];
     let whereSql = '';
     if (start !== null && end !== null) {
@@ -182,13 +202,15 @@ class StatsServiceImpl implements StatsService {
     );
     const current = rows[0]?.total ?? 0;
 
-    const ratio =
-      target != null && target !== 0
-        ? Math.max(0, Math.min(1, current / target))
-        : null;
-
-    return { target, current, ratio };
+    return { target, current, ratio: ratioFor(target, current) };
   }
+}
+
+/** `current / target`, clamped to [0, 1]; null when there is no usable target. */
+function ratioFor(target: number | null, current: number): number | null {
+  return target != null && target !== 0
+    ? Math.max(0, Math.min(1, current / target))
+    : null;
 }
 
 const RESET_TO_PERIOD: Record<

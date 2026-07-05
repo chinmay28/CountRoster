@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { Tracker, TrackerInput, TrackerKind, ResetPeriod } from '@countroster/core';
+import type { Tracker, TrackerInput, TrackerKind } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
 import { useHiddenMode } from '../app/HiddenMode.tsx';
-import { KIND_LABELS, TRACKER_KINDS, RESET_PERIOD_OPTIONS } from '../lib/format.ts';
+import {
+  KIND_LABELS,
+  TRACKER_KINDS,
+  RESET_PERIOD_OPTIONS,
+  type ResetChoice,
+} from '../lib/format.ts';
 
 /** One row of the derived-sources editor. */
 interface LinkRow {
@@ -19,7 +24,8 @@ interface FormValues {
   unit: string;
   target: string;
   default_value: string;
-  reset_period: ResetPeriod;
+  /** A reset period, or 'snapshot' for a point-in-time stat. */
+  reset_period: ResetChoice;
   /** When true, the tracker is computed from `links` rather than logged. */
   isDerived: boolean;
   /** When true, the tracker only shows while hidden mode is unlocked. */
@@ -91,7 +97,7 @@ export function TrackerFormPage() {
         unit: t.unit ?? '',
         target: t.target == null ? '' : String(t.target),
         default_value: String(t.default_value),
-        reset_period: t.reset_period,
+        reset_period: t.is_snapshot === 1 ? 'snapshot' : t.reset_period,
         isDerived,
         isHidden: t.is_hidden === 1,
         links: linkRows.map((l) => ({
@@ -143,12 +149,21 @@ export function TrackerFormPage() {
 
     try {
       // A derived tracker holds a computed number; it is never tapped to log.
+      // "Snapshot stat" is a UI choice on the same select as the reset
+      // periods; on the wire it's the is_snapshot flag with no reset window.
+      // A derivation interleaves entries from several sources, so "the last
+      // reading" is meaningless — derived trackers can't be snapshots.
+      const isSnapshot = !values.isDerived && values.reset_period === 'snapshot';
       const input: TrackerInput = {
         name: values.name.trim(),
         color: values.color,
         kind: values.isDerived ? 'number' : values.kind,
         default_value: values.isDerived ? 0 : Number(values.default_value) || 0,
-        reset_period: values.reset_period,
+        reset_period:
+          isSnapshot || values.reset_period === 'snapshot'
+            ? 'never'
+            : values.reset_period,
+        is_snapshot: isSnapshot ? 1 : 0,
         // Zod fills the rest of the required defaults.
       } as TrackerInput;
       const description = values.description.trim();
@@ -295,9 +310,12 @@ export function TrackerFormPage() {
           <span>Reset every</span>
           <select
             value={values.reset_period}
-            onChange={(e) => set('reset_period', e.target.value as ResetPeriod)}
+            onChange={(e) => set('reset_period', e.target.value as ResetChoice)}
           >
-            {RESET_PERIOD_OPTIONS.map((p) => (
+            {RESET_PERIOD_OPTIONS.filter(
+              // See onSubmit: a derivation has no single "last reading".
+              (p) => !(values.isDerived && p.value === 'snapshot'),
+            ).map((p) => (
               <option key={p.value} value={p.value}>
                 {p.label}
               </option>

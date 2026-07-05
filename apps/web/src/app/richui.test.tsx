@@ -117,27 +117,6 @@ describe('stats panel', () => {
   });
 });
 
-describe('reminders', () => {
-  it('adds, then toggles a reminder off', async () => {
-    const user = userEvent.setup();
-    const t = await test.createTracker({ name: 'Meds' });
-    renderApp(test, `/trackers/${t.id}`);
-
-    await screen.findByRole('heading', { name: 'Reminders' });
-    await user.click(screen.getByRole('button', { name: /add reminder/i }));
-
-    // "9:00 AM" reminder row appears with an On toggle.
-    const toggle = await screen.findByRole('checkbox');
-    expect(toggle).toBeChecked();
-    await user.click(toggle);
-    await waitFor(() => expect(screen.getByText('Off')).toBeInTheDocument());
-
-    const reminders = await test.core.reminders.forTracker(t.id);
-    expect(reminders).toHaveLength(1);
-    expect(reminders[0]!.enabled).toBe(0);
-  });
-});
-
 describe('groups', () => {
   it('creates a group and adds a tracker to it', async () => {
     const user = userEvent.setup();

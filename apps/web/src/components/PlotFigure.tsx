@@ -13,8 +13,8 @@ interface PlotFigureProps {
   className?: string;
   /**
    * When true (default), the figure is sized to its container width so it
-   * stays readable on a phone. Set false for intrinsically-wide charts (e.g.
-   * the calendar heatmap) that should scroll horizontally instead of squish.
+   * stays readable on a phone. Set false for intrinsically-wide charts that
+   * should scroll horizontally instead of squish.
    */
   responsive?: boolean;
 }

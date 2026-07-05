@@ -81,8 +81,9 @@ class TrackerServiceImpl implements TrackerService {
         `INSERT INTO trackers (
           id, name, description, color, icon, kind, unit, target,
           reset_period, week_start, day_start_minute, default_value,
-          archived_at, sort_order, is_derived, is_hidden, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
+          archived_at, sort_order, is_derived, is_hidden, is_snapshot,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           input.name,
@@ -92,13 +93,15 @@ class TrackerServiceImpl implements TrackerService {
           input.kind,
           input.unit ?? null,
           input.target ?? null,
-          input.reset_period,
+          // A snapshot stat has no reset window — normalize to 'never'.
+          input.is_snapshot === 1 ? 'never' : input.reset_period,
           input.week_start,
           input.day_start_minute,
           input.default_value,
           input.sort_order,
           isDerived,
           input.is_hidden,
+          input.is_snapshot,
           now,
           now,
         ],
@@ -127,6 +130,11 @@ class TrackerServiceImpl implements TrackerService {
       }
     };
 
+    // Whatever the patch says, a snapshot tracker's reset window is 'never':
+    // suppress any patched reset_period and repair a non-'never' one left
+    // over from before the tracker became a snapshot.
+    const nextSnapshot = patch.is_snapshot ?? existing.is_snapshot;
+
     assign('name', 'name');
     assign('description', 'description');
     assign('color', 'color');
@@ -134,12 +142,17 @@ class TrackerServiceImpl implements TrackerService {
     assign('kind', 'kind');
     assign('unit', 'unit');
     assign('target', 'target');
-    assign('reset_period', 'reset_period');
+    if (nextSnapshot !== 1) assign('reset_period', 'reset_period');
     assign('week_start', 'week_start');
     assign('day_start_minute', 'day_start_minute');
     assign('default_value', 'default_value');
     assign('sort_order', 'sort_order');
     assign('is_hidden', 'is_hidden');
+    assign('is_snapshot', 'is_snapshot');
+
+    if (nextSnapshot === 1 && existing.reset_period !== 'never') {
+      sets.push(`reset_period = 'never'`);
+    }
 
     // A supplied `links` list replaces the derivation wholesale and re-derives
     // the `is_derived` flag from whether any operands remain.

@@ -106,8 +106,8 @@ export function currentPeriodRange(
 
 /** One windowed total in the summary breakdown. */
 export interface WindowStat {
-  /** Stable key: a `BucketPeriod` or `'all-time'`. */
-  key: BucketPeriod | 'all-time';
+  /** Stable key: a `BucketPeriod`, `'all-time'`, or a snapshot extremum. */
+  key: BucketPeriod | 'all-time' | 'all-time-high' | 'all-time-low';
   /** Human label, e.g. "this week". */
   label: string;
   value: number;
@@ -146,6 +146,34 @@ export function windowStats(
     const broader = ordered[i + 1];
     return broader === undefined || stat.value !== broader.value;
   });
+}
+
+/**
+ * The current value of a snapshot tracker: its most recent reading. Entries
+ * arrive from the core ordered by occurred_at ascending, so that's the last
+ * one. Returns 0 when nothing has been logged yet.
+ */
+export function latestValue(entries: readonly ValuedEntry[]): number {
+  return entries.length > 0 ? entries[entries.length - 1]!.value : 0;
+}
+
+/**
+ * The summary breakdown for a snapshot tracker: instead of windowed totals
+ * (which don't apply to point-in-time levels), report the all-time high and
+ * all-time low readings. Empty when nothing has been logged.
+ */
+export function snapshotStats(entries: readonly ValuedEntry[]): WindowStat[] {
+  if (entries.length === 0) return [];
+  let min = entries[0]!.value;
+  let max = entries[0]!.value;
+  for (const e of entries) {
+    if (e.value < min) min = e.value;
+    if (e.value > max) max = e.value;
+  }
+  return [
+    { key: 'all-time-high', label: 'all-time high', value: max },
+    { key: 'all-time-low', label: 'all-time low', value: min },
+  ];
 }
 
 /**

@@ -103,6 +103,80 @@ describe('create tracker flow', () => {
   });
 });
 
+describe('entry pagination and search', () => {
+  it('shows 10 entries per page, newest first, with a pager', async () => {
+    const user = userEvent.setup();
+    const t = await test.createTracker({ name: 'Sips', kind: 'number' });
+    // 12 entries at distinct instants so newest-first order is unambiguous.
+    for (let i = 1; i <= 12; i++) {
+      await test.core.entries.log(t.id, {
+        value: i,
+        occurred_at: `2026-05-${String(i).padStart(2, '0')}T10:00:00.000-07:00`,
+      });
+    }
+
+    renderApp(test, `/trackers/${t.id}`);
+
+    // Page 1 holds the 10 newest (values 12..3); the 2 oldest wait on page 2.
+    expect(await screen.findByText('Page 1 of 2')).toBeInTheDocument();
+    const list = () => document.querySelectorAll('.entry-list .entry');
+    await waitFor(() => expect(list()).toHaveLength(10));
+    const firstPage = [...list()].map((el) => el.querySelector('.entry__value')!.textContent);
+    expect(firstPage[0]).toBe('12');
+    expect(firstPage).not.toContain('2');
+
+    // "Newer" is disabled on the first page; "Older" moves to the last two.
+    expect(screen.getByRole('button', { name: 'Newer' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Older' }));
+    await waitFor(() => expect(list()).toHaveLength(2));
+    expect(screen.getByText('Page 2 of 2')).toBeInTheDocument();
+    const lastPage = [...list()].map((el) => el.querySelector('.entry__value')!.textContent);
+    expect(lastPage).toEqual(['2', '1']);
+    expect(screen.getByRole('button', { name: 'Older' })).toBeDisabled();
+  });
+
+  it('filters entries by their linked note text', async () => {
+    const user = userEvent.setup();
+    const t = await test.createTracker({ name: 'Spend', kind: 'number' });
+    for (let i = 1; i <= 11; i++) {
+      const entry = await test.core.entries.log(t.id, {
+        value: i,
+        occurred_at: `2026-05-${String(i).padStart(2, '0')}T10:00:00.000-07:00`,
+      });
+      if (i === 2) {
+        await test.core.notes.create({
+          tracker_id: t.id,
+          entry_id: entry.id,
+          body: 'Groceries at the market',
+        });
+      }
+    }
+
+    renderApp(test, `/trackers/${t.id}`);
+    await screen.findByText('Page 1 of 2');
+
+    // Searching by the note surfaces only its entry — even from page 2.
+    await user.type(
+      screen.getByRole('searchbox', { name: /search entries by note/i }),
+      'groceries',
+    );
+    const list = () => document.querySelectorAll('.entry-list .entry');
+    await waitFor(() => expect(list()).toHaveLength(1));
+    expect(list()[0]!.querySelector('.entry__value')!.textContent).toBe('2');
+    expect(screen.getByText('Groceries at the market')).toBeInTheDocument();
+    // A single page of results needs no pager.
+    expect(screen.queryByText(/Page 1 of/)).not.toBeInTheDocument();
+
+    // A query with no matching note shows the empty-search state.
+    await user.clear(screen.getByRole('searchbox', { name: /search entries by note/i }));
+    await user.type(
+      screen.getByRole('searchbox', { name: /search entries by note/i }),
+      'zzz',
+    );
+    expect(await screen.findByText(/No entries match/)).toBeInTheDocument();
+  });
+});
+
 describe('note editing with history', () => {
   it('edits a note and exposes the previous version in history', async () => {
     const user = userEvent.setup();

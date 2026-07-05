@@ -7,8 +7,8 @@ import { KIND_LABELS } from '../lib/format.ts';
 /**
  * Archived trackers: the place to find trackers you've archived and either
  * restore them (back onto Home) or delete them for good. Deleting is
- * permanent and takes the tracker's entries, notes, and reminders with it,
- * so it's gated behind a confirm.
+ * permanent and takes the tracker's entries and notes with it, so it's
+ * gated behind a confirm.
  */
 export function ArchivedTrackers() {
   const core = useCore();
@@ -44,8 +44,8 @@ export function ArchivedTrackers() {
   function remove(id: string, name: string) {
     if (
       !confirm(
-        `Permanently delete "${name}"? This also deletes its entries, notes, ` +
-          `and reminders. This cannot be undone.`,
+        `Permanently delete "${name}"? This also deletes its entries and ` +
+          `notes. This cannot be undone.`,
       )
     ) {
       return;

@@ -17,13 +17,22 @@ export const TRACKER_KINDS: readonly TrackerKind[] = [
   'choice',
 ];
 
+/**
+ * The tracker form's "Reset every" choice: a real reset period, or
+ * `'snapshot'` — the tracker records point-in-time levels (net worth,
+ * weight), so resetting doesn't apply. `'snapshot'` maps to
+ * `{ reset_period: 'never', is_snapshot: 1 }` on the wire.
+ */
+export type ResetChoice = ResetPeriod | 'snapshot';
+
 /** "Reset every" choices for the tracker form, in menu order. */
-export const RESET_PERIOD_OPTIONS: readonly { value: ResetPeriod; label: string }[] = [
+export const RESET_PERIOD_OPTIONS: readonly { value: ResetChoice; label: string }[] = [
   { value: 'never', label: 'Never (cumulative)' },
   { value: 'daily', label: 'Day' },
   { value: 'weekly', label: 'Week' },
   { value: 'monthly', label: 'Month' },
   { value: 'yearly', label: 'Year' },
+  { value: 'snapshot', label: 'Not applicable — snapshot stat' },
 ];
 
 /** Format a duration given in seconds as e.g. "1h 5m 3s". */

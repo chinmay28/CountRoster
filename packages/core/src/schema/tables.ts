@@ -40,6 +40,14 @@ export interface Tracker {
    * hidden and visible trackers.
    */
   is_hidden: 0 | 1;
+  /**
+   * 1 if this tracker records *snapshots* of a statistic (net worth, weight)
+   * rather than amounts to add up. Entries don't accumulate: the current
+   * value is the most recent entry, and aggregations take the last snapshot
+   * in a period instead of the sum. Snapshot trackers keep
+   * `reset_period = 'never'` — there is nothing to reset.
+   */
+  is_snapshot: 0 | 1;
   created_at: string;
   updated_at: string;
 }
@@ -110,14 +118,6 @@ export interface TrackerGroup {
   updated_at: string;
 }
 
-export interface Reminder {
-  id: string;
-  tracker_id: string;
-  /** Minutes since local midnight. */
-  time_minute: number;
-  /** Bitmask: bit 0 = Sunday ... bit 6 = Saturday. Default 127 = every day. */
-  days_mask: number;
-  enabled: 0 | 1;
-  created_at: string;
-  updated_at: string;
-}
+// NOTE: the `reminders` table still exists in the schema (migrations are
+// append-only and old backups must round-trip), but the feature was removed —
+// no service reads or writes it anymore.

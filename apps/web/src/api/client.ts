@@ -5,12 +5,10 @@ import type {
   NoteEdit,
   TrackerGroup,
   TrackerLink,
-  Reminder,
   TrackerService,
   EntryService,
   NoteService,
   GroupService,
-  ReminderService,
   StatsService,
   StatBucket,
   TargetProgress,
@@ -25,8 +23,6 @@ import type {
   NotePatch,
   GroupInput,
   GroupPatch,
-  ReminderInput,
-  ReminderPatch,
 } from '@countroster/core';
 
 /**
@@ -41,7 +37,6 @@ export interface ApiCore {
   entries: EntryService;
   notes: NoteService;
   groups: GroupService;
-  reminders: ReminderService;
   stats: StatsService;
 }
 
@@ -165,16 +160,6 @@ export function createApiClient(baseUrl = '/api'): ApiCore {
       request('POST', `/groups/${groupId}/reorder`, { orderedTrackerIds }),
   };
 
-  const reminders: ReminderService = {
-    forTracker: (trackerId) => request('GET', `/trackers/${trackerId}/reminders`),
-    get: (id) => getOrNull<Reminder>(`/reminders/${id}`),
-    create: (input: ReminderInput) => request('POST', '/reminders', input),
-    update: (id, patch: ReminderPatch) => request('PATCH', `/reminders/${id}`, patch),
-    toggleEnabled: (id, enabled) =>
-      request('POST', `/reminders/${id}/toggle`, { enabled }),
-    delete: (id) => request('DELETE', `/reminders/${id}`),
-  };
-
   const stats: StatsService = {
     bucket: (trackerId, range, period: BucketPeriod) =>
       request<StatBucket[]>(
@@ -189,7 +174,7 @@ export function createApiClient(baseUrl = '/api'): ApiCore {
       ),
   };
 
-  return { trackers, entries, notes, groups, reminders, stats };
+  return { trackers, entries, notes, groups, stats };
 }
 
 /** Default API mount point (same origin; dev server proxies it to the API). */

@@ -26,19 +26,26 @@ export function StatsPanel({ tracker, refreshKey }: StatsPanelProps) {
   const core = useCore();
   const [period, setPeriod] = useState<BucketPeriod>('day');
   const count = PERIODS.find((p) => p.period === period)!.count;
+  const isSnapshot = tracker.is_snapshot === 1;
 
   const { data, loading, error } = useAsync(async () => {
     const range = lastNBuckets(period, count, tracker.week_start);
-    const [buckets, streak, target] = await Promise.all([
+    const [buckets, streak, target, extremes] = await Promise.all([
       core.stats.bucket(tracker.id, range, period),
       core.stats.streak(tracker.id),
       core.stats.targetProgress(tracker.id),
+      // A snapshot stat's headline numbers are its all-time high and low —
+      // computed over every entry, not just the charted range.
+      isSnapshot
+        ? core.entries.forTracker(tracker.id).then(allTimeExtremes)
+        : Promise.resolve(null),
     ]);
-    return { buckets, streak, target };
-  }, [tracker.id, period, count, refreshKey]);
+    return { buckets, streak, target, extremes };
+  }, [tracker.id, period, count, refreshKey, isSnapshot]);
 
   // The streak only makes sense for daily logging. For coarser periods,
-  // summarize the bucket totals (mean / median / range) instead.
+  // summarize the bucket totals (mean / median / range) instead. Snapshot
+  // trackers show all-time high/low regardless of period.
   const summary = data ? summarizeBuckets(data.buckets) : null;
 
   return (
@@ -66,7 +73,19 @@ export function StatsPanel({ tracker, refreshKey }: StatsPanelProps) {
       {data && (
         <>
           <div className="stat-cards">
-            {period === 'day' ? (
+            {isSnapshot ? (
+              data.extremes && (
+                <div className="stat-card">
+                  <span className="stat-card__value">
+                    {formatValue(tracker, data.extremes.high)}
+                  </span>
+                  <span className="stat-card__label">
+                    all-time high · all-time low{' '}
+                    {formatValue(tracker, data.extremes.low)}
+                  </span>
+                </div>
+              )
+            ) : period === 'day' ? (
               <div className="stat-card">
                 <span className="stat-card__value">🔥 {data.streak.current}</span>
                 <span className="stat-card__label">
@@ -97,7 +116,8 @@ export function StatsPanel({ tracker, refreshKey }: StatsPanelProps) {
                   </span>
                 </span>
                 <span className="stat-card__label">
-                  this period · {Math.round((data.target.ratio ?? 0) * 100)}%
+                  {isSnapshot ? 'toward target' : 'this period'} ·{' '}
+                  {Math.round((data.target.ratio ?? 0) * 100)}%
                 </span>
                 <div className="progress" aria-hidden="true">
                   <div
@@ -121,6 +141,20 @@ export function StatsPanel({ tracker, refreshKey }: StatsPanelProps) {
       )}
     </section>
   );
+}
+
+/** All-time high and low readings of a snapshot tracker; null when empty. */
+function allTimeExtremes(
+  entries: { value: number }[],
+): { high: number; low: number } | null {
+  if (entries.length === 0) return null;
+  let high = entries[0]!.value;
+  let low = entries[0]!.value;
+  for (const e of entries) {
+    if (e.value > high) high = e.value;
+    if (e.value < low) low = e.value;
+  }
+  return { high, low };
 }
 
 interface BucketSummary {
@@ -155,17 +189,31 @@ interface BucketChartProps {
   period: BucketPeriod;
 }
 
-/** A bucketed bar chart (Observable Plot) with axes and hover tooltips. */
+/**
+ * The bucketed trend chart (Observable Plot) with axes and hover tooltips:
+ * bars of per-period totals — or, for a snapshot tracker, a line through the
+ * last reading of each period (levels, not amounts, so bars from zero would
+ * misread; empty periods are skipped rather than drawn as zero).
+ */
 function BucketChart({ tracker, buckets, period }: BucketChartProps) {
-  const max = buckets.reduce((m, b) => Math.max(m, b.value), 0);
+  const isSnapshot = tracker.is_snapshot === 1;
+  const hasData = isSnapshot
+    ? buckets.some((b) => b.count > 0)
+    : buckets.reduce((m, b) => Math.max(m, b.value), 0) > 0;
 
   const options = useMemo<Plot.PlotOptions>(() => {
-    const data = buckets.map((b) => ({
-      bucket: labelFor(b.start, period),
-      label: b.label,
-      value: b.value,
-      pretty: formatValue(tracker, b.value),
-    }));
+    const data = buckets
+      .filter((b) => !isSnapshot || b.count > 0)
+      .map((b) => ({
+        bucket: labelFor(b.start, period),
+        label: b.label,
+        value: b.value,
+        pretty: formatValue(tracker, b.value),
+      }));
+    const tip = {
+      title: (d: { label: string; pretty: string }) => `${d.label}: ${d.pretty}`,
+      tip: true,
+    };
     return {
       height: 200,
       marginLeft: 48,
@@ -173,24 +221,28 @@ function BucketChart({ tracker, buckets, period }: BucketChartProps) {
       // `data` arrives from the core already in chronological order. The x scale
       // is ordinal (bucket labels), and Plot would otherwise sort that domain
       // naturally — e.g. month names alphabetically (Apr, Aug, Dec…). Pin the
-      // domain to the data order so bars read left-to-right by date.
-      x: { label: null, domain: data.map((d) => d.bucket) },
+      // domain to the data order so marks read left-to-right by date. For a
+      // snapshot the domain keeps even the skipped (empty) buckets so the time
+      // axis stays evenly spaced.
+      x: {
+        label: null,
+        domain: buckets.map((b) => labelFor(b.start, period)),
+      },
       y: { label: tracker.unit ?? null, grid: true, ticks: 4 },
-      marks: [
-        Plot.barY(data, {
-          x: 'bucket',
-          y: 'value',
-          fill: tracker.color,
-          title: (d: { label: string; pretty: string }) => `${d.label}: ${d.pretty}`,
-          tip: true,
-        }),
-        Plot.ruleY([0]),
-      ],
+      marks: isSnapshot
+        ? [
+            Plot.lineY(data, { x: 'bucket', y: 'value', stroke: tracker.color }),
+            Plot.dot(data, { x: 'bucket', y: 'value', fill: tracker.color, ...tip }),
+          ]
+        : [
+            Plot.barY(data, { x: 'bucket', y: 'value', fill: tracker.color, ...tip }),
+            Plot.ruleY([0]),
+          ],
     };
     // tracker.kind affects formatValue output; include it so tips stay correct.
-  }, [buckets, period, tracker.color, tracker.unit, tracker.kind, tracker.name]);
+  }, [buckets, period, isSnapshot, tracker.color, tracker.unit, tracker.kind, tracker.name]);
 
-  if (buckets.length === 0 || max === 0) {
+  if (buckets.length === 0 || !hasData) {
     return <p className="muted chart__empty">No entries logged in this range yet.</p>;
   }
 
@@ -198,7 +250,7 @@ function BucketChart({ tracker, buckets, period }: BucketChartProps) {
     <PlotFigure
       className="chart-fig"
       options={options}
-      ariaLabel={`${tracker.name} totals by ${period}`}
+      ariaLabel={`${tracker.name} ${isSnapshot ? 'levels' : 'totals'} by ${period}`}
     />
   );
 }

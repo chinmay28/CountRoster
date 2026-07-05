@@ -43,7 +43,6 @@ All routes are under `/api`. JSON in/out; errors are `{ error, issues? }` with
 | Entries   | `GET/POST /trackers/:id/entries`, `GET/PATCH/DELETE /entries/:id`                          |
 | Notes     | `POST /notes`, `GET/PATCH/DELETE /notes/:id`, `GET /notes/:id/history`, `GET /trackers/:id/notes` |
 | Groups    | `GET/POST /groups`, `GET/PATCH/DELETE /groups/:id`, `GET/POST/DELETE /groups/:id/trackers[/:trackerId]`, `POST /groups/:id/reorder` |
-| Reminders | `GET /trackers/:id/reminders`, `POST /reminders`, `GET/PATCH/DELETE /reminders/:id`, `POST /reminders/:id/toggle` |
 | Stats     | `GET /trackers/:id/stats/{buckets,streak,target-progress}`                                 |
 | Backup    | `GET /backup/{manifest,bundle,sqlite}`, `POST /backup/import`                              |
 | Health    | `GET /health`                                                                              |
