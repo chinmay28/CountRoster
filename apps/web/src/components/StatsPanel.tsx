@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Plot from '@observablehq/plot';
 import type { Tracker, Entry, BucketPeriod } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
@@ -117,13 +117,15 @@ function BucketedStats({ tracker, refreshKey }: StatsPanelProps) {
 
 /**
  * Snapshot trackers chart their raw readings on a continuous time axis — no
- * period toggle, since levels aren't summed into buckets. Zoom controls
- * narrow/widen the visible window, anchored at the most recent reading
- * (each zoom-in halves the span).
+ * period toggle, since levels aren't summed into buckets. The visible window
+ * is anchored at the most recent reading and zooms continuously: pinch the
+ * chart (or ctrl+scroll — how browsers report a trackpad pinch), or step by
+ * halvings with the − / + buttons.
  */
 function SnapshotStats({ tracker, refreshKey }: StatsPanelProps) {
   const core = useCore();
-  // 0 shows the full history; each step halves the visible time window.
+  // 0 shows the full history; each whole step halves the visible time
+  // window. Fractional values come from pinch/scroll zooming.
   const [zoom, setZoom] = useState(0);
 
   const { data, loading, error } = useAsync(async () => {
@@ -137,6 +139,28 @@ function SnapshotStats({ tracker, refreshKey }: StatsPanelProps) {
   const entries = data?.entries ?? [];
   const extremes = allTimeExtremes(entries);
 
+  // The deepest useful zoom: the level where only the last two readings (at
+  // distinct instants) remain in view. Gestures and buttons clamp to it.
+  const maxZoom = useMemo(() => {
+    if (entries.length < 3) return 0;
+    const startMs = new Date(entries[0]!.occurred_at).getTime();
+    const endMs = new Date(entries[entries.length - 1]!.occurred_at).getTime();
+    if (endMs <= startMs) return 0;
+    // Walk back to the latest reading strictly before the anchor.
+    for (let i = entries.length - 2; i >= 0; i--) {
+      const t = new Date(entries[i]!.occurred_at).getTime();
+      if (t < endMs) return Math.log2((endMs - startMs) / (endMs - t));
+    }
+    return 0;
+  }, [entries]);
+
+  const zoomBy = useCallback(
+    (delta: number) =>
+      setZoom((z) => Math.min(Math.max(z + delta, 0), maxZoom)),
+    [maxZoom],
+  );
+  const pinchRef = usePinchZoom(zoomBy);
+
   // The readings inside the current zoom window, anchored at the latest one.
   const visible = useMemo(() => {
     if (entries.length === 0 || zoom === 0) return entries;
@@ -148,10 +172,6 @@ function SnapshotStats({ tracker, refreshKey }: StatsPanelProps) {
     );
   }, [entries, zoom]);
 
-  // Zooming past two readings (or ~40 halvings, if readings share an
-  // instant) shows nothing new.
-  const canZoomIn = visible.length > 2 && zoom < 40;
-
   return (
     <section className="stats">
       <div className="stats__head">
@@ -161,7 +181,7 @@ function SnapshotStats({ tracker, refreshKey }: StatsPanelProps) {
             type="button"
             className="btn btn--small"
             aria-label="Zoom out"
-            onClick={() => setZoom((z) => Math.max(0, z - 1))}
+            onClick={() => zoomBy(-1)}
             disabled={zoom === 0}
           >
             −
@@ -170,8 +190,9 @@ function SnapshotStats({ tracker, refreshKey }: StatsPanelProps) {
             type="button"
             className="btn btn--small"
             aria-label="Zoom in"
-            onClick={() => setZoom((z) => z + 1)}
-            disabled={!canZoomIn}
+            onClick={() => zoomBy(1)}
+            // A sliver of remaining zoom (< 5% of a halving) isn't a step.
+            disabled={zoom >= maxZoom - 0.05}
           >
             +
           </button>
@@ -206,13 +227,74 @@ function SnapshotStats({ tracker, refreshKey }: StatsPanelProps) {
                   ? `all history · ${entries.length} reading${entries.length === 1 ? '' : 's'}`
                   : `zoomed to the latest ${visible.length} of ${entries.length} readings`}
               </p>
-              <SnapshotChart tracker={tracker} entries={visible} />
+              <div ref={pinchRef} className="stats__zoomable">
+                <SnapshotChart tracker={tracker} entries={visible} />
+              </div>
             </>
           )}
         </>
       )}
     </section>
   );
+}
+
+/**
+ * Pinch-to-zoom (and ctrl+scroll, the wheel event a trackpad pinch produces)
+ * on the returned ref's element, reported as log2 deltas — +1 means "the
+ * window halved". Listeners are attached natively with `passive: false`
+ * because React's delegated touch/wheel handlers are passive, and a handled
+ * pinch must preventDefault so the browser doesn't page-zoom or scroll.
+ */
+function usePinchZoom(onZoomBy: (log2Delta: number) => void) {
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const spread = (touches: TouchList) =>
+      Math.hypot(
+        touches[0]!.clientX - touches[1]!.clientX,
+        touches[0]!.clientY - touches[1]!.clientY,
+      );
+
+    // The finger spread at the last processed move; null while not pinching.
+    let lastSpread: number | null = null;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) lastSpread = spread(e.touches);
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || lastSpread == null) return;
+      e.preventDefault();
+      const next = spread(e.touches);
+      if (next > 0 && lastSpread > 0) onZoomBy(Math.log2(next / lastSpread));
+      lastSpread = next;
+    };
+    const onTouchEnd = () => {
+      lastSpread = null;
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return; // plain scroll passes through untouched
+      e.preventDefault();
+      onZoomBy(-e.deltaY / 100);
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd);
+    el.addEventListener('touchcancel', onTouchEnd);
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, [onZoomBy]);
+
+  return ref;
 }
 
 /** The target-progress card, shared by both panel variants. */
