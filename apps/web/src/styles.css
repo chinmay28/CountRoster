@@ -531,6 +531,11 @@ a {
   flex-shrink: 0;
   align-self: center;
 }
+/* Hollow ring: this legend row is the whole the slices divide, not a slice. */
+.composition__swatch--whole {
+  background: transparent;
+  border: 2px solid;
+}
 .composition__share {
   font-size: 0.85rem;
 }

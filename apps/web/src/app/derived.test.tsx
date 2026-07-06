@@ -108,21 +108,52 @@ describe('derived tracker composition', () => {
     ).toBeInTheDocument();
   });
 
-  it('sizes slices by absolute movement and shows the net for a subtractive derivation', async () => {
+  it('splits the added total into subtractions and the net for a subtractive derivation', async () => {
     const { profit } = await profitFixture();
     renderApp(test, `/trackers/${profit.id}`);
 
     const heading = await screen.findByRole('heading', { name: /composition/i });
     const section = heading.closest('section')!;
-    // Revenue +150 and Expenses −30 move the total by 180 in all: 83% / 17%,
-    // with the subtraction kept signed in the legend.
-    expect(within(section).getByText(/150 · 83%/)).toBeInTheDocument();
-    expect(within(section).getByText(/-30 · 17%/)).toBeInTheDocument();
-    // The donut announces the subtraction and centers on the net total (120).
+    // Revenue (+150) is the whole here — a legend row with no share — and the
+    // ring splits it into Expenses' cut (30 of 150 = 20%) and the net (80%).
+    const revenueRow = within(section).getByRole('link', { name: 'Revenue' })
+      .parentElement!;
+    expect(revenueRow).toHaveTextContent(/^Revenue150$/);
+    expect(within(section).getByText(/-30 · 20%/)).toBeInTheDocument();
+    expect(within(section).getByText('Net')).toBeInTheDocument();
+    expect(within(section).getByText(/120 · 80%/)).toBeInTheDocument();
+    // The donut announces the split and centers on the whole (gross 150).
     const donut = within(section).getByRole('img', {
-      name: /Revenue 83%.*Expenses subtracts 17%/,
+      name: /Expenses subtracts 20%.*net 80%/,
     });
-    expect(donut).toHaveTextContent('120');
+    expect(donut).toHaveTextContent('150');
+  });
+
+  it('falls back to absolute movement when subtractions exceed the additions', async () => {
+    const revenue = await test.createTracker({ name: 'Revenue', kind: 'number' });
+    const expenses = await test.createTracker({ name: 'Expenses', kind: 'number' });
+    await test.core.entries.log(revenue.id, { value: 150 });
+    await test.core.entries.log(expenses.id, { value: 200 });
+    const profit = await test.createTracker({
+      name: 'Profit',
+      kind: 'number',
+      links: [
+        { source_id: revenue.id, coefficient: 1 },
+        { source_id: expenses.id, coefficient: -1 },
+      ],
+    });
+    renderApp(test, `/trackers/${profit.id}`);
+
+    const heading = await screen.findByRole('heading', { name: /composition/i });
+    const section = heading.closest('section')!;
+    // A negative net has no "whole" to split — each source is sized by its
+    // absolute movement (150 vs 200 of 350: 43% / 57%) around the net (−50).
+    expect(within(section).getByText(/150 · 43%/)).toBeInTheDocument();
+    expect(within(section).getByText(/-200 · 57%/)).toBeInTheDocument();
+    const donut = within(section).getByRole('img', {
+      name: /Revenue 43%.*Expenses subtracts 57%/,
+    });
+    expect(donut).toHaveTextContent('-50');
   });
 
   it('scopes the composition to a reset window picked from the dropdown', async () => {
