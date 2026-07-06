@@ -251,7 +251,7 @@ class StatsServiceImpl implements StatsService {
               s.name AS name,
               s.color AS color,
               l.coefficient AS coefficient,
-              l.coefficient * COALESCE(SUM(e.value), 0) AS total,
+              COALESCE(l.coefficient * SUM(e.value), 0) AS total,
               COUNT(e.id) AS count
          FROM tracker_links l
          JOIN trackers s ON s.id = l.source_id
