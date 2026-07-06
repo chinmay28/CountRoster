@@ -519,11 +519,6 @@ a {
 .composition__share {
   font-size: 0.85rem;
 }
-.composition__note {
-  font-size: 0.85rem;
-  flex-basis: 100%;
-  margin: 0;
-}
 
 /* Detail page */
 .detail {

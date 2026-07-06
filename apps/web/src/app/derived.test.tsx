@@ -108,12 +108,35 @@ describe('derived tracker composition', () => {
     ).toBeInTheDocument();
   });
 
-  it('hides the composition section for a subtractive derivation', async () => {
+  it('sizes slices by absolute movement and shows the net for a subtractive derivation', async () => {
     const { profit } = await profitFixture();
     renderApp(test, `/trackers/${profit.id}`);
 
+    const heading = await screen.findByRole('heading', { name: /composition/i });
+    const section = heading.closest('section')!;
+    // Revenue +150 and Expenses −30 move the total by 180 in all: 83% / 17%,
+    // with the subtraction kept signed in the legend.
+    expect(within(section).getByText(/150 · 83%/)).toBeInTheDocument();
+    expect(within(section).getByText(/-30 · 17%/)).toBeInTheDocument();
+    // The donut announces the subtraction and centers on the net total (120).
+    const donut = within(section).getByRole('img', {
+      name: /Revenue 83%.*Expenses subtracts 17%/,
+    });
+    expect(donut).toHaveTextContent('120');
+  });
+
+  it('hides the composition section for a single-source derivation', async () => {
+    const steps = await test.createTracker({ name: 'Steps', kind: 'number' });
+    await test.core.entries.log(steps.id, { value: 4000 });
+    const doubled = await test.createTracker({
+      name: 'Doubled steps',
+      kind: 'number',
+      links: [{ source_id: steps.id, coefficient: 2 }],
+    });
+    renderApp(test, `/trackers/${doubled.id}`);
+
     // Wait for the page to settle, then confirm the section never appeared —
-    // Profit subtracts Expenses, so shares of the whole don't apply.
+    // one operand has no breakdown to show.
     await screen.findByRole('heading', { name: /derived from/i });
     expect(screen.queryByRole('heading', { name: /composition/i })).toBeNull();
   });
