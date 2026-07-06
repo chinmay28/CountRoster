@@ -151,18 +151,15 @@ export function TrackerFormPage() {
       // A derived tracker holds a computed number; it is never tapped to log.
       // "Snapshot stat" is a UI choice on the same select as the reset
       // periods; on the wire it's the is_snapshot flag with no reset window.
-      // A derivation interleaves entries from several sources, so "the last
-      // reading" is meaningless — derived trackers can't be snapshots.
-      const isSnapshot = !values.isDerived && values.reset_period === 'snapshot';
+      // A derived snapshot combines its sources' *levels*: each one counts
+      // its latest reading, carried forward when a source skips a period.
+      const isSnapshot = values.reset_period === 'snapshot';
       const input: TrackerInput = {
         name: values.name.trim(),
         color: values.color,
         kind: values.isDerived ? 'number' : values.kind,
         default_value: values.isDerived ? 0 : Number(values.default_value) || 0,
-        reset_period:
-          isSnapshot || values.reset_period === 'snapshot'
-            ? 'never'
-            : values.reset_period,
+        reset_period: isSnapshot ? 'never' : values.reset_period,
         is_snapshot: isSnapshot ? 1 : 0,
         // Zod fills the rest of the required defaults.
       } as TrackerInput;
@@ -312,10 +309,7 @@ export function TrackerFormPage() {
             value={values.reset_period}
             onChange={(e) => set('reset_period', e.target.value as ResetChoice)}
           >
-            {RESET_PERIOD_OPTIONS.filter(
-              // See onSubmit: a derivation has no single "last reading".
-              (p) => !(values.isDerived && p.value === 'snapshot'),
-            ).map((p) => (
+            {RESET_PERIOD_OPTIONS.map((p) => (
               <option key={p.value} value={p.value}>
                 {p.label}
               </option>

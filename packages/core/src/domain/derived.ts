@@ -40,6 +40,14 @@ export interface EntrySource {
  * why every sum-based aggregation (totals, buckets, target progress, streaks)
  * works on a derived tracker without special-casing.
  *
+ * A derived *snapshot* tracker combines levels, not amounts, so its stream is
+ * different: every source reading becomes a row whose value is the *combined
+ * level* at that instant — Σ coefficient × (that source's latest reading at or
+ * before it). A source with no reading yet simply contributes nothing (best
+ * effort), and one that skipped a period carries its previous reading forward.
+ * The latest row is therefore the current combined level, and a line through
+ * the rows is the level-over-time chart.
+ *
  * Callers wrap this as `... FROM <source> WHERE …`; the returned params bind
  * first, before any range filters the caller appends.
  */
@@ -47,11 +55,42 @@ export async function effectiveEntrySource(
   storage: Storage,
   trackerId: string,
 ): Promise<EntrySource> {
-  if (!(await isDerivedTracker(storage, trackerId))) {
+  const rows = await storage.query<{ is_derived: number; is_snapshot: number }>(
+    `SELECT is_derived, is_snapshot FROM trackers WHERE id = ?`,
+    [trackerId],
+  );
+  const tracker = rows[0];
+  if ((tracker?.is_derived ?? 0) !== 1) {
     return {
       sql: `(SELECT id, tracker_id, value, occurred_at, created_at, updated_at
                FROM entries WHERE tracker_id = ?)`,
       params: [trackerId],
+    };
+  }
+  if (tracker!.is_snapshot === 1) {
+    // Instants compare by julianday, not lexically, because occurred_at may
+    // carry mixed offsets; simultaneous readings tie-break on id (UUIDv7,
+    // time-sortable). SUM skips a NULL operand — a source with no reading at
+    // or before the row's instant — which is what carries partial data.
+    return {
+      sql: `(SELECT e.id AS id, ? AS tracker_id,
+                    (SELECT SUM(l2.coefficient * (
+                       SELECT e2.value FROM entries e2
+                        WHERE e2.tracker_id = l2.source_id
+                          AND (julianday(e2.occurred_at) < julianday(e.occurred_at)
+                               OR (julianday(e2.occurred_at) = julianday(e.occurred_at)
+                                   AND e2.id <= e.id))
+                        ORDER BY julianday(e2.occurred_at) DESC, e2.id DESC
+                        LIMIT 1))
+                       FROM tracker_links l2
+                      WHERE l2.tracker_id = ?) AS value,
+                    e.occurred_at AS occurred_at,
+                    e.created_at AS created_at,
+                    e.updated_at AS updated_at
+               FROM tracker_links l
+               JOIN entries e ON e.tracker_id = l.source_id
+              WHERE l.tracker_id = ?)`,
+      params: [trackerId, trackerId, trackerId],
     };
   }
   return {

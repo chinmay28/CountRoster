@@ -246,10 +246,11 @@ export function TrackerDetailPage() {
       )}
 
       {/* Percentage breakdown per source (the component hides itself for
-          single-operand derivations); snapshot levels don't sum into a whole
-          to break down. Entries arrive oldest-first, so [0] bounds how far
-          back the period dropdown reaches. */}
-      {isDerived && !isSnapshot && (
+          single-operand derivations). For a snapshot derivation it composes
+          the sources' levels instead of their sums. Entries arrive
+          oldest-first, so [0] bounds how far back the period dropdown
+          reaches. */}
+      {isDerived && (
         <CompositionSection tracker={tracker} earliest={entries[0]?.occurred_at} />
       )}
 
@@ -339,7 +340,15 @@ export function TrackerDetailPage() {
       )}
 
       <section className="detail__entries">
-        <h2>{isDerived ? 'Contributing entries' : 'Entries'}</h2>
+        {/* A snapshot derivation's virtual entries are the combined level at
+            each source reading, not per-source contributions. */}
+        <h2>
+          {isDerived
+            ? isSnapshot
+              ? 'Level history'
+              : 'Contributing entries'
+            : 'Entries'}
+        </h2>
         <EntryList
           tracker={tracker}
           entries={entries}

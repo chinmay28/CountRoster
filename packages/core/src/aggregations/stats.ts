@@ -16,7 +16,8 @@ export interface StatBucket extends Bucket {
   /**
    * Sum of entry values that fall in this bucket — or, for a snapshot
    * tracker, the value of the *last* entry in the bucket (snapshots record
-   * levels, not amounts, so they never add up).
+   * levels, not amounts, so they never add up); a snapshot bucket with no
+   * entries carries the last known level forward, count 0.
    */
   value: number;
   /** Number of entries in this bucket. */
@@ -37,9 +38,14 @@ export interface CompositionSlice {
   name: string;
   color: string;
   coefficient: number;
-  /** `coefficient × SUM(source entry values)` over the requested range. */
+  /**
+   * `coefficient × SUM(source entry values)` over the requested range — or,
+   * for a derived *snapshot* tracker, `coefficient × the source's latest
+   * reading` as of the range's end (levels don't sum; a source with no
+   * reading in the range carries its last earlier one).
+   */
   total: number;
-  /** Number of source entries contributing to `total`. */
+  /** Number of source entries in the range (0 for a carried-over level). */
   count: number;
 }
 
@@ -60,7 +66,9 @@ export interface StatsService {
   /**
    * How a derived tracker's total splits across its source operands, one
    * slice per link in derivation order — all time by default, or scoped to
-   * `range` (e.g. one reset window). Empty for an ordinary tracker.
+   * `range` (e.g. one reset window). For a derived snapshot tracker the
+   * slices are the sources' levels as of the range's end (see
+   * CompositionSlice.total). Empty for an ordinary tracker.
    */
   composition(trackerId: string, range?: TimeRange): Promise<CompositionSlice[]>;
 }
@@ -137,6 +145,24 @@ class StatsServiceImpl implements StatsService {
         // reading (entries arrive in occurred_at order) instead of a sum.
         b.value = isSnapshot ? e.value : b.value + e.value;
         b.count += 1;
+      }
+    }
+
+    if (isSnapshot) {
+      // A level persists between readings, so a bucket without one holds the
+      // last known level instead of dropping to zero (its count stays 0).
+      // Seed from the latest reading before the range so the leading buckets
+      // carry too; before the first-ever reading there is nothing to carry.
+      const prior = await this.storage.query<{ value: number }>(
+        `SELECT value FROM ${source.sql}
+          WHERE julianday(occurred_at) < julianday(?)
+          ORDER BY julianday(occurred_at) DESC, id DESC LIMIT 1`,
+        [...source.params, range.start],
+      );
+      let carry: number | null = prior[0]?.value ?? null;
+      for (const b of buckets) {
+        if (b.count > 0) carry = b.value;
+        else if (carry !== null) b.value = carry;
       }
     }
 
@@ -239,6 +265,9 @@ class StatsServiceImpl implements StatsService {
     trackerId: string,
     range: TimeRange = {},
   ): Promise<CompositionSlice[]> {
+    const tracker = await this.getTracker(trackerId);
+    if (tracker?.is_snapshot === 1) return this.snapshotComposition(trackerId, range);
+
     // One row per link: the source's identity plus its weighted entry sum.
     // LEFT JOIN keeps sources with no entries in range (a 0-total slice,
     // count 0), which is why the range filter lives in the ON clause — in a
@@ -267,6 +296,53 @@ class StatsServiceImpl implements StatsService {
          LEFT JOIN entries e ON ${on.join(' AND ')}
         WHERE l.tracker_id = ?
         GROUP BY l.id
+        ORDER BY l.sort_order ASC, l.created_at ASC`,
+      [...params, trackerId],
+    );
+  }
+
+  /**
+   * Composition of a derived *snapshot* tracker: levels don't sum over a
+   * range, so each slice is `coefficient × the source's latest reading`
+   * strictly before the range's end (as of now when unbounded). The range's
+   * start only scopes `count` — a source that logged nothing in the window
+   * still carries its last earlier reading, best effort, so a partial month
+   * of data still composes into a full picture.
+   */
+  private async snapshotComposition(
+    trackerId: string,
+    range: TimeRange,
+  ): Promise<CompositionSlice[]> {
+    const levelWhere: string[] = ['e.tracker_id = l.source_id'];
+    const countWhere: string[] = ['e.tracker_id = l.source_id'];
+    const params: SqlParam[] = [];
+    if (range.end !== undefined) {
+      levelWhere.push('julianday(e.occurred_at) < julianday(?)');
+      params.push(range.end);
+    }
+    if (range.start !== undefined) {
+      countWhere.push('julianday(e.occurred_at) >= julianday(?)');
+      params.push(range.start);
+    }
+    if (range.end !== undefined) {
+      countWhere.push('julianday(e.occurred_at) < julianday(?)');
+      params.push(range.end);
+    }
+    return this.storage.query<CompositionSlice>(
+      `SELECT l.source_id AS source_id,
+              s.name AS name,
+              s.color AS color,
+              l.coefficient AS coefficient,
+              COALESCE(l.coefficient * (
+                SELECT e.value FROM entries e
+                 WHERE ${levelWhere.join(' AND ')}
+                 ORDER BY julianday(e.occurred_at) DESC, e.id DESC LIMIT 1
+              ), 0) AS total,
+              (SELECT COUNT(*) FROM entries e
+                WHERE ${countWhere.join(' AND ')}) AS count
+         FROM tracker_links l
+         JOIN trackers s ON s.id = l.source_id
+        WHERE l.tracker_id = ?
         ORDER BY l.sort_order ASC, l.created_at ASC`,
       [...params, trackerId],
     );
