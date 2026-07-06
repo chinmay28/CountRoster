@@ -1,27 +1,45 @@
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Tracker, CompositionSlice } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import { formatValue } from '../lib/format.ts';
 import { donutArcPath, percentShares } from '../lib/donut.ts';
+import { resetPeriodOptions } from '../lib/range.ts';
 
 interface CompositionSectionProps {
   tracker: Tracker;
+  /**
+   * `occurred_at` of the tracker's earliest contributing entry, if any —
+   * bounds how far back the period dropdown reaches.
+   */
+  earliest?: string | undefined;
 }
 
 /**
  * "Composition" card for a derived tracker with two or more sources: a donut
- * of how much each source contributes to the all-time total, with a legend
- * carrying names, signed values and percentages. When a derivation subtracts
+ * of how much each source contributes to the total, with a legend carrying
+ * names, signed values and percentages. When a derivation subtracts
  * (Profit = Revenue − Expenses) the slices are sized by each source's
  * *absolute* contribution — its share of the total movement — subtracting
  * slices are hatched, and the center shows the net total.
+ *
+ * Defaults to all time; a tracker with a reset period also gets a dropdown
+ * of its historical windows (this year / last year / 2024…, per its period).
  */
-export function CompositionSection({ tracker }: CompositionSectionProps) {
+export function CompositionSection({ tracker, earliest }: CompositionSectionProps) {
   const core = useCore();
+  // 'all', or the `value` (bucket-start ISO) of a period option.
+  const [selected, setSelected] = useState('all');
+  const options = useMemo(
+    () => resetPeriodOptions(tracker.reset_period, tracker.week_start, earliest),
+    [tracker.reset_period, tracker.week_start, earliest],
+  );
+  const active = options.find((o) => o.value === selected);
+
   const { data: slices } = useAsync(
-    () => core.stats.composition(tracker.id),
-    [tracker.id],
+    () => core.stats.composition(tracker.id, active?.range),
+    [tracker.id, active?.range.start, active?.range.end],
   );
 
   // A single operand has no breakdown to show.
@@ -30,17 +48,39 @@ export function CompositionSection({ tracker }: CompositionSectionProps) {
   const net = slices.reduce((s, slice) => s + slice.total, 0);
   const hasNegative = slices.some((s) => s.total < 0);
   const percents = percentShares(slices.map((s) => Math.abs(s.total)));
+  const windowWord = active ? 'total' : 'all-time total';
 
   return (
     <section className="detail__composition card">
-      <h2>Composition</h2>
+      <div className="composition__head">
+        <h2>Composition</h2>
+        {options.length > 0 && (
+          <select
+            className="composition__period"
+            aria-label="Composition period"
+            value={active ? selected : 'all'}
+            onChange={(e) => setSelected(e.target.value)}
+          >
+            <option value="all">All time</option>
+            {options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
       <p className="muted composition__subtitle">
         {hasNegative
-          ? 'How much each source moves the all-time total; hatched slices subtract.'
-          : 'How the sources add up to the all-time total.'}
+          ? `How much each source moves the ${windowWord}; hatched slices subtract.`
+          : `How the sources add up to the ${windowWord}.`}
       </p>
       {slices.every((s) => s.total === 0) ? (
-        <p className="muted">Nothing logged by the sources yet.</p>
+        <p className="muted">
+          {active
+            ? 'Nothing logged by the sources in this period.'
+            : 'Nothing logged by the sources yet.'}
+        </p>
       ) : (
         <div className="composition">
           <CompositionDonut
@@ -48,6 +88,7 @@ export function CompositionSection({ tracker }: CompositionSectionProps) {
             slices={slices}
             net={net}
             percents={percents}
+            windowLabel={active ? centerLabel(active.label) : 'all time'}
           />
           <ul className="composition__legend">
             {slices.map((slice, i) => (
@@ -81,11 +122,13 @@ function CompositionDonut({
   slices,
   net,
   percents,
+  windowLabel,
 }: {
   tracker: Tracker;
   slices: CompositionSlice[];
   net: number;
   percents: number[];
+  windowLabel: string;
 }) {
   // Cumulative |total| shares → one annular sector per non-empty slice.
   // Zero-total slices draw nothing (the legend still lists them at 0%).
@@ -102,7 +145,7 @@ function CompositionDonut({
       className="composition__donut"
       viewBox={`0 0 ${SIZE} ${SIZE}`}
       role="img"
-      aria-label={`${tracker.name} composition: ${slices
+      aria-label={`${tracker.name} composition (${windowLabel}): ${slices
         .map(
           (s, i) => `${s.name} ${s.total < 0 ? 'subtracts ' : ''}${percents[i]}%`,
         )
@@ -176,7 +219,7 @@ function CompositionDonut({
         textAnchor="middle"
         className="composition__donut-label"
       >
-        all time
+        {windowLabel}
       </text>
     </svg>
   );
@@ -186,4 +229,11 @@ function CompositionDonut({
 function swatchFill(slice: CompositionSlice): string {
   if (slice.total >= 0) return slice.color;
   return `repeating-linear-gradient(45deg, ${slice.color} 0 2px, color-mix(in srgb, ${slice.color} 35%, transparent) 2px 4px)`;
+}
+
+/** "This year" → "this year" under the number; date labels stay as-is. */
+function centerLabel(label: string): string {
+  return /^(This|Last|Today|Yesterday)/.test(label)
+    ? label.charAt(0).toLowerCase() + label.slice(1)
+    : label;
 }

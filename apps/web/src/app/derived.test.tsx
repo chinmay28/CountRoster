@@ -125,6 +125,52 @@ describe('derived tracker composition', () => {
     expect(donut).toHaveTextContent('120');
   });
 
+  it('scopes the composition to a reset window picked from the dropdown', async () => {
+    const year = new Date().getFullYear();
+    const food = await test.createTracker({ name: 'Food', kind: 'number' });
+    const drinks = await test.createTracker({ name: 'Drinks', kind: 'number' });
+    await test.core.entries.log(food.id, { value: 300 });
+    await test.core.entries.log(drinks.id, { value: 100 });
+    // A backdated entry in the previous calendar year.
+    await test.core.entries.log(food.id, {
+      value: 500,
+      occurred_at: `${year - 1}-06-15T12:00:00.000-07:00`,
+    });
+    const calories = await test.createTracker({
+      name: 'Calories',
+      kind: 'number',
+      reset_period: 'yearly',
+      links: [
+        { source_id: food.id, coefficient: 1 },
+        { source_id: drinks.id, coefficient: 1 },
+      ],
+    });
+
+    const user = userEvent.setup();
+    renderApp(test, `/trackers/${calories.id}`);
+
+    const heading = await screen.findByRole('heading', { name: /composition/i });
+    const section = heading.closest('section')!;
+    // All time is the default: Food 800 of 900 (89%), Drinks 100 (11%).
+    expect(await within(section).findByText(/800 · 89%/)).toBeInTheDocument();
+
+    const select = within(section).getByRole('combobox', { name: /period/i });
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['All time', 'This year', 'Last year']);
+
+    // This year excludes the backdated 500: Food 300 (75%), Drinks 100 (25%).
+    await user.selectOptions(select, within(select).getByRole('option', { name: 'This year' }));
+    expect(await within(section).findByText(/300 · 75%/)).toBeInTheDocument();
+
+    // Last year has only the backdated Food entry; Drinks stays as a 0% row.
+    await user.selectOptions(select, within(select).getByRole('option', { name: 'Last year' }));
+    expect(await within(section).findByText(/500 · 100%/)).toBeInTheDocument();
+    expect(within(section).getByText(/0 · 0%/)).toBeInTheDocument();
+  });
+
   it('hides the composition section for a single-source derivation', async () => {
     const steps = await test.createTracker({ name: 'Steps', kind: 'number' });
     await test.core.entries.log(steps.id, { value: 4000 });
