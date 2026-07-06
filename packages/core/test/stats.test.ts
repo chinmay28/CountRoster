@@ -30,6 +30,23 @@ describe('StatsService.bucket', () => {
     // At least one day in the span has no entries (zero-filled).
     expect(buckets.some((b) => b.value === 0 && b.count === 0)).toBe(true);
   });
+
+  it('filters by absolute instant when the range uses a different offset', async () => {
+    const { app } = await makeTestApp();
+    const t = await app.trackers.create({ name: 'Steps', kind: 'number' });
+    // 2026-05-20T12:00-07:00 is 2026-05-20T19:00Z — inside the range below by
+    // instant, but lexically "…T12" sorts before the "…T15" start bound.
+    await app.entries.log(t.id, { value: 7, occurred_at: day('20') });
+
+    const buckets = await app.stats.bucket(
+      t.id,
+      { start: '2026-05-20T15:00:00.000Z', end: '2026-05-21T00:00:00.000Z' },
+      'day',
+    );
+
+    expect(buckets.reduce((s, b) => s + b.value, 0)).toBe(7);
+    expect(buckets.reduce((s, b) => s + b.count, 0)).toBe(1);
+  });
 });
 
 describe('StatsService.streak', () => {

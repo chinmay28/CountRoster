@@ -96,9 +96,13 @@ class StatsServiceImpl implements StatsService {
     const isSnapshot = tracker?.is_snapshot === 1;
 
     const source = await effectiveEntrySource(this.storage, trackerId);
+    // Compare by absolute instant (julianday), not lexically: occurred_at is
+    // stored with the server's local offset while the range bounds may arrive
+    // in a different offset (see EntryService.forTracker).
     const entries = await this.storage.query<{ occurred_at: string; value: number }>(
       `SELECT occurred_at, value FROM ${source.sql}
-        WHERE occurred_at >= ? AND occurred_at < ?
+        WHERE julianday(occurred_at) >= julianday(?)
+          AND julianday(occurred_at) < julianday(?)
         ORDER BY occurred_at ASC`,
       [...source.params, range.start, range.end],
     );
@@ -214,7 +218,12 @@ class StatsServiceImpl implements StatsService {
     const params: SqlParam[] = [...source.params];
     let whereSql = '';
     if (start !== null && end !== null) {
-      whereSql = ' WHERE occurred_at >= ? AND occurred_at < ?';
+      // Instant-based bounds: the window edges are UTC ("Z") strings while
+      // occurred_at carries a local offset, so lexical compare would misplace
+      // entries near the window edges (see EntryService.forTracker).
+      whereSql =
+        ' WHERE julianday(occurred_at) >= julianday(?)' +
+        ' AND julianday(occurred_at) < julianday(?)';
       params.push(start, end);
     }
     const rows = await this.storage.query<{ total: number | null }>(
