@@ -57,14 +57,24 @@ type RingMode = 'additive' | 'breakdown' | 'movement';
  *
  * Defaults to all time; a tracker with a reset period also gets a dropdown
  * of its historical windows (this year / last year / 2024…, per its period).
+ * A derived *snapshot* tracker composes its sources' levels instead: the
+ * default is the current levels, and the dropdown steps back through months
+ * (the smallest snapshot window) — a source with no reading in a month
+ * carries its last earlier one, so partial data still composes.
  */
 export function CompositionSection({ tracker, earliest }: CompositionSectionProps) {
   const core = useCore();
+  const isSnapshot = tracker.is_snapshot === 1;
   // 'all', or the `value` (bucket-start ISO) of a period option.
   const [selected, setSelected] = useState('all');
   const options = useMemo(
-    () => resetPeriodOptions(tracker.reset_period, tracker.week_start, earliest),
-    [tracker.reset_period, tracker.week_start, earliest],
+    () =>
+      resetPeriodOptions(
+        isSnapshot ? 'monthly' : tracker.reset_period,
+        tracker.week_start,
+        earliest,
+      ),
+    [isSnapshot, tracker.reset_period, tracker.week_start, earliest],
   );
   const active = options.find((o) => o.value === selected);
 
@@ -76,9 +86,13 @@ export function CompositionSection({ tracker, earliest }: CompositionSectionProp
   // A single operand has no breakdown to show.
   if (!slices || slices.length < 2) return null;
 
-  const net = slices.reduce((s, slice) => s + slice.total, 0);
-  const gross = slices.reduce((s, slice) => s + Math.max(0, slice.total), 0);
-  const hasNegative = slices.some((s) => s.total < 0);
+  // Highest share first: biggest contribution (by magnitude) at the top of
+  // the legend and the start of the ring.
+  const ordered = [...slices].sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+
+  const net = ordered.reduce((s, slice) => s + slice.total, 0);
+  const gross = ordered.reduce((s, slice) => s + Math.max(0, slice.total), 0);
+  const hasNegative = ordered.some((s) => s.total < 0);
   const mode: RingMode = !hasNegative
     ? 'additive'
     : gross > 0 && net >= 0
@@ -86,11 +100,11 @@ export function CompositionSection({ tracker, earliest }: CompositionSectionProp
       : 'movement';
 
   // The positive sources a breakdown ring is made *of* (legend-only rows).
-  const wholeRows = mode === 'breakdown' ? slices.filter((s) => s.total > 0) : [];
+  const wholeRows = mode === 'breakdown' ? ordered.filter((s) => s.total > 0) : [];
   const ring: RingSlice[] =
     mode === 'breakdown'
       ? [
-          ...slices
+          ...ordered
             .filter((s) => s.total <= 0)
             .map((s) => sourceSlice(s, -s.total)),
           {
@@ -102,20 +116,32 @@ export function CompositionSection({ tracker, earliest }: CompositionSectionProp
             hatched: false,
           },
         ]
-      : slices.map((s) => sourceSlice(s, Math.abs(s.total)));
+      : ordered.map((s) => sourceSlice(s, Math.abs(s.total)));
   const percents = percentShares(ring.map((r) => r.portion));
   // The center is the ring's whole: the gross for a breakdown, else the net.
   const center = mode === 'breakdown' ? gross : net;
 
-  const windowWord = active ? 'total' : 'all-time total';
+  const windowWord = isSnapshot
+    ? active
+      ? 'level at its end'
+      : 'current level'
+    : active
+      ? 'total'
+      : 'all-time total';
+  // Snapshot windows are best effort: a quiet source keeps its last reading.
+  const carryNote =
+    isSnapshot && active
+      ? ' Sources without a reading in the window carry their last one.'
+      : '';
   const subtitle =
-    mode === 'additive'
+    (mode === 'additive'
       ? `How the sources add up to the ${windowWord}.`
       : mode === 'breakdown'
         ? `How ${
             wholeRows.length === 1 ? wholeRows[0]!.name : `the added ${windowWord}`
           } splits between what's subtracted (hatched) and the net.`
-        : `How much each source moves the ${windowWord}; hatched slices subtract.`;
+        : `How much each source moves the ${windowWord}; hatched slices subtract.`) +
+    carryNote;
 
   return (
     <section className="detail__composition card">
@@ -128,7 +154,7 @@ export function CompositionSection({ tracker, earliest }: CompositionSectionProp
             value={active ? selected : 'all'}
             onChange={(e) => setSelected(e.target.value)}
           >
-            <option value="all">All time</option>
+            <option value="all">{isSnapshot ? 'Current' : 'All time'}</option>
             {options.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
@@ -151,7 +177,9 @@ export function CompositionSection({ tracker, earliest }: CompositionSectionProp
             ring={ring}
             center={center}
             percents={percents}
-            windowLabel={active ? centerLabel(active.label) : 'all time'}
+            windowLabel={
+              active ? centerLabel(active.label) : isSnapshot ? 'current' : 'all time'
+            }
           />
           <ul className="composition__legend">
             {/* What the whole ring is made of — a hollow swatch, no share. */}

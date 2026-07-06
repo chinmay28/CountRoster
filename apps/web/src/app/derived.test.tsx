@@ -147,11 +147,12 @@ describe('derived tracker composition', () => {
     const heading = await screen.findByRole('heading', { name: /composition/i });
     const section = heading.closest('section')!;
     // A negative net has no "whole" to split — each source is sized by its
-    // absolute movement (150 vs 200 of 350: 43% / 57%) around the net (−50).
+    // absolute movement (150 vs 200 of 350: 43% / 57%) around the net (−50),
+    // biggest mover first.
     expect(within(section).getByText(/150 · 43%/)).toBeInTheDocument();
     expect(within(section).getByText(/-200 · 57%/)).toBeInTheDocument();
     const donut = within(section).getByRole('img', {
-      name: /Revenue 43%.*Expenses subtracts 57%/,
+      name: /Expenses subtracts 57%.*Revenue 43%/,
     });
     expect(donut).toHaveTextContent('-50');
   });
@@ -200,6 +201,31 @@ describe('derived tracker composition', () => {
     await user.selectOptions(select, within(select).getByRole('option', { name: 'Last year' }));
     expect(await within(section).findByText(/500 · 100%/)).toBeInTheDocument();
     expect(within(section).getByText(/0 · 0%/)).toBeInTheDocument();
+  });
+
+  it('orders the legend by share, highest first, regardless of link order', async () => {
+    // Drinks is linked first but contributes the smaller share.
+    const drinks = await test.createTracker({ name: 'Drinks', kind: 'number' });
+    const food = await test.createTracker({ name: 'Food', kind: 'number' });
+    await test.core.entries.log(drinks.id, { value: 100 });
+    await test.core.entries.log(food.id, { value: 300 });
+    const calories = await test.createTracker({
+      name: 'Calories',
+      kind: 'number',
+      links: [
+        { source_id: drinks.id, coefficient: 1 },
+        { source_id: food.id, coefficient: 1 },
+      ],
+    });
+    renderApp(test, `/trackers/${calories.id}`);
+
+    const heading = await screen.findByRole('heading', { name: /composition/i });
+    const section = heading.closest('section')!;
+    await within(section).findByText(/300 · 75%/);
+    const legend = [...section.querySelectorAll('.composition__item a')].map(
+      (a) => a.textContent,
+    );
+    expect(legend).toEqual(['Food', 'Drinks']);
   });
 
   it('hides the composition section for a single-source derivation', async () => {

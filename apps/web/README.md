@@ -72,6 +72,10 @@ journal notes with per-note edit history. A tracker's "Reset every" can also be
 "Not applicable — snapshot stat" for point-in-time levels like net worth: the
 latest reading is the headline, stats show the all-time high/low, and trends
 draw a zoomable level line through the raw readings instead of period buckets.
+A *derived* tracker can be a snapshot stat too — it combines its sources'
+levels best-effort (a source that skipped a period carries its last reading
+forward), and its composition donut can step back through past months to show
+how the split looked then.
 
 Visualizations & organization:
 
