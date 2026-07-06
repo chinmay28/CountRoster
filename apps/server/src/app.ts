@@ -12,6 +12,12 @@ export const APP_VERSION = '0.1.0';
 export interface SqliteFileSource {
   /** Absolute path to the on-disk SQLite file, or null if in-memory. */
   path: string;
+  /**
+   * Flush pending WAL frames into the main database file. In WAL mode recent
+   * commits live in the -wal sidecar, so downloading the .sqlite file alone
+   * would silently omit them unless checkpointed first.
+   */
+  checkpoint?: () => Promise<void>;
 }
 
 export interface BuildAppOptions {
@@ -41,7 +47,7 @@ export function buildApp(
     res.status(201).json(await core.trackers.create(req.body));
   });
   api.post('/trackers/reorder', async (req, res) => {
-    await core.trackers.reorder(req.body.orderedIds ?? []);
+    await core.trackers.reorder(req.body?.orderedIds ?? []);
     res.status(204).end();
   });
   api.get('/trackers/:id', async (req, res) => {
@@ -64,7 +70,7 @@ export function buildApp(
     res.json(await core.trackers.links(req.params.id));
   });
   api.put('/trackers/:id/links', async (req, res) => {
-    res.json(await core.trackers.setLinks(req.params.id, req.body.links ?? []));
+    res.json(await core.trackers.setLinks(req.params.id, req.body?.links ?? []));
   });
   api.delete('/trackers/:id', async (req, res) => {
     await core.trackers.delete(req.params.id);
@@ -121,7 +127,7 @@ export function buildApp(
     res.status(201).json(await core.groups.create(req.body));
   });
   api.post('/groups/reorder', async (req, res) => {
-    await core.groups.reorder(req.body.orderedGroupIds ?? []);
+    await core.groups.reorder(req.body?.orderedGroupIds ?? []);
     res.status(204).end();
   });
   api.get('/groups/:id', async (req, res) => {
@@ -140,11 +146,11 @@ export function buildApp(
     res.json(await core.groups.trackersIn(req.params.id));
   });
   api.post('/groups/:id/trackers', async (req, res) => {
-    await core.groups.addTracker(req.params.id, req.body.tracker_id);
+    await core.groups.addTracker(req.params.id, req.body?.tracker_id);
     res.status(204).end();
   });
   api.post('/groups/:id/reorder', async (req, res) => {
-    await core.groups.reorderMembers(req.params.id, req.body.orderedTrackerIds ?? []);
+    await core.groups.reorderMembers(req.params.id, req.body?.orderedTrackerIds ?? []);
     res.status(204).end();
   });
   api.delete('/groups/:id/trackers/:trackerId', async (req, res) => {
@@ -156,7 +162,17 @@ export function buildApp(
   api.get('/trackers/:id/stats/buckets', async (req, res) => {
     const start = String(req.query.start ?? '');
     const end = String(req.query.end ?? '');
-    const period = String(req.query.period ?? 'day') as 'day' | 'week' | 'month' | 'year';
+    const period = String(req.query.period ?? 'day');
+    if (!isBucketPeriod(period)) {
+      return res
+        .status(400)
+        .json({ error: `Invalid period "${period}"; expected day, week, month, or year` });
+    }
+    if (Number.isNaN(Date.parse(start)) || Number.isNaN(Date.parse(end))) {
+      return res
+        .status(400)
+        .json({ error: 'start and end must be valid ISO 8601 timestamps' });
+    }
     res.json(await core.stats.bucket(req.params.id, { start, end }, period));
   });
   api.get('/trackers/:id/stats/streak', async (req, res) => {
@@ -192,6 +208,7 @@ export function buildApp(
     if (!opts.fileSource || opts.fileSource.path === ':memory:') {
       return res.status(501).json({ error: 'Raw SQLite export unavailable for an in-memory database' });
     }
+    await opts.fileSource.checkpoint?.();
     const stamp = new Date().toISOString().slice(0, 10);
     res.download(opts.fileSource.path, `countroster-${stamp}.sqlite`, (err) => {
       if (err) next(err);
@@ -214,6 +231,13 @@ export function buildApp(
   app.use('/api', api);
   app.use(errorHandler);
   return app;
+}
+
+const BUCKET_PERIODS = ['day', 'week', 'month', 'year'] as const;
+type ApiBucketPeriod = (typeof BUCKET_PERIODS)[number];
+
+function isBucketPeriod(v: string): v is ApiBucketPeriod {
+  return (BUCKET_PERIODS as readonly string[]).includes(v);
 }
 
 function timeRange(req: Request): { start?: string; end?: string } {

@@ -21,7 +21,12 @@ const WEB_DIST = resolve(
 
 async function main(): Promise<void> {
   const { core, adapter, schemaVersion } = await boot(DB_PATH);
-  const app = buildApp(core, { fileSource: { path: adapter.path } });
+  const app = buildApp(core, {
+    fileSource: {
+      path: adapter.path,
+      checkpoint: () => adapter.exec('PRAGMA wal_checkpoint(TRUNCATE)'),
+    },
+  });
 
   // In production, serve the built PWA from the same origin as the API so the
   // mobile browser shell behaves like an installed app with no CORS hops.

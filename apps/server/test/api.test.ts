@@ -237,6 +237,29 @@ describe('CountRoster API', () => {
     expect((await api.del(`/api/trackers/${revenue.id}`)).status).toBe(204);
   });
 
+  it('rejects invalid stats/buckets query params with a 400', async () => {
+    const created = await api.post('/api/trackers', { name: 'Validated' });
+    const tracker = await created.json();
+
+    const badPeriod = await api.get(
+      `/api/trackers/${tracker.id}/stats/buckets?start=2026-01-01T00:00:00.000Z&end=2026-02-01T00:00:00.000Z&period=fortnight`,
+    );
+    expect(badPeriod.status).toBe(400);
+
+    const badDates = await api.get(
+      `/api/trackers/${tracker.id}/stats/buckets?start=nonsense&end=alsononsense&period=day`,
+    );
+    expect(badDates.status).toBe(400);
+
+    expect((await api.del(`/api/trackers/${tracker.id}`)).status).toBe(204);
+  });
+
+  it('tolerates reorder posts with no request body', async () => {
+    // No content-type header, no body: express.json leaves req.body undefined.
+    const res = await fetch(`${base}/api/trackers/reorder`, { method: 'POST' });
+    expect(res.status).toBe(204);
+  });
+
   it('exports a backup bundle and reports a manifest', async () => {
     const manifest = await (await api.get('/api/backup/manifest')).json();
     expect(manifest.checksums.tables).toMatch(/^sha256:/);
