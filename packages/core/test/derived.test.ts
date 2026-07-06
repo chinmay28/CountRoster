@@ -98,6 +98,58 @@ describe('Derived trackers', () => {
     expect(progress.ratio).toBeCloseTo(0.5);
   });
 
+  it('reports the per-source composition of its total', async () => {
+    const { app, revenue, expenses, profit } = await profitSetup();
+    const slices = await app.stats.composition(profit.id);
+    expect(slices).toEqual([
+      {
+        source_id: revenue.id,
+        name: 'Revenue',
+        color: revenue.color,
+        coefficient: 1,
+        total: 150,
+        count: 2,
+      },
+      {
+        source_id: expenses.id,
+        name: 'Expenses',
+        color: expenses.color,
+        coefficient: -1,
+        total: -30,
+        count: 1,
+      },
+    ]);
+  });
+
+  it('composition weighs each source by its coefficient', async () => {
+    const { app, revenue, expenses, profit } = await profitSetup();
+    await app.trackers.setLinks(profit.id, [
+      { source_id: revenue.id, coefficient: 2 },
+      { source_id: expenses.id, coefficient: 1 },
+    ]);
+    const slices = await app.stats.composition(profit.id);
+    expect(slices.map((s) => s.total)).toEqual([300, 30]); // 2×150, 1×30
+  });
+
+  it('composition keeps a source with no entries as a zero slice', async () => {
+    const { app, revenue, profit } = await profitSetup();
+    const idle = await app.trackers.create({ name: 'Idle', kind: 'number' });
+    await app.trackers.setLinks(profit.id, [
+      { source_id: revenue.id, coefficient: 1 },
+      { source_id: idle.id, coefficient: 1 },
+    ]);
+    const slices = await app.stats.composition(profit.id);
+    expect(slices.find((s) => s.source_id === idle.id)).toMatchObject({
+      total: 0,
+      count: 0,
+    });
+  });
+
+  it('composition is empty for an ordinary tracker', async () => {
+    const { app, revenue } = await profitSetup();
+    expect(await app.stats.composition(revenue.id)).toEqual([]);
+  });
+
   it('streak reflects the days its sources were active', async () => {
     const { app, profit } = await profitSetup();
     const streak = await app.stats.streak(profit.id);

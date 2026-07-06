@@ -166,6 +166,9 @@ export function buildApp(
     const at = req.query.at ? String(req.query.at) : undefined;
     res.json(await core.stats.targetProgress(req.params.id, at));
   });
+  api.get('/trackers/:id/stats/composition', async (req, res) => {
+    res.json(await core.stats.composition(req.params.id));
+  });
 
   // ---- Backup -------------------------------------------------------------
   api.get('/backup/manifest', async (_req, res) => {

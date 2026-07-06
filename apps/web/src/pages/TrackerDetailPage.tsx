@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCore } from '../app/CoreContext.tsx';
 import { useHiddenMode } from '../app/HiddenMode.tsx';
 import { useAsync } from '../app/useAsync.ts';
+import { CompositionSection } from '../components/CompositionSection.tsx';
 import { EntryList } from '../components/EntryList.tsx';
 import { MultiLogPanel } from '../components/MultiLogPanel.tsx';
 import { NotesSection } from '../components/NotesSection.tsx';
@@ -243,6 +244,11 @@ export function TrackerDetailPage() {
           )}
         </section>
       )}
+
+      {/* Percentage breakdown per source; only additive derivations show it
+          (the component itself hides for subtractive ones), and snapshot
+          levels don't sum into a whole to break down. */}
+      {isDerived && !isSnapshot && <CompositionSection tracker={tracker} />}
 
       <Suspense fallback={<p className="muted">Loading charts…</p>}>
         <StatsPanel tracker={tracker} refreshKey={statsKey} />

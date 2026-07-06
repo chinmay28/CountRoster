@@ -196,6 +196,17 @@ describe('CountRoster API', () => {
     const total = entries.reduce((s: number, e: { value: number }) => s + e.value, 0);
     expect(total).toBe(70);
 
+    // The composition endpoint splits that total per source.
+    const slices = await (
+      await api.get(`/api/trackers/${profit.id}/stats/composition`)
+    ).json();
+    expect(
+      slices.map((s: { name: string; total: number }) => [s.name, s.total]),
+    ).toEqual([
+      ['Rev', 100],
+      ['Exp', -30],
+    ]);
+
     // Logging directly on a derived tracker is a 400.
     const logged = await api.post(`/api/trackers/${profit.id}/entries`, { value: 5 });
     expect(logged.status).toBe(400);

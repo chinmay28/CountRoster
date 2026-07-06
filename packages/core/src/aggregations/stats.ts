@@ -29,6 +29,19 @@ export interface TargetProgress {
   ratio: number | null;
 }
 
+/** One source operand's all-time contribution to a derived tracker's total. */
+export interface CompositionSlice {
+  source_id: string;
+  /** The source tracker's display name and color, for charting. */
+  name: string;
+  color: string;
+  coefficient: number;
+  /** `coefficient × SUM(source entry values)` over all time. */
+  total: number;
+  /** Number of source entries contributing to `total`. */
+  count: number;
+}
+
 export interface StatsService {
   /** Sum entry values into period buckets spanning [range.start, range.end). */
   bucket(
@@ -42,6 +55,12 @@ export interface StatsService {
 
   /** Progress toward the tracker's target within its current reset period. */
   targetProgress(trackerId: string, at?: string): Promise<TargetProgress>;
+
+  /**
+   * How a derived tracker's all-time total splits across its source operands,
+   * one slice per link in derivation order. Empty for an ordinary tracker.
+   */
+  composition(trackerId: string): Promise<CompositionSlice[]>;
 }
 
 export function createStatsService(
@@ -203,6 +222,26 @@ class StatsServiceImpl implements StatsService {
     const current = rows[0]?.total ?? 0;
 
     return { target, current, ratio: ratioFor(target, current) };
+  }
+
+  async composition(trackerId: string): Promise<CompositionSlice[]> {
+    // One row per link: the source's identity plus its weighted entry sum.
+    // LEFT JOIN keeps sources with no entries (a 0-total slice, count 0).
+    return this.storage.query<CompositionSlice>(
+      `SELECT l.source_id AS source_id,
+              s.name AS name,
+              s.color AS color,
+              l.coefficient AS coefficient,
+              l.coefficient * COALESCE(SUM(e.value), 0) AS total,
+              COUNT(e.id) AS count
+         FROM tracker_links l
+         JOIN trackers s ON s.id = l.source_id
+         LEFT JOIN entries e ON e.tracker_id = l.source_id
+        WHERE l.tracker_id = ?
+        GROUP BY l.id
+        ORDER BY l.sort_order ASC, l.created_at ASC`,
+      [trackerId],
+    );
   }
 }
 
