@@ -861,6 +861,11 @@ a {
   font-size: 0.85rem;
   margin: 0 0 0.25rem;
 }
+/* Pinch-to-zoom surface around the snapshot chart: keep one-finger vertical
+   scrolling native, but claim two-finger gestures for the chart zoom. */
+.stats__zoomable {
+  touch-action: pan-y;
+}
 .stat-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

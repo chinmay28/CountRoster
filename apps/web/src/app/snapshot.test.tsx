@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { CoreValueProvider } from './CoreContext.tsx';
@@ -131,6 +131,60 @@ describe('snapshot tracker detail page', () => {
 
     // And back out to everything.
     await userEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(await screen.findByText(/all history · 3 readings/)).toBeInTheDocument();
+  });
+
+  it('pinch gestures zoom the level chart in and out', async () => {
+    const tracker = await seedSnapshot(test);
+    renderApp(test, `/trackers/${tracker.id}`);
+
+    await screen.findByRole('img', { name: /net worth level over time/i });
+    const surface = document.querySelector('.stats__zoomable') as HTMLElement;
+
+    // Two fingers land 100px apart, then spread to 200px: one full halving
+    // of the window (log2(200/100) = 1) — the oldest reading drops out.
+    fireEvent.touchStart(surface, {
+      touches: [
+        { clientX: 100, clientY: 100 },
+        { clientX: 200, clientY: 100 },
+      ],
+    });
+    fireEvent.touchMove(surface, {
+      touches: [
+        { clientX: 50, clientY: 100 },
+        { clientX: 250, clientY: 100 },
+      ],
+    });
+    fireEvent.touchEnd(surface, { touches: [] });
+    expect(
+      await screen.findByText(/zoomed to the latest 2 of 3 readings/),
+    ).toBeInTheDocument();
+
+    // Pinching back in (fingers converge) widens the window to everything.
+    fireEvent.touchStart(surface, {
+      touches: [
+        { clientX: 50, clientY: 100 },
+        { clientX: 250, clientY: 100 },
+      ],
+    });
+    fireEvent.touchMove(surface, {
+      touches: [
+        { clientX: 100, clientY: 100 },
+        { clientX: 200, clientY: 100 },
+      ],
+    });
+    fireEvent.touchEnd(surface, { touches: [] });
+    expect(await screen.findByText(/all history · 3 readings/)).toBeInTheDocument();
+
+    // Ctrl+scroll — the wheel event a desktop trackpad pinch produces —
+    // zooms too; a plain scroll without ctrl must not.
+    fireEvent.wheel(surface, { deltaY: -100, ctrlKey: true });
+    expect(
+      await screen.findByText(/zoomed to the latest 2 of 3 readings/),
+    ).toBeInTheDocument();
+    fireEvent.wheel(surface, { deltaY: 500, ctrlKey: false });
+    expect(screen.getByText(/zoomed to the latest 2 of 3 readings/)).toBeInTheDocument();
+    fireEvent.wheel(surface, { deltaY: 500, ctrlKey: true });
     expect(await screen.findByText(/all history · 3 readings/)).toBeInTheDocument();
   });
 });
