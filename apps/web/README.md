@@ -71,13 +71,13 @@ entry edit & delete (paginated, searchable by an entry's note), and editable
 journal notes with per-note edit history. A tracker's "Reset every" can also be
 "Not applicable — snapshot stat" for point-in-time levels like net worth: the
 latest reading is the headline, stats show the all-time high/low, and trends
-draw a level line instead of bars.
+draw a zoomable level line through the raw readings instead of period buckets.
 
 Visualizations & organization:
 
-- **Trends** — a bucketed chart (day/week/month/year) with axes and tooltips —
-  bars of totals, or a level line for snapshot stats — plus a day-streak or
-  all-time high/low card and a target-progress bar, on each tracker.
+- **Trends** — per tracker: a bucketed bar chart (day/week/month/year) with a
+  day-streak card and a target-progress bar — or, for snapshot stats, a
+  time-axis line of readings with zoom in/out and an all-time high/low card.
 - **Compare** (`/compare`) — a multi-series line chart comparing several trackers
   over time, with a tracker picker and period toggle.
 - **Groups** (`/groups`) — organize trackers into groups; the home screen renders
