@@ -100,7 +100,7 @@ describe('snapshot tracker detail page', () => {
     expect(screen.getByText(/snapshot stat/)).toBeInTheDocument();
   });
 
-  it('renders the trends panel with an all-time high/low card and a level chart', async () => {
+  it('renders a zoomable level chart in trends, without period buckets', async () => {
     const tracker = await seedSnapshot(test);
     renderApp(test, `/trackers/${tracker.id}`);
 
@@ -108,12 +108,30 @@ describe('snapshot tracker detail page', () => {
     expect(await screen.findByText(/all-time high · all-time low/)).toBeInTheDocument();
     expect(screen.queryByText(/day streak/)).not.toBeInTheDocument();
 
-    // The chart renders levels (line), not totals (bars). Default period is
-    // Day: the readings are outside the last 14 days, so switch to Year.
-    await userEvent.click(screen.getByRole('button', { name: 'Year' }));
+    // No Day/Week/Month/Year toggle — levels aren't bucketed into periods.
+    for (const label of ['Day', 'Week', 'Month', 'Year']) {
+      expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
+    }
+
+    // All three readings chart on a continuous time axis.
     expect(
-      await screen.findByRole('img', { name: /net worth levels by year/i }),
+      await screen.findByRole('img', { name: /net worth level over time/i }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/all history · 3 readings/)).toBeInTheDocument();
+
+    // Zoom out is a no-op at full history; zoom in halves the window
+    // (anchored at the latest reading), dropping the oldest reading.
+    expect(screen.getByRole('button', { name: 'Zoom out' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(
+      await screen.findByText(/zoomed to the latest 2 of 3 readings/),
+    ).toBeInTheDocument();
+    // Two readings left: nothing more to zoom into.
+    expect(screen.getByRole('button', { name: 'Zoom in' })).toBeDisabled();
+
+    // And back out to everything.
+    await userEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(await screen.findByText(/all history · 3 readings/)).toBeInTheDocument();
   });
 });
 
