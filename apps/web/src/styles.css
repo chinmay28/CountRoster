@@ -470,6 +470,56 @@ a {
   color: var(--muted);
 }
 
+/* "Composition" panel on the detail page: donut + per-source legend. */
+.composition {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+.composition__subtitle {
+  margin-top: -0.5rem;
+  font-size: 0.85rem;
+}
+.composition__donut {
+  width: 160px;
+  height: 160px;
+  flex-shrink: 0;
+}
+.composition__donut-total {
+  fill: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+}
+.composition__donut-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.composition__legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 12rem;
+}
+.composition__item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.composition__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  align-self: center;
+}
+.composition__share {
+  font-size: 0.85rem;
+}
+
 /* Detail page */
 .detail {
   display: grid;

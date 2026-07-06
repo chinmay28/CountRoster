@@ -12,6 +12,7 @@ import type {
   StatsService,
   StatBucket,
   TargetProgress,
+  CompositionSlice,
   TimeRange,
   BucketPeriod,
   TrackerInput,
@@ -172,6 +173,8 @@ export function createApiClient(baseUrl = '/api'): ApiCore {
         'GET',
         `/trackers/${trackerId}/stats/target-progress${qs({ at })}`,
       ),
+    composition: (trackerId) =>
+      request<CompositionSlice[]>('GET', `/trackers/${trackerId}/stats/composition`),
   };
 
   return { trackers, entries, notes, groups, stats };

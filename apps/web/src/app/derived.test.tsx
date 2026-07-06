@@ -80,6 +80,68 @@ describe('derived tracker detail', () => {
   });
 });
 
+describe('derived tracker composition', () => {
+  it('shows a donut with per-source percentages for an additive derivation', async () => {
+    const food = await test.createTracker({ name: 'Food', kind: 'number' });
+    const drinks = await test.createTracker({ name: 'Drinks', kind: 'number' });
+    await test.core.entries.log(food.id, { value: 300 });
+    await test.core.entries.log(drinks.id, { value: 100 });
+    const calories = await test.createTracker({
+      name: 'Calories',
+      kind: 'number',
+      links: [
+        { source_id: food.id, coefficient: 1 },
+        { source_id: drinks.id, coefficient: 1 },
+      ],
+    });
+    renderApp(test, `/trackers/${calories.id}`);
+
+    const heading = await screen.findByRole('heading', { name: /composition/i });
+    const section = heading.closest('section')!;
+    // Legend carries each source with its share of the 400 total.
+    expect(within(section).getByRole('link', { name: 'Food' })).toBeInTheDocument();
+    expect(within(section).getByText(/300 · 75%/)).toBeInTheDocument();
+    expect(within(section).getByText(/100 · 25%/)).toBeInTheDocument();
+    // The donut itself, with an accessible summary.
+    expect(
+      within(section).getByRole('img', { name: /Food 75%.*Drinks 25%/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('sizes slices by absolute movement and shows the net for a subtractive derivation', async () => {
+    const { profit } = await profitFixture();
+    renderApp(test, `/trackers/${profit.id}`);
+
+    const heading = await screen.findByRole('heading', { name: /composition/i });
+    const section = heading.closest('section')!;
+    // Revenue +150 and Expenses −30 move the total by 180 in all: 83% / 17%,
+    // with the subtraction kept signed in the legend.
+    expect(within(section).getByText(/150 · 83%/)).toBeInTheDocument();
+    expect(within(section).getByText(/-30 · 17%/)).toBeInTheDocument();
+    // The donut announces the subtraction and centers on the net total (120).
+    const donut = within(section).getByRole('img', {
+      name: /Revenue 83%.*Expenses subtracts 17%/,
+    });
+    expect(donut).toHaveTextContent('120');
+  });
+
+  it('hides the composition section for a single-source derivation', async () => {
+    const steps = await test.createTracker({ name: 'Steps', kind: 'number' });
+    await test.core.entries.log(steps.id, { value: 4000 });
+    const doubled = await test.createTracker({
+      name: 'Doubled steps',
+      kind: 'number',
+      links: [{ source_id: steps.id, coefficient: 2 }],
+    });
+    renderApp(test, `/trackers/${doubled.id}`);
+
+    // Wait for the page to settle, then confirm the section never appeared —
+    // one operand has no breakdown to show.
+    await screen.findByRole('heading', { name: /derived from/i });
+    expect(screen.queryByRole('heading', { name: /composition/i })).toBeNull();
+  });
+});
+
 describe('derived tracker creation', () => {
   it('creates a derived tracker through the form', async () => {
     const revenue = await test.createTracker({ name: 'Revenue', kind: 'number' });

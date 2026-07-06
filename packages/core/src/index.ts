@@ -71,6 +71,7 @@ export type {
   StatsService,
   StatBucket,
   TargetProgress,
+  CompositionSlice,
 } from './aggregations/stats.js';
 
 // Aggregation primitives
