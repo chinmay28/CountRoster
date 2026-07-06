@@ -4,9 +4,49 @@ import {
   sumValues,
   sumInRange,
   resetPeriodRange,
+  resetPeriodOptions,
   windowStats,
   RESET_PERIOD_LABEL,
 } from './range.ts';
+
+describe('resetPeriodOptions', () => {
+  const now = new Date('2026-05-20T14:00:00');
+
+  it('is empty for never (no reset window) and for no entries', () => {
+    expect(resetPeriodOptions('never', 1, '2024-01-01T00:00:00.000-07:00', now)).toEqual([]);
+    expect(resetPeriodOptions('yearly', 1, undefined, now)).toEqual([]);
+  });
+
+  it('yearly walks back to the year of the first entry', () => {
+    const opts = resetPeriodOptions('yearly', 1, '2024-06-01T00:00:00.000-07:00', now);
+    expect(opts.map((o) => o.label)).toEqual(['This year', 'Last year', '2024']);
+    expect(opts[0]!.range.start).toMatch(/^2026-01-01T00:00:00/);
+    expect(opts[0]!.range.end).toMatch(/^2027-01-01T00:00:00/);
+    expect(opts[2]!.range.start).toMatch(/^2024-01-01T00:00:00/);
+  });
+
+  it('monthly labels older buckets by month and year', () => {
+    const opts = resetPeriodOptions('monthly', 1, '2026-02-10T00:00:00', now);
+    expect(opts.map((o) => o.label)).toEqual([
+      'This month',
+      'Last month',
+      'Mar 2026',
+      'Feb 2026',
+    ]);
+    expect(opts[3]!.range.start).toMatch(/^2026-02-01T00:00:00/);
+    expect(opts[3]!.range.end).toMatch(/^2026-03-01T00:00:00/);
+  });
+
+  it('daily uses Today/Yesterday then dates', () => {
+    const opts = resetPeriodOptions('daily', 1, '2026-05-18T09:00:00', now);
+    expect(opts.map((o) => o.label)).toEqual(['Today', 'Yesterday', 'May 18']);
+  });
+
+  it('caps how far back the menu reaches', () => {
+    const opts = resetPeriodOptions('daily', 1, '2020-01-01T00:00:00', now, 10);
+    expect(opts).toHaveLength(10);
+  });
+});
 
 describe('todayRange', () => {
   it('spans local midnight to next midnight, in local-offset ISO', () => {

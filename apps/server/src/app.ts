@@ -167,7 +167,7 @@ export function buildApp(
     res.json(await core.stats.targetProgress(req.params.id, at));
   });
   api.get('/trackers/:id/stats/composition', async (req, res) => {
-    res.json(await core.stats.composition(req.params.id));
+    res.json(await core.stats.composition(req.params.id, timeRange(req)));
   });
 
   // ---- Backup -------------------------------------------------------------

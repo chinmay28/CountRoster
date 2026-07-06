@@ -176,6 +176,88 @@ export function snapshotStats(entries: readonly ValuedEntry[]): WindowStat[] {
   ];
 }
 
+/** One pickable window in the composition period dropdown. */
+export interface PeriodOption {
+  /** Bucket start in local-offset ISO — doubles as the `<option>` value. */
+  value: string;
+  /** Human label: "This year", "Last month", "Apr 2026", "Week of May 11"… */
+  label: string;
+  range: Required<TimeRange>;
+}
+
+/** Relative names for the two most recent buckets of each period. */
+const RELATIVE_LABELS: Record<BucketPeriod, readonly [string, string]> = {
+  day: ['Today', 'Yesterday'],
+  week: ['This week', 'Last week'],
+  month: ['This month', 'Last month'],
+  year: ['This year', 'Last year'],
+};
+
+/**
+ * The pickable reset windows for a tracker's composition breakdown: the
+ * current bucket of its reset period, the previous one, and every earlier
+ * bucket back to the one containing `earliest` (its first entry) — newest
+ * first, capped at `max` so a years-old daily tracker can't flood the menu.
+ * Empty for `'never'` (no reset window) or when nothing has been logged.
+ */
+export function resetPeriodOptions(
+  resetPeriod: ResetPeriod,
+  weekStart: WeekStart = 1,
+  earliest?: string,
+  now: Date = new Date(),
+  max = 120,
+): PeriodOption[] {
+  if (resetPeriod === 'never' || !earliest) return [];
+  const earliestMs = new Date(earliest).getTime();
+  if (Number.isNaN(earliestMs)) return [];
+
+  const period = RESET_TO_BUCKET[resetPeriod];
+  const [current, previous] = RELATIVE_LABELS[period];
+  const options: PeriodOption[] = [];
+  let start = bucketStart(now, period, weekStart);
+  while (options.length < max) {
+    const end = bucketEnd(start, period, weekStart);
+    options.push({
+      value: toLocalISO(start),
+      label:
+        options.length === 0
+          ? current
+          : options.length === 1
+            ? previous
+            : bucketDateLabel(start, period, now),
+      range: { start: toLocalISO(start), end: toLocalISO(end) },
+    });
+    if (start.getTime() <= earliestMs) break;
+    // Step into the previous bucket, then normalize to its start.
+    start = bucketStart(new Date(start.getTime() - 1), period, weekStart);
+  }
+  return options;
+}
+
+/** Date-based label for a bucket beyond "this"/"last", e.g. "Apr 2026". */
+function bucketDateLabel(start: Date, period: BucketPeriod, now: Date): string {
+  const yearOpt =
+    start.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' as const };
+  switch (period) {
+    case 'year':
+      return String(start.getFullYear());
+    case 'month':
+      return start.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+    case 'week':
+      return `Week of ${start.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        ...yearOpt,
+      })}`;
+    case 'day':
+      return start.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        ...yearOpt,
+      });
+  }
+}
+
 /**
  * The [start, end) ISO range covering the most recent `count` buckets of the
  * given `period`, up to and including the in-progress one. Boundaries are

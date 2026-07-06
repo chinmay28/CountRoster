@@ -145,6 +145,38 @@ describe('Derived trackers', () => {
     });
   });
 
+  it('composition can be scoped to a time range', async () => {
+    const { app, revenue, profit } = await profitSetup();
+    // A revenue entry the year before; the fixture's entries are all in 2026.
+    await app.entries.log(revenue.id, {
+      value: 999,
+      occurred_at: '2025-06-15T12:00:00.000-07:00',
+    });
+
+    const thisYear = await app.stats.composition(profit.id, {
+      start: '2026-01-01T00:00:00.000-07:00',
+      end: '2027-01-01T00:00:00.000-07:00',
+    });
+    expect(thisYear.map((s) => [s.total, s.count])).toEqual([
+      [150, 2],
+      [-30, 1],
+    ]);
+
+    const lastYear = await app.stats.composition(profit.id, {
+      start: '2025-01-01T00:00:00.000-07:00',
+      end: '2026-01-01T00:00:00.000-07:00',
+    });
+    // The out-of-range source still appears, as a zero slice.
+    expect(lastYear.map((s) => [s.total, s.count])).toEqual([
+      [999, 1],
+      [0, 0],
+    ]);
+
+    // No range keeps the all-time behavior.
+    const all = await app.stats.composition(profit.id);
+    expect(all.map((s) => s.total)).toEqual([1149, -30]);
+  });
+
   it('composition is empty for an ordinary tracker', async () => {
     const { app, revenue } = await profitSetup();
     expect(await app.stats.composition(revenue.id)).toEqual([]);

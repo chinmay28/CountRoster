@@ -207,6 +207,14 @@ describe('CountRoster API', () => {
       ['Exp', -30],
     ]);
 
+    // …and honors start/end query params (a window before any entry is all zeros).
+    const scoped = await (
+      await api.get(
+        `/api/trackers/${profit.id}/stats/composition?end=2000-01-01T00:00:00.000Z`,
+      )
+    ).json();
+    expect(scoped.map((s: { total: number }) => s.total)).toEqual([0, 0]);
+
     // Logging directly on a derived tracker is a 400.
     const logged = await api.post(`/api/trackers/${profit.id}/entries`, { value: 5 });
     expect(logged.status).toBe(400);

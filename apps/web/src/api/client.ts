@@ -173,8 +173,11 @@ export function createApiClient(baseUrl = '/api'): ApiCore {
         'GET',
         `/trackers/${trackerId}/stats/target-progress${qs({ at })}`,
       ),
-    composition: (trackerId) =>
-      request<CompositionSlice[]>('GET', `/trackers/${trackerId}/stats/composition`),
+    composition: (trackerId, range) =>
+      request<CompositionSlice[]>(
+        'GET',
+        `/trackers/${trackerId}/stats/composition${rangeQuery(range)}`,
+      ),
   };
 
   return { trackers, entries, notes, groups, stats };

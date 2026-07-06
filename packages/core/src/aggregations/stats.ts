@@ -1,6 +1,7 @@
 import type { SqlParam, Storage } from '../storage/adapter.js';
 import type { Clock } from '../time.js';
 import type { Tracker } from '../schema/tables.js';
+import type { TimeRange } from '../domain/entries.js';
 import { effectiveEntrySource } from '../domain/derived.js';
 import {
   bucketStart,
@@ -29,14 +30,14 @@ export interface TargetProgress {
   ratio: number | null;
 }
 
-/** One source operand's all-time contribution to a derived tracker's total. */
+/** One source operand's contribution to a derived tracker's total. */
 export interface CompositionSlice {
   source_id: string;
   /** The source tracker's display name and color, for charting. */
   name: string;
   color: string;
   coefficient: number;
-  /** `coefficient × SUM(source entry values)` over all time. */
+  /** `coefficient × SUM(source entry values)` over the requested range. */
   total: number;
   /** Number of source entries contributing to `total`. */
   count: number;
@@ -57,10 +58,11 @@ export interface StatsService {
   targetProgress(trackerId: string, at?: string): Promise<TargetProgress>;
 
   /**
-   * How a derived tracker's all-time total splits across its source operands,
-   * one slice per link in derivation order. Empty for an ordinary tracker.
+   * How a derived tracker's total splits across its source operands, one
+   * slice per link in derivation order — all time by default, or scoped to
+   * `range` (e.g. one reset window). Empty for an ordinary tracker.
    */
-  composition(trackerId: string): Promise<CompositionSlice[]>;
+  composition(trackerId: string, range?: TimeRange): Promise<CompositionSlice[]>;
 }
 
 export function createStatsService(
@@ -224,9 +226,26 @@ class StatsServiceImpl implements StatsService {
     return { target, current, ratio: ratioFor(target, current) };
   }
 
-  async composition(trackerId: string): Promise<CompositionSlice[]> {
+  async composition(
+    trackerId: string,
+    range: TimeRange = {},
+  ): Promise<CompositionSlice[]> {
     // One row per link: the source's identity plus its weighted entry sum.
-    // LEFT JOIN keeps sources with no entries (a 0-total slice, count 0).
+    // LEFT JOIN keeps sources with no entries in range (a 0-total slice,
+    // count 0), which is why the range filter lives in the ON clause — in a
+    // WHERE it would drop those rows. Bounds compare by absolute instant
+    // (julianday), matching EntryService.forTracker: occurred_at carries the
+    // *server's* offset while a client may ask in a different one.
+    const on: string[] = ['e.tracker_id = l.source_id'];
+    const params: SqlParam[] = [];
+    if (range.start !== undefined) {
+      on.push('julianday(e.occurred_at) >= julianday(?)');
+      params.push(range.start);
+    }
+    if (range.end !== undefined) {
+      on.push('julianday(e.occurred_at) < julianday(?)');
+      params.push(range.end);
+    }
     return this.storage.query<CompositionSlice>(
       `SELECT l.source_id AS source_id,
               s.name AS name,
@@ -236,11 +255,11 @@ class StatsServiceImpl implements StatsService {
               COUNT(e.id) AS count
          FROM tracker_links l
          JOIN trackers s ON s.id = l.source_id
-         LEFT JOIN entries e ON e.tracker_id = l.source_id
+         LEFT JOIN entries e ON ${on.join(' AND ')}
         WHERE l.tracker_id = ?
         GROUP BY l.id
         ORDER BY l.sort_order ASC, l.created_at ASC`,
-      [trackerId],
+      [...params, trackerId],
     );
   }
 }
