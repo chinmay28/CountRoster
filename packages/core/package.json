@@ -2,7 +2,7 @@
   "name": "@countroster/core",
   "version": "0.0.0",
   "private": true,
-  "description": "Shared domain layer for countroster: schema, services, aggregations, backup. Platform-agnostic.",
+  "description": "TypeScript mirror of the CountRoster domain: types for the web client and an in-memory test double for its component tests. The production implementation lives in server/ (Go).",
   "license": "AGPL-3.0-only",
   "author": "Chinmay Manjunath",
   "type": "module",

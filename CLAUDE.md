@@ -6,109 +6,114 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CountRoster is an "anything tracker" (habits, meds, symptoms, spending, moods). It is a **client-server** application: a thin browser client over a shared backend, so every device — desktop or mobile — reads and writes the same data.
 
-- `packages/core` (`@countroster/core`) — the platform-agnostic TypeScript domain layer (schema, services, aggregations, backup). Runs **on the server**.
-- `apps/server` (`@countroster/server`) — an Express REST API that wires the core over a `node:sqlite` file adapter. This SQLite file is the single shared source of truth.
+- `server/` — the **Go** backend: domain layer (schema, services, aggregations, backup) + REST API over a `modernc.org/sqlite` file. Compiles to **one static binary** that also serves the PWA. This SQLite file is the single shared source of truth.
 - `apps/web` (`@countroster/web`) — a mobile-friendly, installable **PWA** (Vite + React) that talks to the server over HTTP and behaves like an app.
+- `packages/core` (`@countroster/core`) — the *original* TypeScript domain layer, now retained **only** as the web client's type source and in-memory test double. It is not the production path.
 
-> **History:** this project began *local-first* (per-device SQLite; web via sqlite-wasm/OPFS; Expo mobile shells). It was deliberately pivoted to client-server so all clients share one dataset. Parts of `DESIGN.md`/`DEPLOYMENT.md` still describe the old model — they're marked where superseded. There is **no auth** by design: the server is meant to run on a trusted network (LAN/Tailscale/VPN).
+> **History:** this project began *local-first* (per-device SQLite; Expo shells), pivoted to client-server on Node/Express/TypeScript, and was then **rewritten in Go** with zero contract changes — the REST API, SQL schema, on-disk SQLite file, and backup format are bit-compatible with the TS implementation, and the UI didn't change at all. Parts of `DESIGN.md`/`DEPLOYMENT.md` describe the older eras — they're marked where superseded. There is **no auth** by design: the server runs on a trusted network (LAN/Tailscale/VPN).
 
-See `DESIGN.md` for architecture, `apps/server/README.md` and `apps/web/README.md` for shell specifics.
+See `DESIGN.md` for architecture, `server/README.md` and `apps/web/README.md` for specifics.
 
 ## Commands
 
-Run from the repo root (npm workspaces fan out to `packages/*` and `apps/*`):
+Run from the repo root:
 
 ```bash
-npm install          # requires Node >= 20.10; CI/dev uses Node 22
-npm test             # vitest run across all packages
-npm run build        # build every workspace (core: tsc; server: tsc; web: vite)
-npm run typecheck    # tsc --noEmit across workspaces
+npm install          # Node >= 20.10 (build/dev tooling for the TS workspaces)
+npm test             # vitest (core + web) AND `go test ./...` (server)
+npm run build        # TS workspaces + `go build` → server/bin/countroster
+npm run typecheck    # tsc --noEmit + `go vet`
 ```
 
-Run the app in development (two processes; **build core first** so its `dist/` exists):
+Go-only iteration (fast):
 
 ```bash
-npm run build --workspace @countroster/core         # the server & web import the compiled core
-npm run dev   --workspace @countroster/server        # API on http://localhost:8787 (COUNTROSTER_DB, PORT, HOST envs)
-npm run dev   --workspace @countroster/web           # PWA on http://localhost:5173, proxies /api → server
+cd server
+go test ./...        # the authoritative domain + API suites
+go build ./...       # compile check
 ```
 
-In production, `apps/server` serves the built `apps/web/dist` from the same origin (SPA fallback), so it's one process and no CORS.
+Run the app in development (two processes; **build core first** so the web client's imported types exist):
 
-Single core test: `npx vitest run test/entries.test.ts` (or `-t "name"`) inside `packages/core`.
+```bash
+npm run build --workspace @countroster/core          # web imports the compiled core's types
+(cd server && go run ./cmd/countroster)               # API on http://localhost:8787 (COUNTROSTER_DB, PORT, HOST envs)
+npm run dev   --workspace @countroster/web            # PWA on http://localhost:5173, proxies /api → server
+```
 
-There is no linter/formatter configured. TypeScript itself (strict mode) is the static-analysis gate.
+In production the Go binary serves the built `apps/web/dist` (embedded at build time or via `WEB_DIST`) from the same origin with an SPA fallback — one process, no CORS.
+
+Single Go package test: `go test ./internal/core -run TestStreak` inside `server/`. Single web test: `npx vitest run src/app/app.test.tsx` inside `apps/web`.
+
+There is no linter/formatter beyond `gofmt`/`go vet` (server) and TypeScript strict mode (web).
 
 ## Architecture
 
 ```
-browser PWA (apps/web)  ──HTTP/REST──>  Express API (apps/server)  ──>  @countroster/core  ──>  Storage adapter  ──>  node:sqlite file
+browser PWA (apps/web)  ──HTTP/REST──>  Go server (server/)  ──>  SQLite file
 ```
 
-The client holds **no business logic** — it's a typed HTTP client whose service objects (`apps/web/src/api/client.ts`) mirror the core's service interfaces, so React pages call `core.trackers.list()` etc. regardless of whether that's a local core (tests) or the API client (production). All domain logic lives in `@countroster/core` and runs server-side.
+The client holds **no business logic** — it's a typed HTTP client whose service objects (`apps/web/src/api/client.ts`) mirror the domain service interfaces, so React pages call `core.trackers.list()` etc. regardless of whether that's a local TS core (component tests) or the API client (production). All domain logic lives in `server/internal/core` and runs server-side.
+
+### The wire contract is frozen
+
+The PWA is compiled against the REST API's exact shapes: snake_case JSON field names, `0 | 1` integer flags (`is_derived`, `is_hidden`, `is_snapshot`, `week_start`), explicit `null`s, `{"error": …}` error bodies, statuses 201/204/400/404/409. `server/internal/api/api_test.go` pins the contract; change it only together with `apps/web/src/api/client.ts` and the TS types in `packages/core`.
 
 ### The Storage contract is SQL
 
-`Storage` (`src/storage/adapter.ts`) is a ~4-method interface: `exec`, `query<T>`, `transaction`, `close`. **Domain services write raw parameterized SQL; the adapter never parses or rewrites it.** SQL *is* the contract between the domain and whatever engine provides it:
-
-- `MemoryAdapter` (`packages/core/src/storage/memory.ts`) — `node:sqlite`, `:memory:`, used by tests.
-- `NodeSqliteAdapter` (`apps/server/src/db/adapter.ts`) — `node:sqlite`, file-backed; the production engine. Same engine as the test adapter, just on disk.
-- Both load `node:sqlite` via `process.getBuiltinModule('node:sqlite')` (not a static import) to dodge bundlers that choke on `node:sqlite`. The `sqlite-expo.ts`/`sqlite-wasm.ts` sketches and the `testing.ts`/`sqlite.ts` `better-sqlite3` comments are stale relics of the local-first era.
+`storage.Storage` (`server/internal/storage`) is a 4-method interface: `Exec`, `Query`, `Transaction`, `Close`. **Domain services write raw parameterized SQL; the adapter never parses or rewrites it.** SQL *is* the contract. The engine is `modernc.org/sqlite` (pure Go — this is what keeps the binary CGO-free/static), file-backed in production, `:memory:` in tests. WAL mode, foreign keys ON, single pooled connection.
 
 ### Composition root
 
-`createApp(storage, { clock? })` in `src/createApp.ts` wires every service over one `Storage` and returns a `CountRosterCore` (`trackers`, `entries`, `notes`, `groups`, `stats`, `backup`, `migrations`). Call it once at startup **after opening the adapter**, then call `app.migrations.run()` to apply pending migrations. The server's `boot()` (`apps/server/src/boot.ts`) does exactly this. `src/index.ts` is the curated public API — anything the server/client need must be re-exported there.
+`cmd/countroster/main.go` does: open storage → `migrate.Run` → `core.New(storage, clock)` → `api.New(...)` → serve. `core.App` bundles the services (`Trackers`, `Entries`, `Notes`, `Groups`, `Stats`); backup is `backup.Service`.
 
-### Server (`apps/server`)
+### Service layer (`server/internal/core`)
 
-Express 5, ESM, `NodeNext` module resolution (so the compiled `dist/` runs under Node ESM). `buildApp(core, opts)` (`src/app.ts`) registers the REST routes and a single error middleware that maps `ZodError → 400` and any `*NotFoundError → 404`; everything else is 500. `boot()` opens the file adapter, builds the core, runs migrations. `server.ts` listens and, when `apps/web/dist` exists, serves it from the same origin with an SPA fallback. Endpoints map 1:1 to core services (e.g. `POST /api/trackers`, `GET /api/trackers/:id/stats/streak`, `GET /api/backup/bundle`). `COUNTROSTER_DB=:memory:` is honored as a SQLite sentinel; tests boot against it.
+Pattern across all services (ported from the TS core):
 
-### Client (`apps/web`)
+- **Validate inputs** at the top of write methods via the parsers in `validate.go` (a port of the Zod schemas — same defaults, same limits, presence-aware so PATCH distinguishes absent / null / value).
+- **Insert → re-`Get()` → return** the persisted row, so callers always see DB-resolved defaults.
+- IDs come from `ids.New()` (UUIDv7 — timestamp-sortable, monotonic within a millisecond; SQL tie-breaks on `id` rely on this).
+- **Never call `time.Now()` for persisted timestamps.** Go through the injected `Clock` (`internal/timeutil`) so tests are deterministic. Timestamps are stored as **ISO 8601 with a local offset** (`ToLocalISO`), not UTC `Z` — the offset is needed for correct local-day bucketing. SQL range comparisons use `julianday()` so mixed offsets compare as instants.
 
-A thin PWA. `src/api/client.ts` builds an `ApiCore` whose `trackers/entries/notes/groups/stats` objects implement the same interfaces the core exports, each method a `fetch`. `.get(id)` lookups return `null` on 404. `CoreContext` provides this client (production) or a real `MemoryAdapter`-backed core (tests) — they're interchangeable because both satisfy `ApiCore`. **Keep the client's method signatures in lockstep with the core service interfaces**, or the swap breaks. Backup is not part of `ApiCore` (binary streams); it's exposed via standalone helpers (`backupBundleUrl`, `importBackup`). vite-plugin-pwa supplies the manifest/service worker; the SW must **not** cache `/api`.
-
-### Service layer (`src/domain/`)
-
-Each service is `createXService(storage, clock)` returning a small interface. Pattern across all of them:
-
-- **Validate inputs with Zod** (`src/schema/validators.ts`) at the top of write methods, e.g. `entryLogInputSchema.parse(rawInput)`. Reads are trusted: rows come back typed via `query<Entry>` and cast, matching `src/schema/tables.ts`.
-- **Insert → re-`get()` → return** the persisted row, so callers always see DB-resolved defaults.
-- IDs come from `newId()` (`src/ids.ts`, UUIDv7 — timestamp-sortable).
-- **Never call `Date.now()` / `new Date()` for persisted timestamps.** Go through the injected `Clock` (`src/time.ts`) so tests are deterministic. Timestamps are stored as **ISO 8601 with a local offset** (`toLocalISO`), not UTC `Z` — the offset is needed for correct local-day bucketing.
-
-All services are now fully implemented: `trackers`, `entries`, `notes`, `groups` (CRUD + membership), `stats` (`src/aggregations/stats.ts`: `bucket`/`streak`/`targetProgress`), and `backup` (`src/backup/`). The interfaces in each module are the spec. (Reminders were removed as a feature; the `reminders` table remains in the schema because migrations are append-only and old backups must round-trip.)
+Errors map to HTTP in `api.handleErr`: `ValidationError`→400, `NotFoundError`→404, `DerivedTrackerError`→400, `TrackerInUseError`→409, anything else→500.
 
 ### Notes carry an append-only edit log
 
-`notes.edit()` runs in a `storage.transaction`: it inserts the *previous* body into `note_edits` before updating the row, and no-ops if the body is unchanged. Entries and notes are hard-deleted; trackers soft-delete via `archived_at`. History is preserved only through `note_edits`.
+`Notes.Update` runs in a transaction: it inserts the *previous* body into `note_edits` before updating the row, and no-ops if nothing changed. Entries and notes are hard-deleted; trackers soft-delete via `archived_at`.
 
 ### Migrations are append-only
 
-`src/schema/migrations/` holds numbered migration objects (embedded SQL template literals, not `.sql` files, for cross-platform portability). `index.ts` exports the ordered `MIGRATIONS` array and `LATEST_VERSION`. The runner (`src/migrations/runner.ts`) reads `schema_version` from the `app_meta` table, applies pending migrations in one transaction, and is idempotent.
+`server/internal/migrate` holds the numbered migrations (SQL copied **verbatim** from the TS core — both implementations must produce identical databases) and the runner (reads `schema_version` from `app_meta`, applies pending migrations in one transaction, idempotent).
 
-**Never edit a shipped migration — add a new one.** When you change the schema, update three things in lockstep: the migration SQL, the TS types in `src/schema/tables.ts`, and the Zod validators in `src/schema/validators.ts`.
+**Never edit a shipped migration — add a new one.** When you change the schema, update in lockstep: the migration SQL, the row structs in `internal/core/types.go`, the validators in `internal/core/validate.go`, the backup table list in `internal/backup/tables.go`, **and** the TS mirrors (`packages/core/src/schema/{tables,validators}.ts` + a matching TS migration) so the web test double stays faithful.
+
+### Backup format is cross-implementation
+
+`internal/backup` produces/consumes the `.countroster.zip` bundle (manifest + `all.json` + CSVs, stored uncompressed). The manifest checksum is SHA-256 over the **JavaScript-canonical** JSON serialization of the tables — `internal/jsjson` reproduces `JSON.stringify` byte-for-byte (ECMA number formatting, minimal escaping, insertion-ordered keys). Golden fixtures in `internal/backup/testdata/` (a bundle exported by the TS implementation) prove bundles round-trip across implementations; don't regenerate them casually. (Reminders were removed as a feature; the `reminders` table remains in the schema because migrations are append-only and old backups must round-trip.)
 
 ### Aggregations
 
-`src/aggregations/periods.ts` (`bucketStart`/`bucketEnd`/`bucketLabel`) is implemented and tested for day/week/month/year bucketing. It currently uses host-local-time JS `Date` math and does **not yet** honor per-tracker `day_start_minute` or custom timezones — that work belongs in this module when added (see DESIGN.md Appendix B).
+`internal/core/periods.go` (`bucketStart`/`bucketEnd`/`bucketLabel`) implements day/week/month/year bucketing in host-local time, mirroring the JS `Date` math of the original. It does **not yet** honor per-tracker `day_start_minute` or custom timezones — that work belongs in this file when added (see DESIGN.md Appendix B).
 
 ## Testing conventions
 
-- Tests live in `packages/core/test/` (excluded from the build). Each test gets a fresh in-memory DB.
-- Use `makeTestApp()` from `test/setup.ts` — it opens a `MemoryAdapter`, builds the app with a **fixed clock**, runs migrations, and exposes `setTime(iso)` to advance time. Default clock is `2026-05-25T12:00:00.000-07:00`.
-- Vitest globals are **off** (`vitest.config.ts`): import `describe/it/expect` explicitly.
-- Note the `.js` extension on relative imports in `.ts` files (e.g. `from '../src/time.js'`) — required by the ESM/`NodeNext`-style module resolution; keep it consistent.
+- Go tests live next to the code (`server/internal/**/*_test.go`), one suite per original vitest file. Each test opens a fresh `:memory:` DB via `newTestApp` (fixed clock `2026-05-25T12:00:00.000-07:00`, advanced with `setTime`).
+- Cross-implementation guarantees are golden-fixture tests: `internal/jsjson` (number/string formatting vs `JSON.stringify`) and `internal/backup` (a Node-exported bundle must import with checksums verifying).
+- Web component tests (`apps/web`) still run against the TS core over a `MemoryAdapter` (`makeTestCore`) — that's why `packages/core` remains. Keep its validators/types in lockstep with the Go ones.
+- TS tests use vitest with globals **off**: import `describe/it/expect` explicitly; note the `.js` extension on relative imports in `.ts` files.
 
 ## Conventions to preserve
 
-- ESM-only (`"type": "module"`). `tsconfig.base.json` is strict with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` — index access yields `T | undefined` (hence the `rows[0]!` / `?? null` patterns), and optional props can't be set to `undefined` explicitly.
-- The core stays platform-agnostic: **no React, no HTTP/Express, no network code** in `packages/core`. HTTP belongs to `apps/server`; React/PWA belongs to `apps/web`. The core reaches outside SQL only through `crypto.subtle` (backup checksums), which exists in both Node and browsers.
-- The server is `NodeNext` (real Node ESM, `.js` import extensions in compiled output); the core and web use `bundler` resolution. Keep imports consistent within each package.
+- The Go server owns all HTTP; **no React or network code in `packages/core`**, no business logic in `apps/web`.
+- `CGO_ENABLED=0` must keep working — don't introduce cgo dependencies; the single-static-binary deploy depends on it.
+- TS workspaces stay ESM-only (`"type": "module"`), strict mode with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
+- The PWA service worker must **not** cache `/api` (see `apps/web/vite.config.ts`).
 
 ## Licensing & contributions
 
 - CountRoster is licensed **`AGPL-3.0-only`** (`LICENSE` is the canonical GNU AGPL-3.0 text). Every workspace `package.json` carries `"license": "AGPL-3.0-only"`; keep that field on any new package you add.
-- **Dependencies must be AGPL-compatible.** The current tree is entirely permissive (MIT/ISC/Apache-2.0/BSD/BlueOak). Do **not** add a dependency under a GPL-incompatible or proprietary license without flagging it — it can taint the whole project. Permissive licenses (MIT/Apache-2.0/BSD/ISC) are fine; another copyleft license needs review.
+- **Dependencies must be AGPL-compatible.** The current tree is entirely permissive (MIT/ISC/Apache-2.0/BSD/BlueOak; the Go module tree is BSD-3-Clause). Do **not** add a dependency under a GPL-incompatible or proprietary license without flagging it — it can taint the whole project. Permissive licenses (MIT/Apache-2.0/BSD/ISC) are fine; another copyleft license needs review.
 - **Contributions run through the CLA** (`CLA.md`), accepted via a DCO `Signed-off-by` line — commit with `git commit -s`. The CLA grants the maintainer relicensing rights so the project can be dual-licensed commercially later; preserve that intent in any contribution tooling.
 - It's a network app, so **AGPL §13 applies to operators**: a modified server offered over a network must make its source available. Keep that note in the user-facing docs (`README.md`, `DEPLOYMENT.md`).
 - See `CONTRIBUTING.md` for the contributor workflow.

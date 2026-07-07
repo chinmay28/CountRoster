@@ -1,0 +1,21 @@
+{
+  "format_version": 1,
+  "app_version": "0.1.0",
+  "schema_version": 4,
+  "exported_at": "2026-05-25T13:00:00.000-07:00",
+  "row_counts": {
+    "app_meta": 1,
+    "trackers": 7,
+    "tracker_groups": 1,
+    "tracker_options": 0,
+    "entries": 7,
+    "notes": 1,
+    "note_edits": 1,
+    "tracker_group_memberships": 2,
+    "tracker_links": 2,
+    "reminders": 0
+  },
+  "checksums": {
+    "tables": "sha256:760c43cab8d48c3476bf589bdaaa0409a93e0a11bfc11adbf0163ca6235bce59"
+  }
+}

@@ -2,7 +2,7 @@
   "name": "countroster",
   "private": true,
   "version": "0.0.0",
-  "description": "A local-first anything-tracker. iOS + Android + Web from a shared TypeScript core.",
+  "description": "An anything-tracker: a Go server (REST API + SQLite) serving an installable PWA.",
   "license": "AGPL-3.0-only",
   "author": "Chinmay Manjunath",
   "workspaces": [
@@ -10,9 +10,12 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "build": "npm run build --workspaces --if-present && npm run build:server",
+    "build:server": "cd server && CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o bin/countroster ./cmd/countroster",
+    "test": "npm run test --workspaces --if-present && npm run test:server",
+    "test:server": "cd server && go test ./...",
+    "typecheck": "npm run typecheck --workspaces --if-present && npm run vet:server",
+    "vet:server": "cd server && go vet ./..."
   },
   "engines": {
     "node": ">=20.10.0"
