@@ -37,11 +37,13 @@ Run the app in development (two processes; **build core first** so the web clien
 
 ```bash
 npm run build --workspace @countroster/core          # web imports the compiled core's types
-(cd server && go run ./cmd/countroster)               # API on http://localhost:8787 (COUNTROSTER_DB, PORT, HOST envs)
+(cd server && go run ./cmd/countroster serve)         # API on http://localhost:8787 (config via serve flags: --db/--port/--host)
 npm run dev   --workspace @countroster/web            # PWA on http://localhost:5173, proxies /api → server
 ```
 
-In production the Go binary serves the built `apps/web/dist` (embedded at build time or via `WEB_DIST`) from the same origin with an SPA fallback — one process, no CORS.
+The `serve` subcommand (also the default with no args) takes `--host`, `--port`, `--db`, and `--web-dist` flags; each **overrides** its env-var fallback (`HOST`, `PORT`, `COUNTROSTER_DB`, `WEB_DIST`), which overrides the built-in default. Prefer the flags — the env vars remain only as fallbacks (and for the Node-era quickstart path). `countroster version`/`--version` prints the version.
+
+In production the Go binary serves the built `apps/web/dist` (embedded at build time or via `--web-dist`) from the same origin with an SPA fallback — one process, no CORS.
 
 Single Go package test: `go test ./internal/core -run TestStreak` inside `server/`. Single web test: `npx vitest run src/app/app.test.tsx` inside `apps/web`.
 

@@ -38,8 +38,8 @@ falls back to the env var, then the built-in default (**flag > env > default**).
 `countroster serve -h` lists the flags; `--version` (or the `version`
 subcommand) prints the version and exits.
 
-The web client is resolved in order: `WEB_DIST` → assets embedded at build
-time → `apps/web/dist` relative to the working directory. To embed, copy the
+The web client is resolved in order: `--web-dist` (env `WEB_DIST`) → assets
+embedded at build time → `apps/web/dist` relative to the working directory. To embed, copy the
 built PWA in before compiling (this is what `scripts/quickstart.sh` does):
 
 ```bash
