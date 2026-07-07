@@ -24,12 +24,16 @@
 > (cd server && CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' \
 >    -o bin/countroster ./cmd/countroster)            # → one static binary
 >
-> COUNTROSTER_DB=/var/lib/countroster/db.sqlite \
-> PORT=8787 \
->   ./server/bin/countroster                        # API + PWA on one origin
+> ./server/bin/countroster serve \
+>   --db /var/lib/countroster/db.sqlite --port 8787   # API + PWA on one origin
 > ```
 >
-> - **Persistence is the SQLite file** at `COUNTROSTER_DB`. Back it up (or use the
+> Configure the server with `countroster serve` flags — `--db`, `--port`,
+> `--host`, `--web-dist`. Each overrides its env-var fallback
+> (`COUNTROSTER_DB`, `PORT`, `HOST`, `WEB_DIST`), which in turn overrides the
+> default (**flag > env > default**). `countroster serve -h` lists them.
+>
+> - **Persistence is the SQLite file** at `--db` (env `COUNTROSTER_DB`). Back it up (or use the
 >   in-app Data page → bundle / raw SQLite export). Put it on a durable volume.
 > - **No auth** — run it on a trusted network. Expose it over **Tailscale** (a
 >   tailnet IP / MagicDNS `*.ts.net` name, already in the dev/preview allowlist),
@@ -45,12 +49,14 @@
 >   Serve, a reverse proxy with a cert (Caddy/nginx + Let's Encrypt), or a tunnel
 >   gives you HTTPS.
 > - **Process management:** run under systemd / a container; restart on boot.
->   The binary serves the PWA from (in order) `WEB_DIST`, the assets embedded
->   at build time, or `apps/web/dist` relative to the working directory.
+>   The binary serves the PWA from (in order) `--web-dist` (env `WEB_DIST`),
+>   the assets embedded at build time, or `apps/web/dist` relative to the
+>   working directory.
 > - **A reasonable container** is `FROM scratch` (plus CA certs if you ever add
 >   outbound TLS): run the builds above in a builder stage, then
->   `COPY server/bin/countroster /` and `CMD ["/countroster"]` with the SQLite
->   file on a mounted volume.
+>   `COPY server/bin/countroster /` and
+>   `CMD ["/countroster", "serve", "--db", "/data/countroster.sqlite"]` with the
+>   SQLite file on a mounted volume.
 >
 > ### Quick start on Linux (Ubuntu / Debian / Raspberry Pi) — systemd
 >

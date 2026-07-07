@@ -16,16 +16,17 @@ REST → screenshots to /tmp/shots).
 ```bash
 npm install                                   # once per container
 npm run build                                 # core (tsc) → web (vite) → server (go build)
-COUNTROSTER_DB=$SCRATCH/verify.sqlite PORT=8791 WEB_DIST=apps/web/dist \
-  ./server/bin/countroster &                  # serves apps/web/dist too
+./server/bin/countroster serve \
+  --db $SCRATCH/verify.sqlite --port 8791 --web-dist apps/web/dist &  # serves apps/web/dist too
 curl -s http://127.0.0.1:8791/api/health      # {"ok":true,...}
 ```
 
-- Migrations run automatically on boot; a fresh `COUNTROSTER_DB` file path
+- Migrations run automatically on boot; a fresh `--db` file path
   exercises them for real. `:memory:` also works.
-- The binary serves the PWA from (in order): `WEB_DIST`, assets embedded at
-  build time, or `apps/web/dist` relative to the working directory. In a dev
-  checkout the embed is empty, so build the web workspace first.
+- The binary serves the PWA from (in order): `--web-dist` (env `WEB_DIST`),
+  assets embedded at build time, or `apps/web/dist` relative to the working
+  directory. In a dev checkout the embed is empty, so build the web workspace
+  first.
 - Go-only iteration: `cd server && go test ./...` runs the domain + API suites
   in milliseconds; `go build ./...` type-checks.
 

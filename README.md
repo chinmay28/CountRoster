@@ -83,17 +83,27 @@ Manage it with `systemctl status countroster` and `journalctl -u countroster -f`
 
 ```bash
 npm run build                                  # core (types) → web (vite) → server (go build)
-COUNTROSTER_DB=./data/countroster.sqlite \
-  ./server/bin/countroster                     # serves the API *and* the built PWA on one origin
+./server/bin/countroster serve \
+  --db ./data/countroster.sqlite               # serves the API *and* the built PWA on one origin
 ```
 
 To bake the PWA *into* the binary (a truly single-file deploy — this is what
 the quick-start does), copy `apps/web/dist/` into `server/cmd/countroster/webdist/`
-before `go build`. Otherwise the server falls back to serving `WEB_DIST` from disk.
+before `go build`. Otherwise the server falls back to serving the `--web-dist`
+directory from disk.
 
-Server env vars: `PORT` (default 8787), `HOST` (default 0.0.0.0), `COUNTROSTER_DB`
-(SQLite file path; default `./data/countroster.sqlite`), `WEB_DIST` (path to the
-built client; overrides embedded assets).
+Configure the server with `countroster serve` flags — prefer these over the
+env vars, which remain only as fallbacks:
+
+| Flag | Env fallback | Default | Meaning |
+|---|---|---|---|
+| `--port` | `PORT` | `8787` | listen port |
+| `--host` | `HOST` | `0.0.0.0` | bind address |
+| `--db` | `COUNTROSTER_DB` | `./data/countroster.sqlite` | SQLite file path |
+| `--web-dist` | `WEB_DIST` | — | built-client directory; overrides embedded assets |
+
+Each flag wins over its env var, which wins over the default (**flag > env >
+default**). See `countroster serve -h`, or [`server/README.md`](./server/README.md#cli).
 
 ## Testing & checks
 
