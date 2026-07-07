@@ -248,11 +248,8 @@ export function TrackerDetailPage() {
       {/* Percentage breakdown per source (the component hides itself for
           single-operand derivations). For a snapshot derivation it composes
           the sources' levels instead of their sums. Entries arrive
-          oldest-first, so [0] bounds how far back the period dropdown
-          reaches. */}
-      {isDerived && (
-        <CompositionSection tracker={tracker} earliest={entries[0]?.occurred_at} />
-      )}
+          oldest-first; their instants scope the period dropdown. */}
+      {isDerived && <CompositionSection tracker={tracker} entries={entries} />}
 
       <Suspense fallback={<p className="muted">Loading charts…</p>}>
         <StatsPanel tracker={tracker} refreshKey={statsKey} />

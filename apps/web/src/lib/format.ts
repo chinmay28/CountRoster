@@ -62,13 +62,17 @@ export function isCurrencyUnit(unit: string): boolean {
 /** Format a number without trailing zeros, with a unit if present. */
 export function formatNumber(value: number, unit?: string | null): string {
   // Round to 2 decimals but drop trailing zeros (2.5 not 2.50, 3 not 3.00).
-  const n = String(Math.round(value * 100) / 100);
-  if (!unit) return n;
+  const rounded = Math.round(value * 100) / 100;
+  if (!unit) return String(rounded);
   if (isCurrencyUnit(unit)) {
-    // Keep the sign ahead of the symbol: "-$5", not "$-5".
-    return n.startsWith('-') ? `-${unit}${n.slice(1)}` : `${unit}${n}`;
+    // Money reads with thousands separators ($1,981,284) and the sign ahead
+    // of the symbol: "-$5", not "$-5".
+    const n = Math.abs(rounded).toLocaleString('en-US', {
+      maximumFractionDigits: 2,
+    });
+    return rounded < 0 ? `-${unit}${n}` : `${unit}${n}`;
   }
-  return `${n} ${unit}`;
+  return `${rounded} ${unit}`;
 }
 
 /**
