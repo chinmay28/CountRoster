@@ -13,16 +13,30 @@ zip) can't tell the implementations apart.
 cd server
 go build -o bin/countroster ./cmd/countroster   # Go >= 1.21 bootstraps; go.mod pins the toolchain
 ./bin/countroster                               # API on http://localhost:8787
+./bin/countroster serve --port 9000             # same thing, on a chosen port
 ```
 
-Environment variables (unchanged from the Node era):
+## CLI
 
-| Var | Default | Meaning |
-|---|---|---|
-| `PORT` | `8787` | listen port |
-| `HOST` | `0.0.0.0` | bind address |
-| `COUNTROSTER_DB` | `./data/countroster.sqlite` | SQLite file (`:memory:` honored as the SQLite sentinel) |
-| `WEB_DIST` | — | serve the PWA from this directory (overrides embedded assets) |
+```
+countroster [serve] [flags]   start the server (default command)
+countroster version           print version and exit
+countroster help              show usage
+```
+
+`serve` is the default, so a bare `countroster` still starts the server. Each
+serve flag overrides the matching environment variable below; an unset flag
+falls back to the env var, then the built-in default (**flag > env > default**).
+
+| Flag | Env | Default | Meaning |
+|---|---|---|---|
+| `--port` | `PORT` | `8787` | listen port |
+| `--host` | `HOST` | `0.0.0.0` | bind address |
+| `--db` | `COUNTROSTER_DB` | `./data/countroster.sqlite` | SQLite file (`:memory:` honored as the SQLite sentinel) |
+| `--web-dist` | `WEB_DIST` | — | serve the PWA from this directory (overrides embedded assets) |
+
+`countroster serve -h` lists the flags; `--version` (or the `version`
+subcommand) prints the version and exits.
 
 The web client is resolved in order: `WEB_DIST` → assets embedded at build
 time → `apps/web/dist` relative to the working directory. To embed, copy the

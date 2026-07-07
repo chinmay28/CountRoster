@@ -2,10 +2,16 @@
 // PWA, served from one origin — a single static binary replacing the Node
 // process of the TypeScript era. Runtime interface (env vars, endpoints,
 // on-disk SQLite format) is unchanged.
+//
+// The CLI accepts a `serve` subcommand (also the default with no arguments)
+// whose flags override the corresponding environment variables, plus
+// `version` and `help`.
 package main
 
 import (
 	"embed"
+	"errors"
+	"flag"
 	"fmt"
 	"io/fs"
 	"log"
@@ -31,19 +37,88 @@ import (
 var embeddedWeb embed.FS
 
 func main() {
-	if err := run(); err != nil {
+	if err := dispatch(os.Args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			// Usage already written to stderr by the flag package.
+			return
+		}
 		log.Fatalf("[countroster] failed to start: %v", err)
 	}
 }
 
-func run() error {
-	port := envOr("PORT", "8787")
-	host := envOr("HOST", "0.0.0.0")
-	dbEnv := envOr("COUNTROSTER_DB", "./data/countroster.sqlite")
+// dispatch routes the first non-flag argument to a subcommand. With no
+// arguments (or a leading flag) it serves, preserving the historic behaviour
+// of running the bare binary.
+func dispatch(args []string) error {
+	cmd := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		cmd, args = args[0], args[1:]
+	}
+	switch cmd {
+	case "", "serve":
+		return serve(args)
+	case "version":
+		fmt.Printf("countroster %s\n", api.AppVersion)
+		return nil
+	case "help":
+		printUsage(os.Stdout)
+		return nil
+	default:
+		fmt.Fprintf(os.Stderr, "unknown command %q\n\n", cmd)
+		printUsage(os.Stderr)
+		return fmt.Errorf("unknown command %q", cmd)
+	}
+}
+
+// config holds the resolved server settings. Precedence is CLI flag > env var
+// > built-in default: each flag defaults to the env-resolved value, so an
+// unset flag falls through to the environment.
+type config struct {
+	host    string
+	port    string
+	db      string
+	webDist string
+}
+
+func serve(args []string) error {
+	fset := flag.NewFlagSet("serve", flag.ContinueOnError)
+	fset.Usage = func() {
+		out := fset.Output()
+		fmt.Fprint(out, "Usage: countroster serve [flags]\n\n"+
+			"Start the CountRoster server. Flags override the matching environment\n"+
+			"variable; an unset flag falls back to the env var, then the default.\n\n"+
+			"Flags:\n")
+		fset.PrintDefaults()
+	}
+
+	var cfg config
+	var showVersion bool
+	fset.StringVar(&cfg.host, "host", envOr("HOST", "0.0.0.0"), "bind address (env HOST)")
+	fset.StringVar(&cfg.port, "port", envOr("PORT", "8787"), "listen port (env PORT)")
+	fset.StringVar(&cfg.db, "db", envOr("COUNTROSTER_DB", "./data/countroster.sqlite"),
+		"SQLite file, or :memory: (env COUNTROSTER_DB)")
+	fset.StringVar(&cfg.webDist, "web-dist", os.Getenv("WEB_DIST"),
+		"serve the PWA from this directory, overriding embedded assets (env WEB_DIST)")
+	fset.BoolVar(&showVersion, "version", false, "print version and exit")
+
+	if err := fset.Parse(args); err != nil {
+		return err
+	}
+	if showVersion {
+		fmt.Printf("countroster %s\n", api.AppVersion)
+		return nil
+	}
+	if extra := fset.Args(); len(extra) > 0 {
+		return fmt.Errorf("unexpected argument %q", extra[0])
+	}
+	return run(cfg)
+}
+
+func run(cfg config) error {
 	// ':memory:' is a SQLite sentinel, not a path — don't resolve it to a file.
-	dbPath := dbEnv
-	if dbEnv != ":memory:" {
-		abs, err := filepath.Abs(dbEnv)
+	dbPath := cfg.db
+	if cfg.db != ":memory:" {
+		abs, err := filepath.Abs(cfg.db)
 		if err != nil {
 			return err
 		}
@@ -69,11 +144,11 @@ func run() error {
 		Checkpoint: db.Checkpoint,
 	})
 
-	handler := withWebClient(apiHandler)
+	handler := withWebClient(apiHandler, cfg.webDist)
 
-	addr := net.JoinHostPort(host, port)
+	addr := net.JoinHostPort(cfg.host, cfg.port)
 	log.Printf("[countroster] API listening on http://%s:%s (db: %s, schema v%d)",
-		host, port, dbPath, schemaVersion)
+		cfg.host, cfg.port, dbPath, schemaVersion)
 	return http.ListenAndServe(addr, handler)
 }
 
@@ -81,8 +156,8 @@ func run() error {
 // mobile browser shell behaves like an installed app with no CORS hops. Any
 // non-API GET that misses a file returns index.html (SPA fallback), so deep
 // links like /trackers/:id survive a refresh.
-func withWebClient(apiHandler http.Handler) http.Handler {
-	files, origin := webFiles()
+func withWebClient(apiHandler http.Handler, webDist string) http.Handler {
+	files, origin := webFiles(webDist)
 	if files == nil {
 		log.Printf("[countroster] no web build embedded and no WEB_DIST on disk — API only " +
 			"(run the web dev server separately).")
@@ -111,15 +186,15 @@ func withWebClient(apiHandler http.Handler) http.Handler {
 	})
 }
 
-// webFiles picks the client asset source: an explicit WEB_DIST directory
-// wins, then the assets embedded at build time, then the default
-// apps/web/dist of a source checkout.
-func webFiles() (fs.FS, string) {
-	if dir := os.Getenv("WEB_DIST"); dir != "" {
-		if hasIndex(os.DirFS(dir)) {
-			return os.DirFS(dir), dir
+// webFiles picks the client asset source: an explicit web-dist directory
+// (--web-dist flag or WEB_DIST env) wins, then the assets embedded at build
+// time, then the default apps/web/dist of a source checkout.
+func webFiles(webDist string) (fs.FS, string) {
+	if webDist != "" {
+		if hasIndex(os.DirFS(webDist)) {
+			return os.DirFS(webDist), webDist
 		}
-		log.Printf("[countroster] WEB_DIST=%s has no index.html — ignoring", dir)
+		log.Printf("[countroster] web-dist %s has no index.html — ignoring", webDist)
 	}
 	if sub, err := fs.Sub(embeddedWeb, "webdist"); err == nil && hasIndex(sub) {
 		return sub, "embedded assets"
@@ -140,4 +215,16 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func printUsage(w *os.File) {
+	fmt.Fprintf(w, `countroster %s — an anything tracker (REST API + PWA)
+
+Usage:
+  countroster [serve] [flags]   start the server (default command)
+  countroster version           print version and exit
+  countroster help              show this help
+
+Run "countroster serve -h" for the serve flags.
+`, api.AppVersion)
 }
