@@ -298,6 +298,9 @@ a {
 .tracker-card__total {
   font-size: 1.6rem;
   font-weight: 700;
+  /* Keep the big number below the corner log button (which hangs ~2rem into
+     the card) so long values never run underneath it. */
+  margin-top: 0.6rem;
 }
 .tracker-card__sub {
   color: var(--muted);
@@ -305,8 +308,10 @@ a {
 }
 .tracker-card__actions {
   position: absolute;
-  top: 0;
-  right: 0;
+  /* Tuck the button into the card's corner (the card has 1rem padding, so it
+     stays inside) — this pulls it up and away from the total underneath. */
+  top: -0.5rem;
+  right: -0.5rem;
   display: flex;
   align-items: center;
   gap: 0.4rem;
