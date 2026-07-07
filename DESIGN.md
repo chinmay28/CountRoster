@@ -1,5 +1,30 @@
 # CountRoster — Design & Architecture
 
+> ## 0.5 Implementation revision — Go server (current)
+>
+> The backend described in §0 below was **rewritten in Go** (`server/`),
+> replacing the TypeScript `@countroster/core` + Express `apps/server` pair
+> with a single static binary. Nothing about the *design* changed — the REST
+> contract, the SQL schema, the SQLite file on disk, the backup-bundle format
+> and its checksums are all bit-compatible, and the PWA client is untouched:
+>
+> ```
+> browser PWA (apps/web)  ──HTTP/REST──>  Go server (server/) ──>  SQLite file
+> ```
+>
+> - `server/internal/core` ports the domain services (SQL-is-the-contract,
+>   validate-then-insert-then-reread, injected clock, UUIDv7 ids).
+> - `server/internal/migrate` carries the same append-only migrations 001–004;
+>   the Go server opens a database written by the TS server as-is.
+> - `server/internal/backup` + `server/internal/jsjson` reproduce the bundle
+>   format byte-for-byte (including JavaScript's `JSON.stringify` number
+>   formatting and key order), so old backups round-trip in both directions.
+> - `packages/core` (TypeScript) remains as **types + an in-memory test double**
+>   for the web client's component tests; it is no longer the production path.
+>
+> Where the sections below say "Express", "node:sqlite", or "@countroster/core
+> on the server", read "the Go server". Everything else stands.
+
 > ## 0. Architecture revision — client-server (current)
 >
 > **This is the authoritative description of the architecture as built.** The

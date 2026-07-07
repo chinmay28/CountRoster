@@ -19,21 +19,27 @@ built as a **client-server** app so every device shares one dataset:
 ```
 countroster/
 ├── DESIGN.md                 # architecture & design document
+├── server/                   # the Go backend — REST API + SQLite, compiles to ONE static binary
+│   ├── cmd/countroster/      #   entrypoint; embeds the built PWA at release time
+│   └── internal/             #   domain services, migrations, stats, backup, HTTP layer
 ├── packages/
-│   └── core/                 # @countroster/core — platform-agnostic TS domain (runs on the server)
+│   └── core/                 # @countroster/core — TS domain types + in-memory test double for the web client
 └── apps/
-    ├── server/               # @countroster/server — Express REST API + node:sqlite (the backend)
     └── web/                  # @countroster/web — installable PWA client (Vite + React)
 ```
+
+The deployable artifact is a **single static Go binary** (`server/bin/countroster`)
+that serves the REST API and the PWA from one origin, with zero runtime
+dependencies — Node is only needed at build time to compile the web client.
 
 ## Getting started
 
 ```bash
-npm install                                   # Node >= 20.10 (CI/dev uses Node 22)
-npm run build --workspace @countroster/core   # the server & client import the compiled core
+npm install                                   # Node >= 20.10 (build/dev tooling)
+npm run build --workspace @countroster/core   # the web client imports the core's types
 
-# Terminal 1 — the backend API:
-npm run dev --workspace @countroster/server    # http://localhost:8787
+# Terminal 1 — the backend API (Go >= 1.21; newer toolchains fetch automatically):
+cd server && go run ./cmd/countroster          # http://localhost:8787
 
 # Terminal 2 — the web client (proxies /api → the server):
 npm run dev --workspace @countroster/web       # http://localhost:5173
@@ -52,8 +58,9 @@ curl -fsSL https://raw.githubusercontent.com/chinmay28/countroster/main/scripts/
 
 (or, from a checkout: `sudo ./scripts/quickstart.sh`)
 
-It installs Node 22 if needed, creates a dedicated `countroster` system user, builds
-the app, and runs it under systemd serving the API + PWA on `http://<host>:8787`.
+It installs Node 22 and Go if needed (both build-time only), creates a dedicated
+`countroster` system user, compiles the PWA and the static server binary, and runs
+it under systemd serving the API + PWA on `http://<host>:8787`.
 
 **Re-run it any time to upgrade — installs and upgrades are non-disruptive and
 never lose data:**
@@ -65,38 +72,44 @@ never lose data:**
   version keeps serving, so a failed build leaves the running app untouched.
 - After restart it polls `/api/health`; if the new version is unhealthy it **rolls
   back** to the previous commit and **restores the pre-upgrade snapshot**.
-- Schema changes run through the core's append-only, idempotent migration runner.
+- Schema changes run through the server's append-only, idempotent migration runner.
 
 Override defaults with env vars (`PORT`, `HOST`, `COUNTROSTER_REF`,
 `COUNTROSTER_DATA_DIR`, `COUNTROSTER_PREFIX`, `COUNTROSTER_USER`, …). The generated
 unit is documented at [`deploy/countroster.service`](./deploy/countroster.service).
 Manage it with `systemctl status countroster` and `journalctl -u countroster -f`.
 
-### Production (single process, manual)
+### Production (single binary, manual)
 
 ```bash
-npm run build --workspace @countroster/core
-npm run build --workspace @countroster/web     # → apps/web/dist
-npm run build --workspace @countroster/server
+npm run build                                  # core (types) → web (vite) → server (go build)
 COUNTROSTER_DB=./data/countroster.sqlite \
-  node apps/server/dist/server.js              # serves the API *and* the built PWA on one origin
+  ./server/bin/countroster                     # serves the API *and* the built PWA on one origin
 ```
+
+To bake the PWA *into* the binary (a truly single-file deploy — this is what
+the quick-start does), copy `apps/web/dist/` into `server/cmd/countroster/webdist/`
+before `go build`. Otherwise the server falls back to serving `WEB_DIST` from disk.
 
 Server env vars: `PORT` (default 8787), `HOST` (default 0.0.0.0), `COUNTROSTER_DB`
 (SQLite file path; default `./data/countroster.sqlite`), `WEB_DIST` (path to the
-built client).
+built client; overrides embedded assets).
 
 ## Testing & checks
 
 ```bash
-npm test          # vitest across core (domain), server (API integration), web (components)
-npm run typecheck # tsc --noEmit everywhere
+npm test          # vitest (core test double + web components) + `go test ./...` (domain, API)
+npm run typecheck # tsc --noEmit for the TS workspaces + `go vet` for the server
 ```
+
+The Go suites in `server/internal/` are the authority on domain behavior and
+the REST contract; the golden fixtures under `server/internal/backup/testdata/`
+pin backup-bundle compatibility with the original TypeScript implementation.
 
 ## Documentation
 
-- [DESIGN.md](./DESIGN.md) — architecture, schema, `@countroster/core` API
-- [apps/server/README.md](./apps/server/README.md) — the backend API
+- [DESIGN.md](./DESIGN.md) — architecture, schema, domain API
+- [server/README.md](./server/README.md) — the Go backend
 - [apps/web/README.md](./apps/web/README.md) — the PWA client
 - [DEPLOYMENT.md](./DEPLOYMENT.md) — deploying the server + PWA
 

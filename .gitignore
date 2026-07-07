@@ -4,10 +4,16 @@ dist/
 .DS_Store
 
 # Server runtime data (the SQLite file is the live database, not source)
-apps/server/data/
+data/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Go server build artifacts; webdist/ receives the built PWA before `go build`
+# embeds it (only its README placeholder is source)
+server/bin/
+server/cmd/countroster/webdist/*
+!server/cmd/countroster/webdist/README.txt
 
 # Capacitor / iOS (the ios/ project is committed; these generated parts are not)
 apps/web/ios/App/Pods/

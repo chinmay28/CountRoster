@@ -46,21 +46,23 @@ git push --force-with-lease
 ## Development
 
 See [`CLAUDE.md`](./CLAUDE.md) and [`DESIGN.md`](./DESIGN.md) for architecture,
-and the per-package READMEs under `apps/` for shell specifics. Before opening a
-PR:
+[`server/README.md`](./server/README.md) for the Go backend, and
+[`apps/web/README.md`](./apps/web/README.md) for the PWA client. Before opening
+a PR:
 
 ```bash
-npm install        # Node >= 20.10
-npm run build      # build every workspace (build core first if running locally)
-npm test           # vitest across all packages
-npm run typecheck  # tsc --noEmit across workspaces
+npm install        # Node >= 20.10 (web build tooling); Go >= 1.21 for the server
+npm run build      # TS workspaces + `go build` the server binary
+npm test           # vitest (web/core) + `go test ./...` (server domain & API)
+npm run typecheck  # tsc --noEmit + `go vet`
 ```
 
-TypeScript strict mode is the static-analysis gate; there is no separate linter.
+TypeScript strict mode and `go vet` are the static-analysis gates; there is no
+separate linter.
 
 ## Pull requests
 
 - Keep changes focused and described clearly.
-- Add or update tests for behavior changes (tests live in `packages/core/test/`).
+- Add or update tests for behavior changes (server behavior: `server/internal/**/*_test.go`; web components: `apps/web/src/**/*.test.tsx`).
 - Make sure `npm test` and `npm run typecheck` pass.
 - Ensure every commit is signed off (see above).

@@ -5,24 +5,29 @@ description: Build, launch, and drive CountRoster end-to-end to verify a change 
 
 # Verifying CountRoster changes
 
-The runtime surface is one Node process: the Express server serves the REST
-API under `/api` **and** the built PWA from the same origin. Verify by booting
-that server against a throwaway DB and driving it with curl (API) and
-Playwright (UI).
+The runtime surface is one **static Go binary**: it serves the REST API under
+`/api` **and** the built PWA from the same origin. Verify by booting that
+binary against a throwaway DB and driving it with curl (API) and Playwright
+(UI). `node scripts/verify.mjs` automates the whole flow (launch → seed over
+REST → screenshots to /tmp/shots).
 
 ## Build & launch
 
 ```bash
 npm install                                   # once per container
-npm run build                                 # core (tsc) → server (tsc) → web (vite)
-COUNTROSTER_DB=$SCRATCH/verify.sqlite PORT=8791 \
-  node apps/server/dist/server.js &           # serves apps/web/dist too
+npm run build                                 # core (tsc) → web (vite) → server (go build)
+COUNTROSTER_DB=$SCRATCH/verify.sqlite PORT=8791 WEB_DIST=apps/web/dist \
+  ./server/bin/countroster &                  # serves apps/web/dist too
 curl -s http://127.0.0.1:8791/api/health      # {"ok":true,...}
 ```
 
 - Migrations run automatically on boot; a fresh `COUNTROSTER_DB` file path
   exercises them for real. `:memory:` also works.
-- The server only serves the PWA if `apps/web/dist` exists (build first).
+- The binary serves the PWA from (in order): `WEB_DIST`, assets embedded at
+  build time, or `apps/web/dist` relative to the working directory. In a dev
+  checkout the embed is empty, so build the web workspace first.
+- Go-only iteration: `cd server && go test ./...` runs the domain + API suites
+  in milliseconds; `go build ./...` type-checks.
 
 ## Drive the API
 
@@ -49,5 +54,8 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 
 ## Gotchas
 
-- `pkill -f "node apps/server/dist/server.js"` when done.
+- `pkill -f server/bin/countroster` when done.
 - Entries come back oldest-first from the API; the UI lists newest-first.
+- The wire contract (JSON field names, 0/1 flags, status codes) is pinned by
+  `server/internal/api/api_test.go` — if a UI change needs an API change,
+  update that suite in the same commit.

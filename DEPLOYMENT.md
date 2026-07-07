@@ -12,18 +12,21 @@
 >
 > ## 0. Deploying CountRoster (server + PWA)
 >
-> The deployable unit is **one Node process** that serves both the REST API and
-> the built PWA from the same origin.
+> The deployable unit is **one static Go binary** that serves both the REST API
+> and the built PWA from the same origin. Node is needed only at build time (to
+> compile the web client with Vite); the running service has no JS runtime.
 >
 > ```bash
 > npm ci
-> npm run build --workspace @countroster/core     # compiled core (server & web import it)
-> npm run build --workspace @countroster/web        # → apps/web/dist (the PWA)
-> npm run build --workspace @countroster/server     # → apps/server/dist
+> npm run build --workspace @countroster/core      # TS types the web build imports
+> npm run build --workspace @countroster/web         # → apps/web/dist (the PWA)
+> cp -r apps/web/dist/. server/cmd/countroster/webdist/   # embed the PWA in the binary
+> (cd server && CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' \
+>    -o bin/countroster ./cmd/countroster)            # → one static binary
 >
 > COUNTROSTER_DB=/var/lib/countroster/db.sqlite \
 > PORT=8787 \
->   node apps/server/dist/server.js                 # API + PWA on one origin
+>   ./server/bin/countroster                        # API + PWA on one origin
 > ```
 >
 > - **Persistence is the SQLite file** at `COUNTROSTER_DB`. Back it up (or use the
@@ -41,12 +44,13 @@
 >   workers on a secure context (`https://` or `http://localhost`). Tailscale
 >   Serve, a reverse proxy with a cert (Caddy/nginx + Let's Encrypt), or a tunnel
 >   gives you HTTPS.
-> - **Process management:** run under systemd / pm2 / a container; restart on
->   boot; point `WEB_DIST` at the built client if it isn't the default
->   `apps/web/dist` relative to the server.
-> - **A reasonable container** runs the three builds above, then
->   `CMD ["node","apps/server/dist/server.js"]` with the SQLite file on a mounted
->   volume.
+> - **Process management:** run under systemd / a container; restart on boot.
+>   The binary serves the PWA from (in order) `WEB_DIST`, the assets embedded
+>   at build time, or `apps/web/dist` relative to the working directory.
+> - **A reasonable container** is `FROM scratch` (plus CA certs if you ever add
+>   outbound TLS): run the builds above in a builder stage, then
+>   `COPY server/bin/countroster /` and `CMD ["/countroster"]` with the SQLite
+>   file on a mounted volume.
 >
 > ### Quick start on Linux (Ubuntu / Debian / Raspberry Pi) — systemd
 >
@@ -59,11 +63,13 @@
 >
 > What it does (idempotent — re-run to upgrade):
 >
-> - Installs Node 22 (via NodeSource) if a suitable one isn't already present, plus
->   `git`/`curl`.
+> - Installs Node 22 (via NodeSource) and Go (from go.dev) if suitable ones
+>   aren't already present, plus `git`/`curl`. Both are **build-time only** —
+>   the running service is a single static binary.
 > - Creates a dedicated unprivileged `countroster` system user (no login shell).
-> - Clones to `/opt/countroster/src`, builds core → web → server, and installs the
->   unit at `/etc/systemd/system/countroster.service` (reference copy:
+>   - Clones to `/opt/countroster/src`, builds core → web → static Go binary
+>   (with the PWA embedded), and installs the unit at
+>   `/etc/systemd/system/countroster.service` (reference copy:
 >   [`deploy/countroster.service`](./deploy/countroster.service)). The unit is
 >   hardened (`ProtectSystem=strict`, `ProtectHome=true`, `NoNewPrivileges=true`,
 >   `ReadWritePaths=/var/lib/countroster`).
@@ -77,13 +83,13 @@
 > | Data lives apart from code | DB at `/var/lib/countroster/countroster.sqlite`; the source tree at `/opt/countroster/src` can be rebuilt/replaced freely. |
 > | Consistent backup | On upgrade it **stops the service first**, then snapshots the DB (`+ -wal/-shm`) to `…/backups/countroster-<timestamp>.sqlite` (keeps the newest `BACKUP_KEEP`, default 10). |
 > | No downtime on a bad build | The new version is compiled while the old one keeps serving; a build failure never touches the running service. |
-> | Self-healing bad release | After restart it polls `/api/health`; if unhealthy it **rolls back** to the previous commit, **restores the pre-upgrade snapshot**, and restarts. |
-> | Schema changes | Applied by the core's append-only, idempotent migration runner on startup (additive; older data stays readable — see §8). |
+> | Self-healing bad release | After restart it polls `/api/health`; if unhealthy it **rolls back** to the previous commit, **restores the pre-upgrade snapshot**, and restarts — even across the Node→Go implementation boundary. |
+> | Schema changes | Applied by the server's append-only, idempotent migration runner on startup (additive; older data stays readable — see §8). The Go server opens the **same SQLite file** the TypeScript server wrote; no data migration is involved. |
 >
 > Override defaults with env vars: `PORT`, `HOST`, `COUNTROSTER_REF`,
 > `COUNTROSTER_REPO`, `COUNTROSTER_DATA_DIR`, `COUNTROSTER_PREFIX`,
-> `COUNTROSTER_USER`, `INSTALL_NODE` (`auto`/`never`), `BACKUP_KEEP`. E.g. pin a
-> tag on port 9090:
+> `COUNTROSTER_USER`, `INSTALL_NODE` (`auto`/`never`), `INSTALL_GO`
+> (`auto`/`never`), `BACKUP_KEEP`. E.g. pin a tag on port 9090:
 >
 > ```bash
 > curl -fsSL …/scripts/quickstart.sh | sudo PORT=9090 COUNTROSTER_REF=v0.2.0 bash
