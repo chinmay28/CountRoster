@@ -132,13 +132,20 @@ describe('derived snapshot tracker detail', () => {
       'Brokerage',
     ]);
 
-    // The dropdown offers the current levels plus monthly windows back to
-    // the first reading (month is the smallest snapshot window).
+    // The dropdown offers the current levels plus the monthly windows in
+    // which something was logged (month is the smallest snapshot window).
+    // "This month" never appears — it always duplicates Current.
+    const now = new Date();
+    const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
     const select = within(section).getByRole('combobox', { name: /period/i });
     const labels = within(select)
       .getAllByRole('option')
       .map((o) => o.textContent);
-    expect(labels.slice(0, 3)).toEqual(['Current', 'This month', 'Last month']);
+    expect(labels).toEqual([
+      'Current',
+      'Last month',
+      twoMonthsAgo.toLocaleDateString(undefined, { month: 'short', year: 'numeric' }),
+    ]);
 
     // Last month: Checking had no reading yet that month — its reading from
     // two months ago carries: 1000 (67%) + Brokerage 500 (33%).
@@ -148,6 +155,52 @@ describe('derived snapshot tracker detail', () => {
     expect(
       within(section).getByText(/carry their last one/),
     ).toBeInTheDocument();
+  });
+
+  it('omits windows in which nothing was logged — the numbers there are unchanged', async () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const checking = await test.createTracker({
+      name: 'Checking',
+      kind: 'number',
+      is_snapshot: 1,
+    });
+    const savings = await test.createTracker({
+      name: 'Savings',
+      kind: 'number',
+      is_snapshot: 1,
+    });
+    // Readings four months ago and this month; the three months between saw
+    // nothing, so their composition is identical to the four-months-ago one.
+    await test.core.entries.log(checking.id, { value: 1000, occurred_at: iso(y, m - 4, 15) });
+    await test.core.entries.log(savings.id, { value: 200, occurred_at: iso(y, m - 4, 16) });
+    await test.core.entries.log(checking.id, {
+      value: 1200,
+      occurred_at: toLocalISO(new Date(y, m, 1, 0, 0, 1)),
+    });
+    const netWorth = await test.createTracker({
+      name: 'Net worth',
+      kind: 'number',
+      is_snapshot: 1,
+      links: [
+        { source_id: checking.id, coefficient: 1 },
+        { source_id: savings.id, coefficient: 1 },
+      ],
+    });
+    renderApp(test, `/trackers/${netWorth.id}`);
+
+    const heading = await screen.findByRole('heading', { name: /composition/i });
+    const section = heading.closest('section')!;
+    const select = within(section).getByRole('combobox', { name: /period/i });
+    const labels = within(select)
+      .getAllByRole('option')
+      .map((o) => o.textContent);
+    const fourMonthsAgo = new Date(y, m - 4, 1);
+    expect(labels).toEqual([
+      'Current',
+      fourMonthsAgo.toLocaleDateString(undefined, { month: 'short', year: 'numeric' }),
+    ]);
   });
 
   it('home card shows the combined current level', async () => {
