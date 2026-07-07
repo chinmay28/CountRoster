@@ -10,10 +10,12 @@ import { resetPeriodOptions } from '../lib/range.ts';
 interface CompositionSectionProps {
   tracker: Tracker;
   /**
-   * `occurred_at` of the tracker's earliest contributing entry, if any —
-   * bounds how far back the period dropdown reaches.
+   * The tracker's effective entries, oldest first. Their instants decide the
+   * period dropdown: the earliest bounds how far back it reaches, and windows
+   * in which no source logged anything are omitted — the composition there is
+   * identical to the previous window's, so listing them is noise.
    */
-  earliest?: string | undefined;
+  entries: readonly { occurred_at: string }[];
 }
 
 /**
@@ -62,20 +64,29 @@ type RingMode = 'additive' | 'breakdown' | 'movement';
  * (the smallest snapshot window) — a source with no reading in a month
  * carries its last earlier one, so partial data still composes.
  */
-export function CompositionSection({ tracker, earliest }: CompositionSectionProps) {
+export function CompositionSection({ tracker, entries }: CompositionSectionProps) {
   const core = useCore();
   const isSnapshot = tracker.is_snapshot === 1;
   // 'all', or the `value` (bucket-start ISO) of a period option.
   const [selected, setSelected] = useState('all');
-  const options = useMemo(
-    () =>
-      resetPeriodOptions(
-        isSnapshot ? 'monthly' : tracker.reset_period,
-        tracker.week_start,
-        earliest,
-      ),
-    [isSnapshot, tracker.reset_period, tracker.week_start, earliest],
-  );
+  const options = useMemo(() => {
+    const all = resetPeriodOptions(
+      isSnapshot ? 'monthly' : tracker.reset_period,
+      tracker.week_start,
+      entries[0]?.occurred_at,
+    );
+    // A snapshot's current-month window always equals "Current" (no reading
+    // is ever ahead of now), so skip it rather than list a duplicate.
+    const windows = isSnapshot ? all.slice(1) : all;
+    // Only windows where the numbers changed — i.e. some source logged in
+    // them. The rest would repeat the previous window's composition.
+    const instants = entries.map((e) => new Date(e.occurred_at).getTime());
+    return windows.filter((o) => {
+      const start = new Date(o.range.start).getTime();
+      const end = new Date(o.range.end).getTime();
+      return instants.some((t) => t >= start && t < end);
+    });
+  }, [isSnapshot, tracker.reset_period, tracker.week_start, entries]);
   const active = options.find((o) => o.value === selected);
 
   const { data: slices } = useAsync(

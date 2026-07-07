@@ -55,6 +55,15 @@ describe('formatNumber', () => {
     // The sign stays ahead of the symbol.
     expect(formatNumber(-5, '$')).toBe('-$5');
   });
+
+  it('groups thousands for currency, so large amounts stay readable', () => {
+    expect(formatNumber(1981284, '$')).toBe('$1,981,284');
+    expect(formatNumber(403612.5, '$')).toBe('$403,612.5');
+    expect(formatNumber(-55000, '$')).toBe('-$55,000');
+    // Only money gets separators; plain counts keep the bare digits.
+    expect(formatNumber(1234567)).toBe('1234567');
+    expect(formatNumber(1234567, 'steps')).toBe('1234567 steps');
+  });
 });
 
 describe('formatValue', () => {
