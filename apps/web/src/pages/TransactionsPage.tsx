@@ -221,6 +221,9 @@ function TransactionRow({
         {pending ? (
           <input
             className="txn__name"
+            // size=1 zeroes the input's intrinsic ~20ch width so the grid
+            // column, not the input, decides how wide the name can be.
+            size={1}
             defaultValue={txn.name}
             aria-label={`Name for ${txn.raw_description}`}
             disabled={busy}
@@ -234,9 +237,14 @@ function TransactionRow({
         </span>
       </div>
       <div className="txn__meta muted">
-        {txn.raw_description}
-        {txn.account ? ` · ${txn.account}` : ''}
-        {txn.category ? ` · ${txn.category}` : ''}
+        {[
+          // The raw descriptor is only interesting when sanitizing changed it.
+          ...(txn.raw_description.toLowerCase() !== txn.name.toLowerCase()
+            ? [txn.raw_description]
+            : []),
+          ...(txn.account ? [txn.account] : []),
+          ...(txn.category ? [txn.category] : []),
+        ].join(' · ')}
       </div>
       <div className="txn__actions">
         {pending ? (

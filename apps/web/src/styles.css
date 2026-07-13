@@ -901,9 +901,15 @@ a {
   padding: 0.75rem 1rem;
   display: grid;
   gap: 0.35rem;
+  min-width: 0;
 }
+/* auto/1fr/auto grid: the name column can shrink to zero while the date and
+   amount keep their natural width, so a row can never grow past the card —
+   a flex row let the input's intrinsic ~20ch width push the card off-screen
+   on phones. */
 .txn__main {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.6rem;
 }
@@ -913,9 +919,12 @@ a {
   white-space: nowrap;
 }
 .txn__name {
-  flex: 1;
   min-width: 0;
+  width: 100%;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 input.txn__name {
   border: 1px solid transparent;
@@ -940,6 +949,7 @@ input.txn__name:focus {
 }
 .txn__meta {
   font-size: 0.8rem;
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 .txn__actions {
@@ -947,11 +957,12 @@ input.txn__name:focus {
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+  min-width: 0;
 }
 .txn__actions select {
-  flex: 1;
-  min-width: 10rem;
-  max-width: 16rem;
+  flex: 1 1 8rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* Home group sections */
