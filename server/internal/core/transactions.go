@@ -432,14 +432,15 @@ func (s *TransactionService) Unfile(id string) (*CardTransaction, error) {
 	return restored, nil
 }
 
-// Clear bulk-purges every transaction in a terminal status — "confirmed"
-// (their tracker entries stay) or "ignored". Purged rows lose their dedupe
-// keys, so re-importing an old CSV can stage them again.
+// Clear bulk-purges every transaction in one status — "pending" (drop a bad
+// import), "confirmed" (their tracker entries stay) or "ignored". Purged
+// rows lose their dedupe keys, so re-importing the same CSV can stage them
+// again.
 func (s *TransactionService) Clear(status string) (int, error) {
-	if status != "confirmed" && status != "ignored" {
+	if status != "pending" && status != "confirmed" && status != "ignored" {
 		return 0, &ValidationError{Issues: []Issue{{
 			Code: "invalid_enum_value", Path: []any{"status"},
-			Message: `Invalid status "` + status + `"; expected confirmed or ignored`,
+			Message: `Invalid status "` + status + `"; expected pending, confirmed, or ignored`,
 		}}}
 	}
 	cleared := 0

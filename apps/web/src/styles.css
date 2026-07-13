@@ -889,6 +889,9 @@ a {
 }
 .txn__bulk {
   margin: 0 0 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 .txn__list {
   list-style: none;

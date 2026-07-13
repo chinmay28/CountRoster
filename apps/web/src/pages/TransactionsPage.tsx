@@ -82,14 +82,18 @@ export function TransactionsPage() {
     });
   }
 
-  async function clearAll(which: 'confirmed' | 'ignored') {
+  async function clearAll(which: 'pending' | 'confirmed' | 'ignored') {
     const n = list.data?.length ?? 0;
+    const plural = n === 1 ? '' : 's';
     const warning =
-      which === 'confirmed'
-        ? `Clear ${n} filed transaction${n === 1 ? '' : 's'} from this list? ` +
-          'Their tracker entries stay, but re-importing an old CSV may stage them again.'
-        : `Delete ${n} dismissed transaction${n === 1 ? '' : 's'} for good? ` +
-          'Re-importing an old CSV may bring them back.';
+      which === 'pending'
+        ? `Drop all ${n} imported transaction${plural}? ` +
+          'Nothing has been filed; re-importing the CSV stages them again.'
+        : which === 'confirmed'
+          ? `Clear ${n} filed transaction${plural} from this list? ` +
+            'Their tracker entries stay, but re-importing an old CSV may stage them again.'
+          : `Delete ${n} dismissed transaction${plural} for good? ` +
+            'Re-importing an old CSV may bring them back.';
     if (!window.confirm(warning)) return;
     await run(async () => {
       const { cleared } = await core.transactions.clear(which);
@@ -137,22 +141,21 @@ export function TransactionsPage() {
         {error && <p className="error">{error}</p>}
       </section>
 
-      {status === 'pending' && categorized.length > 1 && (
+      {(list.data?.length ?? 0) > 0 && (
         <div className="txn__bulk">
-          <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void confirmAll()}>
-            File all {categorized.length} categorized
-          </button>
-        </div>
-      )}
-      {status !== 'pending' && (list.data?.length ?? 0) > 0 && (
-        <div className="txn__bulk">
+          {status === 'pending' && categorized.length > 1 && (
+            <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void confirmAll()}>
+              File all {categorized.length} categorized
+            </button>
+          )}
           <button
             type="button"
             className="btn btn--danger"
             disabled={busy}
-            onClick={() => void clearAll(status as 'confirmed' | 'ignored')}
+            onClick={() => void clearAll(status as 'pending' | 'confirmed' | 'ignored')}
           >
-            Clear all {list.data!.length} {status === 'confirmed' ? 'filed' : 'dismissed'}
+            Clear all {list.data!.length}{' '}
+            {status === 'pending' ? 'imported' : status === 'confirmed' ? 'filed' : 'dismissed'}
           </button>
         </div>
       )}

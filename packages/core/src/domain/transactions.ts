@@ -46,8 +46,8 @@ export interface TransactionService {
   confirm(id: string, input?: TransactionConfirmInput): Promise<TransactionConfirmResult>;
   /** Reverse a confirm: delete the filed entry (and its notes), back to pending. */
   unfile(id: string): Promise<CardTransaction>;
-  /** Bulk-purge every row in a terminal status; returns how many went. */
-  clear(status: 'confirmed' | 'ignored'): Promise<{ cleared: number }>;
+  /** Bulk-purge every row in one status; returns how many went. */
+  clear(status: 'pending' | 'confirmed' | 'ignored'): Promise<{ cleared: number }>;
 }
 
 export class TransactionNotFoundError extends Error {
@@ -314,14 +314,15 @@ class TransactionServiceImpl implements TransactionService {
   }
 
   /**
-   * Bulk-purge every transaction in a terminal status — 'confirmed' (their
-   * tracker entries stay) or 'ignored'. Purged rows lose their dedupe keys,
-   * so re-importing an old CSV can stage them again.
+   * Bulk-purge every transaction in one status — 'pending' (drop a bad
+   * import), 'confirmed' (their tracker entries stay) or 'ignored'. Purged
+   * rows lose their dedupe keys, so re-importing the same CSV can stage
+   * them again.
    */
-  async clear(status: 'confirmed' | 'ignored'): Promise<{ cleared: number }> {
-    if (status !== 'confirmed' && status !== 'ignored') {
+  async clear(status: 'pending' | 'confirmed' | 'ignored'): Promise<{ cleared: number }> {
+    if (status !== 'pending' && status !== 'confirmed' && status !== 'ignored') {
       throw new Error(
-        `Invalid status "${String(status)}"; expected confirmed or ignored`,
+        `Invalid status "${String(status)}"; expected pending, confirmed, or ignored`,
       );
     }
     let cleared = 0;
