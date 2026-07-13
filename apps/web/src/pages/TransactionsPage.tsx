@@ -280,12 +280,21 @@ function TransactionRow({
               Dismiss
             </button>
           </>
+        ) : txn.status === 'ignored' ? (
+          <>
+            <span className="muted">Dismissed</span>
+            <button
+              type="button"
+              className="btn btn--danger btn--small"
+              disabled={busy}
+              onClick={onDelete}
+              title="Remove for good — a future import can bring it back"
+            >
+              Delete
+            </button>
+          </>
         ) : (
-          <span className="muted">
-            {txn.status === 'confirmed'
-              ? `Filed into ${tracker?.name ?? 'a tracker'}`
-              : 'Dismissed'}
-          </span>
+          <span className="muted">Filed into {tracker?.name ?? 'a tracker'}</span>
         )}
       </div>
     </li>

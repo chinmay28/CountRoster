@@ -572,6 +572,14 @@ func TestTransactionsOverAPI(t *testing.T) {
 		t.Fatalf("ignored list: %d %v", status, ignored)
 	}
 
+	// DELETE on an ignored row purges it for good.
+	if res, _ := c.do("DELETE", "/api/transactions/"+cafeID, nil); res.StatusCode != 204 {
+		t.Fatalf("delete ignored: %d", res.StatusCode)
+	}
+	if status := c.getJSON("/api/transactions?status=ignored", &ignored); status != 200 || len(ignored) != 0 {
+		t.Fatalf("ignored list after purge: %d %v", status, ignored)
+	}
+
 	// Confirm without any tracker (no suggestion) → 400; unknown id → 404.
 	if status := c.getJSON("/api/transactions/nope", nil); status != 404 {
 		t.Fatalf("get unknown: %d", status)

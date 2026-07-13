@@ -257,13 +257,21 @@ class TransactionServiceImpl implements TransactionService {
     return updated;
   }
 
+  /**
+   * Dismiss or purge. A pending row is kept as `ignored` so its dedupe key
+   * still blocks re-import; deleting an already-ignored row removes it for
+   * good (a future import of the same CSV row will stage it again).
+   */
   async delete(id: string): Promise<void> {
     const existing = await this.get(id);
     if (!existing) return; // silent no-op, like entries/notes
     if (existing.status === 'confirmed') {
-      throw new Error('Only pending transactions can be deleted');
+      throw new Error('Confirmed transactions cannot be deleted; delete their entry instead');
     }
-    if (existing.status === 'ignored') return;
+    if (existing.status === 'ignored') {
+      await this.storage.exec(`DELETE FROM card_transactions WHERE id = ?`, [id]);
+      return;
+    }
     await this.storage.exec(
       `UPDATE card_transactions SET status = 'ignored', updated_at = ? WHERE id = ?`,
       [this.clock.nowISO(), id],

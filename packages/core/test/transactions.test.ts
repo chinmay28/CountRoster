@@ -198,6 +198,23 @@ describe('TransactionService', () => {
     await expect(app.transactions.delete('nope')).resolves.toBeUndefined();
   });
 
+  it('deleting an ignored transaction purges it, so it can re-import', async () => {
+    const { app } = await makeTestApp();
+    const r = row('2026-07-01', 'SPAM MERCHANT', -3);
+
+    const res = await app.transactions.import({ transactions: [r] });
+    const id = res.transactions[0]!.id;
+    await app.transactions.delete(id); // pending → ignored
+    await app.transactions.delete(id); // ignored → gone
+
+    expect(await app.transactions.list('ignored')).toHaveLength(0);
+    expect(await app.transactions.list('all')).toHaveLength(0);
+
+    const fresh = await app.transactions.import({ transactions: [r] });
+    expect(fresh.imported).toBe(1);
+    expect(fresh.duplicates).toBe(0);
+  });
+
   it('list filters by status, newest first', async () => {
     const { app } = await makeTestApp();
     const dining = await app.trackers.create({ name: 'Restaurants' });

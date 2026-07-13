@@ -358,23 +358,29 @@ func (s *TransactionService) Update(id string, raw any) (*CardTransaction, error
 	return updated, nil
 }
 
-// Delete dismisses a transaction from the inbox. The row is kept as
+// Delete dismisses or purges a transaction. A pending row is kept as
 // `ignored` (not removed) so the dedupe key still blocks re-import; deleting
-// a confirmed transaction is refused — delete its entry instead.
+// an already-ignored row removes it for good (a future import of the same
+// CSV row will stage it again). Confirmed transactions are refused — delete
+// their entry instead.
 func (s *TransactionService) Delete(id string) error {
 	existing, err := s.Get(id)
 	if err != nil || existing == nil {
 		return err
 	}
-	if existing.Status == "confirmed" {
-		return onlyPendingError("deleted")
+	switch existing.Status {
+	case "confirmed":
+		return &ValidationError{Issues: []Issue{{
+			Code: "invalid_state", Path: []any{"status"},
+			Message: "Confirmed transactions cannot be deleted; delete their entry instead",
+		}}}
+	case "ignored":
+		return s.st.Exec(`DELETE FROM card_transactions WHERE id = ?`, id)
+	default:
+		return s.st.Exec(
+			`UPDATE card_transactions SET status = 'ignored', updated_at = ? WHERE id = ?`,
+			s.clock.NowISO(), id)
 	}
-	if existing.Status == "ignored" {
-		return nil
-	}
-	return s.st.Exec(
-		`UPDATE card_transactions SET status = 'ignored', updated_at = ? WHERE id = ?`,
-		s.clock.NowISO(), id)
 }
 
 // Confirm files a pending transaction into a tracker: it creates the Entry

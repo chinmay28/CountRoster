@@ -131,7 +131,7 @@ describe('transactions inbox', () => {
     });
   });
 
-  it('dismisses a transaction into the Dismissed filter', async () => {
+  it('dismisses a transaction, then deletes it for good from Dismissed', async () => {
     const user = userEvent.setup();
     await test.core.transactions.import({
       transactions: [{ date: '2026-07-01', description: 'SPAM', amount: -3 }],
@@ -145,6 +145,11 @@ describe('transactions inbox', () => {
     const list = document.querySelector('.txn__list') as HTMLElement;
     expect(await within(list).findByText('Spam')).toBeInTheDocument();
     expect(within(list).getByText('Dismissed')).toBeInTheDocument();
+
+    // Delete purges the row entirely.
+    await user.click(within(list).getByRole('button', { name: 'Delete' }));
+    expect(await screen.findByText('Nothing dismissed')).toBeInTheDocument();
+    expect(await test.core.transactions.list('all')).toHaveLength(0);
   });
 
   it('files all categorized rows in bulk', async () => {

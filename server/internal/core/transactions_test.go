@@ -281,6 +281,23 @@ func TestDeleteMarksIgnoredAndKeepsDedupe(t *testing.T) {
 		t.Fatalf("imported=%d duplicates=%d", again.Imported, again.Duplicates)
 	}
 
+	// Deleting the ignored row purges it for good…
+	if err := a.Transactions.Delete(res.Transactions[0].ID); err != nil {
+		t.Fatalf("delete ignored: %v", err)
+	}
+	ignored, err = a.Transactions.List("ignored")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ignored) != 0 {
+		t.Fatalf("ignored after purge = %d", len(ignored))
+	}
+	// …so the same CSV row imports fresh next time.
+	fresh := importRows(t, a, row)
+	if fresh.Imported != 1 || fresh.Duplicates != 0 {
+		t.Fatalf("imported=%d duplicates=%d", fresh.Imported, fresh.Duplicates)
+	}
+
 	// Deleting an unknown id is a silent no-op (like entries/notes).
 	if err := a.Transactions.Delete("nope"); err != nil {
 		t.Fatalf("delete missing: %v", err)
