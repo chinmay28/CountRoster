@@ -272,6 +272,18 @@ a {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 1rem;
+  /* Grid items refuse to shrink below their content's min-content width, so a
+     card with a long unbreakable name/total would silently widen its column
+     past the viewport and make the whole page pannable sideways. Clamp the
+     items and wrap the text instead. */
+  min-width: 0;
+}
+.tracker-grid > * {
+  min-width: 0;
+}
+.tracker-card__name,
+.tracker-card__total {
+  overflow-wrap: anywhere;
 }
 
 .tracker-card {
@@ -1224,6 +1236,10 @@ input.txn__name:focus {
     flex: 1;
     min-height: 0; /* let the flex child shrink so it can scroll */
     overflow-y: auto;
+    /* `overflow-y: auto` makes the used overflow-x `auto` too, so any child
+       wider than the viewport turns the whole pane sideways-draggable. This
+       pane only ever scrolls vertically — pin the x axis shut. */
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     /* Clear the floating FAB at the end of long lists (tab bar is in flow). */
     padding-bottom: 4rem;
@@ -1314,16 +1330,20 @@ input.txn__name:focus {
   }
 }
 
-/* Two-up tracker cards on phones; single column on the very narrowest. */
+/* Two-up tracker cards on phones; single column on the very narrowest.
+   minmax(0, 1fr) — not bare 1fr, which means minmax(auto, 1fr) — so a card
+   with a wide name/total can never prop its column open past half the screen
+   and push the grid (and with it the whole scroll pane) into horizontal
+   overflow. */
 @media (max-width: 720px) {
   .tracker-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 0.75rem;
   }
 }
 @media (max-width: 380px) {
   .tracker-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
