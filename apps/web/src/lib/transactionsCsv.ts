@@ -7,11 +7,13 @@ import type { TransactionImportItem } from '@countroster/core';
  * dedupe and categorization all happen server-side.
  *
  * Empower's export looks like:
- *   "Date","Account","Description","Category","Tags","Amount"
- *   "2026-07-01","Amex Gold","TRADER JOE'S #552","Groceries","","-43.21"
+ *   "Transactions For All Accounts from Jan 2026 to Jul 2026"
+ *   Date,Description,Category,Firm Name,Account Name,Amount,Tags
+ *   "2026-07-12","Coffee Corner","Restaurants","Some Bank","Credit Card - Ending in 7291","-$12.34",""
  *
- * Column matching is header-driven and case-insensitive, so column order and
- * extra columns don't matter.
+ * Column matching is header-driven and case-insensitive, and the header row
+ * is located by scanning the first rows (Empower puts a title line above
+ * it), so column order, extra columns, and preamble lines don't matter.
  */
 
 export interface ParsedTransactionsCsv {
@@ -104,22 +106,34 @@ export function parseTransactionsCsv(text: string): ParsedTransactionsCsv {
   const rows = parseCsv(text);
   if (rows.length === 0) throw new Error('The file is empty.');
 
-  const header = rows[0]!;
-  const dateCol = findColumn(header, 'date', 'transaction date', 'posted date');
-  const descCol = findColumn(header, 'description', 'merchant', 'payee', 'name');
-  const amountCol = findColumn(header, 'amount');
-  if (dateCol === -1 || descCol === -1 || amountCol === -1) {
+  // The header isn't necessarily the first row: Empower writes a title line
+  // ("Transactions For All Accounts from …") above it. Scan the first rows
+  // for the one that carries the columns we need.
+  const isHeader = (row: string[]) =>
+    findColumn(row, 'date', 'transaction date', 'posted date') !== -1 &&
+    findColumn(row, 'description', 'merchant', 'payee', 'name') !== -1 &&
+    findColumn(row, 'amount') !== -1;
+  const headerIdx = rows.slice(0, 10).findIndex(isHeader);
+  if (headerIdx === -1) {
     throw new Error(
       'Could not find Date, Description, and Amount columns. ' +
         'Export transactions as CSV from Empower and upload that file.',
     );
   }
+
+  const header = rows[headerIdx]!;
+  const dateCol = findColumn(header, 'date', 'transaction date', 'posted date');
+  const descCol = findColumn(header, 'description', 'merchant', 'payee', 'name');
+  const amountCol = findColumn(header, 'amount');
   const accountCol = findColumn(header, 'account', 'account name');
+  // Empower splits the institution ("Some Bank") from the account ("Credit
+  // Card - Ending in 7291"); joined they make the account label unambiguous.
+  const firmCol = findColumn(header, 'firm name', 'firm', 'institution');
   const categoryCol = findColumn(header, 'category');
 
   const transactions: TransactionImportItem[] = [];
   let skipped = 0;
-  for (const row of rows.slice(1)) {
+  for (const row of rows.slice(headerIdx + 1)) {
     const date = normalizeDate(row[dateCol] ?? '');
     const amount = normalizeAmount(row[amountCol] ?? '');
     const description = (row[descCol] ?? '').trim();
@@ -127,7 +141,9 @@ export function parseTransactionsCsv(text: string): ParsedTransactionsCsv {
       skipped++;
       continue;
     }
-    const account = accountCol === -1 ? '' : (row[accountCol] ?? '').trim();
+    const accountName = accountCol === -1 ? '' : (row[accountCol] ?? '').trim();
+    const firm = firmCol === -1 ? '' : (row[firmCol] ?? '').trim();
+    const account = [firm, accountName].filter((s) => s !== '').join(' · ').slice(0, 120);
     const category = categoryCol === -1 ? '' : (row[categoryCol] ?? '').trim();
     transactions.push({
       date,
