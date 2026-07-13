@@ -44,6 +44,10 @@ export interface TransactionService {
   update(id: string, patch: TransactionPatch): Promise<CardTransaction>;
   delete(id: string): Promise<void>;
   confirm(id: string, input?: TransactionConfirmInput): Promise<TransactionConfirmResult>;
+  /** Reverse a confirm: delete the filed entry (and its notes), back to pending. */
+  unfile(id: string): Promise<CardTransaction>;
+  /** Bulk-purge every row in a terminal status; returns how many went. */
+  clear(status: 'confirmed' | 'ignored'): Promise<{ cleared: number }>;
 }
 
 export class TransactionNotFoundError extends Error {
@@ -276,6 +280,60 @@ class TransactionServiceImpl implements TransactionService {
       `UPDATE card_transactions SET status = 'ignored', updated_at = ? WHERE id = ?`,
       [this.clock.nowISO(), id],
     );
+  }
+
+  /**
+   * Reverse a confirm: delete the entry that filing created (and the notes
+   * attached to it, including the one carrying the transaction name) and
+   * return the row to `pending`, keeping the tracker as the suggestion. The
+   * learned category rule stays — a re-confirm overwrites it anyway.
+   */
+  async unfile(id: string): Promise<CardTransaction> {
+    const txn = await this.get(id);
+    if (!txn) throw new TransactionNotFoundError(id);
+    if (txn.status !== 'confirmed') {
+      throw new Error('Only filed transactions can be unfiled');
+    }
+
+    await this.storage.transaction(async (tx) => {
+      if (txn.entry_id !== null) {
+        await tx.exec(`DELETE FROM notes WHERE entry_id = ?`, [txn.entry_id]);
+        await tx.exec(`DELETE FROM entries WHERE id = ?`, [txn.entry_id]);
+      }
+      await tx.exec(
+        `UPDATE card_transactions
+            SET status = 'pending', entry_id = NULL, updated_at = ?
+          WHERE id = ?`,
+        [this.clock.nowISO(), id],
+      );
+    });
+
+    const restored = await this.get(id);
+    if (!restored) throw new Error(`Transaction unfile succeeded but row not found: ${id}`);
+    return restored;
+  }
+
+  /**
+   * Bulk-purge every transaction in a terminal status — 'confirmed' (their
+   * tracker entries stay) or 'ignored'. Purged rows lose their dedupe keys,
+   * so re-importing an old CSV can stage them again.
+   */
+  async clear(status: 'confirmed' | 'ignored'): Promise<{ cleared: number }> {
+    if (status !== 'confirmed' && status !== 'ignored') {
+      throw new Error(
+        `Invalid status "${String(status)}"; expected confirmed or ignored`,
+      );
+    }
+    let cleared = 0;
+    await this.storage.transaction(async (tx) => {
+      const rows = await tx.query<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM card_transactions WHERE status = ?`,
+        [status],
+      );
+      cleared = rows[0]?.n ?? 0;
+      await tx.exec(`DELETE FROM card_transactions WHERE status = ?`, [status]);
+    });
+    return { cleared };
   }
 
   async confirm(

@@ -82,6 +82,21 @@ export function TransactionsPage() {
     });
   }
 
+  async function clearAll(which: 'confirmed' | 'ignored') {
+    const n = list.data?.length ?? 0;
+    const warning =
+      which === 'confirmed'
+        ? `Clear ${n} filed transaction${n === 1 ? '' : 's'} from this list? ` +
+          'Their tracker entries stay, but re-importing an old CSV may stage them again.'
+        : `Delete ${n} dismissed transaction${n === 1 ? '' : 's'} for good? ` +
+          'Re-importing an old CSV may bring them back.';
+    if (!window.confirm(warning)) return;
+    await run(async () => {
+      const { cleared } = await core.transactions.clear(which);
+      return `Cleared ${cleared} transaction${cleared === 1 ? '' : 's'}.`;
+    });
+  }
+
   return (
     <section className="form-page">
       <div className="stats__head">
@@ -126,6 +141,18 @@ export function TransactionsPage() {
         <div className="txn__bulk">
           <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void confirmAll()}>
             File all {categorized.length} categorized
+          </button>
+        </div>
+      )}
+      {status !== 'pending' && (list.data?.length ?? 0) > 0 && (
+        <div className="txn__bulk">
+          <button
+            type="button"
+            className="btn btn--danger"
+            disabled={busy}
+            onClick={() => void clearAll(status as 'confirmed' | 'ignored')}
+          >
+            Clear all {list.data!.length} {status === 'confirmed' ? 'filed' : 'dismissed'}
           </button>
         </div>
       )}
@@ -183,6 +210,12 @@ export function TransactionsPage() {
                 return null;
               })
             }
+            onUnfile={() =>
+              run(async () => {
+                const restored = await core.transactions.unfile(t.id);
+                return `Unfiled “${restored.name}” — it's back under To review.`;
+              })
+            }
           />
         ))}
       </ul>
@@ -199,6 +232,7 @@ function TransactionRow({
   onPickTracker,
   onConfirm,
   onDelete,
+  onUnfile,
 }: {
   txn: CardTransaction;
   trackers: Tracker[];
@@ -208,6 +242,7 @@ function TransactionRow({
   onPickTracker: (trackerId: string) => void;
   onConfirm: () => void;
   onDelete: () => void;
+  onUnfile: () => void;
 }) {
   const pending = txn.status === 'pending';
   const spend = -txn.amount; // bank exports carry debits as negatives
@@ -294,7 +329,18 @@ function TransactionRow({
             </button>
           </>
         ) : (
-          <span className="muted">Filed into {tracker?.name ?? 'a tracker'}</span>
+          <>
+            <span className="muted">Filed into {tracker?.name ?? 'a tracker'}</span>
+            <button
+              type="button"
+              className="btn btn--small"
+              disabled={busy}
+              onClick={onUnfile}
+              title="Remove the entry and return this to the review inbox"
+            >
+              Undo
+            </button>
+          </>
         )}
       </div>
     </li>
