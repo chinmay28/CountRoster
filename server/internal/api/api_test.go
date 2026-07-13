@@ -471,3 +471,119 @@ func TestTrackerPatch404(t *testing.T) {
 		t.Errorf("patch of unknown tracker should 404, got %d %s", res.StatusCode, data)
 	}
 }
+
+// TestTransactionsOverAPI pins the credit-card transactions contract: import
+// with dedupe, list by status, patch, dismiss (DELETE = ignored), and confirm
+// producing an entry plus a note carrying the transaction name.
+func TestTransactionsOverAPI(t *testing.T) {
+	c := &client{t: t, base: newServer(t).URL}
+
+	var groceries m
+	if status := c.postJSON("/api/trackers", m{"name": "Groceries", "unit": "$"}, &groceries); status != 201 {
+		t.Fatalf("create tracker: %d", status)
+	}
+
+	// Import two rows; one auto-categorizes via the CSV category column.
+	var imported m
+	status := c.postJSON("/api/transactions/import", m{
+		"transactions": []m{
+			{"date": "2026-07-01", "description": "TRADER JOE'S #552",
+				"amount": -43.21, "account": "Amex", "category": "Groceries"},
+			{"date": "2026-07-02", "description": "SOME CAFE", "amount": -5.5},
+		},
+	}, &imported)
+	if status != 201 {
+		t.Fatalf("import: %d %v", status, imported)
+	}
+	if imported["imported"] != float64(2) || imported["duplicates"] != float64(0) {
+		t.Fatalf("import summary: %v", imported)
+	}
+	txns := imported["transactions"].([]any)
+	tj := txns[0].(m)
+	if tj["name"] != "Trader Joe's" || tj["status"] != "pending" ||
+		tj["raw_description"] != "TRADER JOE'S #552" || tj["tracker_id"] != groceries["id"] {
+		t.Fatalf("transaction shape: %v", tj)
+	}
+
+	// Re-import → all duplicates.
+	var again m
+	c.postJSON("/api/transactions/import", m{
+		"transactions": []m{
+			{"date": "2026-07-01", "description": "TRADER JOE'S #552",
+				"amount": -43.21, "account": "Amex", "category": "Groceries"},
+		},
+	}, &again)
+	if again["imported"] != float64(0) || again["duplicates"] != float64(1) {
+		t.Fatalf("re-import summary: %v", again)
+	}
+
+	// Pending list (default), newest first.
+	var pending []m
+	if status := c.getJSON("/api/transactions", &pending); status != 200 || len(pending) != 2 {
+		t.Fatalf("pending list: %d %v", status, pending)
+	}
+	if status := c.getJSON("/api/transactions?status=bogus", nil); status != 400 {
+		t.Fatalf("bad status filter should 400, got %d", status)
+	}
+
+	// Patch the name.
+	tjID := tj["id"].(string)
+	res, data := c.do("PATCH", "/api/transactions/"+tjID, m{"name": "Trader Joe's Run"})
+	if res.StatusCode != 200 {
+		t.Fatalf("patch: %d %s", res.StatusCode, data)
+	}
+
+	// Confirm: 201 with transaction+entry+note; note body is the edited name.
+	var confirmed m
+	if status := c.postJSON("/api/transactions/"+tjID+"/confirm", m{}, &confirmed); status != 201 {
+		t.Fatalf("confirm: %d %v", status, confirmed)
+	}
+	entry := confirmed["entry"].(m)
+	note := confirmed["note"].(m)
+	txn := confirmed["transaction"].(m)
+	if entry["tracker_id"] != groceries["id"] || entry["value"] != 43.21 {
+		t.Fatalf("entry: %v", entry)
+	}
+	if note["body"] != "Trader Joe's Run" || note["entry_id"] != entry["id"] {
+		t.Fatalf("note: %v", note)
+	}
+	if txn["status"] != "confirmed" || txn["entry_id"] != entry["id"] {
+		t.Fatalf("transaction: %v", txn)
+	}
+
+	// Confirmed rows can't be edited, re-confirmed, or deleted.
+	if res, _ := c.do("PATCH", "/api/transactions/"+tjID, m{"name": "X"}); res.StatusCode != 400 {
+		t.Fatalf("patch confirmed should 400, got %d", res.StatusCode)
+	}
+	if status := c.postJSON("/api/transactions/"+tjID+"/confirm", m{}, nil); status != 400 {
+		t.Fatalf("re-confirm should 400, got %d", status)
+	}
+	if res, _ := c.do("DELETE", "/api/transactions/"+tjID, nil); res.StatusCode != 400 {
+		t.Fatalf("delete confirmed should 400, got %d", res.StatusCode)
+	}
+
+	// DELETE a pending row dismisses it into `ignored`.
+	cafeID := txns[1].(m)["id"].(string)
+	if res, _ := c.do("DELETE", "/api/transactions/"+cafeID, nil); res.StatusCode != 204 {
+		t.Fatalf("delete pending: %d", res.StatusCode)
+	}
+	var ignored []m
+	if status := c.getJSON("/api/transactions?status=ignored", &ignored); status != 200 || len(ignored) != 1 {
+		t.Fatalf("ignored list: %d %v", status, ignored)
+	}
+
+	// Confirm without any tracker (no suggestion) → 400; unknown id → 404.
+	if status := c.getJSON("/api/transactions/nope", nil); status != 404 {
+		t.Fatalf("get unknown: %d", status)
+	}
+	var out m
+	if status := c.postJSON("/api/transactions/import", m{"transactions": []m{
+		{"date": "2026-07-03", "description": "MYSTERY", "amount": -1},
+	}}, &out); status != 201 {
+		t.Fatalf("import: %d", status)
+	}
+	mysteryID := out["transactions"].([]any)[0].(m)["id"].(string)
+	if status := c.postJSON("/api/transactions/"+mysteryID+"/confirm", nil, nil); status != 400 {
+		t.Fatalf("confirm with no tracker should 400, got %d", status)
+	}
+}

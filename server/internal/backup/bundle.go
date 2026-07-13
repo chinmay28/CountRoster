@@ -356,15 +356,20 @@ func normalizeParam(v any) any {
 // checksumTables computes "sha256:<hex>" over the canonical (JS-compatible)
 // compact serialization of the tables payload, tables emitted in
 // backupTables order so the hash is stable — byte-identical to the TS
-// implementation's crypto.subtle digest.
+// implementation's crypto.subtle digest. Tables absent from the payload are
+// skipped (not hashed as empty): bundles exported before a table existed
+// must still verify against the checksum they were written with.
 func checksumTables(tables *jsjson.Obj) string {
 	ordered := jsjson.NewObj()
 	for _, t := range backupTables {
-		if v := tables.Get(t.Name); v != nil {
-			ordered.Set(t.Name, v)
-		} else {
-			ordered.Set(t.Name, []any{})
+		if !tables.Has(t.Name) {
+			continue
 		}
+		v := tables.Get(t.Name)
+		if v == nil {
+			v = []any{}
+		}
+		ordered.Set(t.Name, v)
 	}
 	sum := sha256.Sum256(jsjson.Stringify(ordered))
 	return "sha256:" + hex.EncodeToString(sum[:])

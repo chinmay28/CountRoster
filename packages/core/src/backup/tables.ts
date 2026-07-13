@@ -57,4 +57,16 @@ export const BACKUP_TABLES: ReadonlyArray<{
       'created_at', 'updated_at',
     ],
   },
+  {
+    name: 'category_rules',
+    columns: ['id', 'merchant', 'tracker_id', 'created_at', 'updated_at'],
+  },
+  {
+    name: 'card_transactions',
+    columns: [
+      'id', 'posted_at', 'amount', 'name', 'raw_description', 'account',
+      'category', 'dedupe_key', 'status', 'tracker_id', 'entry_id',
+      'created_at', 'updated_at',
+    ],
+  },
 ];

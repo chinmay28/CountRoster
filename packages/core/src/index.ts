@@ -19,6 +19,9 @@ export type {
   Note,
   NoteEdit,
   TrackerGroup,
+  CardTransaction,
+  CategoryRule,
+  TransactionStatus,
 } from './schema/tables.js';
 
 // Input shapes
@@ -34,6 +37,10 @@ export {
   notePatchSchema,
   groupInputSchema,
   groupPatchSchema,
+  transactionImportItemSchema,
+  transactionImportSchema,
+  transactionPatchSchema,
+  transactionConfirmSchema,
   type TrackerInput,
   type TrackerPatch,
   type TrackerLinkInput,
@@ -45,6 +52,10 @@ export {
   type NotePatch,
   type GroupInput,
   type GroupPatch,
+  type TransactionImportItem,
+  type TransactionImportInput,
+  type TransactionPatch,
+  type TransactionConfirmInput,
 } from './schema/validators.js';
 
 // Services
@@ -67,6 +78,15 @@ export {
   type GroupService,
   GroupNotFoundError,
 } from './domain/groups.js';
+export {
+  type TransactionService,
+  type TransactionImportResult,
+  type TransactionConfirmResult,
+  type TransactionListStatus,
+  TransactionNotFoundError,
+  sanitizeMerchantName,
+  merchantKey,
+} from './domain/transactions.js';
 export type {
   StatsService,
   StatBucket,

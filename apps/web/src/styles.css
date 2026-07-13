@@ -880,28 +880,78 @@ a {
   --plot-background: var(--surface);
 }
 
-/* Compare-page tracker picker */
-.compare__picker {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+/* Transactions inbox */
+.txn__import {
+  display: grid;
+  gap: 0.6rem;
   margin: 1rem 0;
+  padding: 1rem;
 }
-.compare__chip {
-  display: inline-flex;
+.txn__bulk {
+  margin: 0 0 1rem;
+}
+.txn__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+.txn {
+  padding: 0.75rem 1rem;
+  display: grid;
+  gap: 0.35rem;
+}
+.txn__main {
+  display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  font-size: 0.9rem;
-  cursor: pointer;
+  gap: 0.6rem;
 }
-.compare__swatch {
-  width: 0.8rem;
-  height: 0.8rem;
-  border-radius: 50%;
+.txn__date {
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.txn__name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+input.txn__name {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0.2rem 0.4rem;
+}
+input.txn__name:hover,
+input.txn__name:focus {
+  border-color: var(--border);
+  background: var(--surface);
+}
+.txn__amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.txn__amount--credit {
+  color: var(--muted);
+}
+.txn__meta {
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.txn__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.txn__actions select {
+  flex: 1;
+  min-width: 10rem;
+  max-width: 16rem;
 }
 
 /* Home group sections */

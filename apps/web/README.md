@@ -17,7 +17,7 @@ the server, so every device that points at the same server sees the same data.
 - **Charts** via [Observable Plot](https://observablehq.com/plot/): a `PlotFigure`
   wrapper renders Plot specs into React, sized to its container (ResizeObserver) so
   charts fit a phone. Plot is **code-split** — it loads only when you open a tracker
-  detail or the Compare page, keeping the home screen's first paint light.
+  detail, keeping the home screen's first paint light.
 - **No local database.** The old sqlite-wasm/OPFS adapter is gone; the only state
   here is UI state.
 
@@ -82,8 +82,13 @@ Visualizations & organization:
 - **Trends** — per tracker: a bucketed bar chart (day/week/month/year) with a
   day-streak card and a target-progress bar — or, for snapshot stats, a
   time-axis line of readings with zoom in/out and an all-time high/low card.
-- **Compare** (`/compare`) — a multi-series line chart comparing several trackers
-  over time, with a tracker picker and period toggle.
+- **Transactions** (`/transactions`) — a credit-card import inbox: upload a
+  transactions CSV (Empower Personal Dashboard's export, or any CSV with Date,
+  Description and Amount columns), and the server deduplicates rows, cleans up
+  merchant names, and suggests a tracker per transaction (learned from your past
+  confirmations, falling back to the CSV's category column). Review, rename or
+  dismiss rows, then file them: each confirmed transaction becomes an entry in
+  its tracker with a note carrying the transaction name.
 - **Groups** (`/groups`) — organize trackers into groups; the home screen renders
   them under group headings.
 - **Data** (`/data`) — backup export (bundle / raw SQLite) and restore.

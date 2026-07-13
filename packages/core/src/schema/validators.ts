@@ -127,6 +127,42 @@ export const notePatchSchema = z.object({
 });
 export type NotePatch = z.infer<typeof notePatchSchema>;
 
+/** One parsed CSV row for TransactionService.import(). */
+export const transactionImportItemSchema = z.object({
+  /** Plain calendar date, e.g. "2026-07-04". */
+  date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected a date like 2026-07-04'),
+  description: z.string().trim().min(1).max(500),
+  amount: z.number().finite(),
+  account: z.string().trim().max(120).optional().nullable(),
+  category: z.string().trim().max(120).optional().nullable(),
+});
+export type TransactionImportItem = z.infer<typeof transactionImportItemSchema>;
+
+/** Input to TransactionService.import(). */
+export const transactionImportSchema = z.object({
+  transactions: z.array(transactionImportItemSchema).min(1).max(5000),
+});
+export type TransactionImportInput = z.infer<typeof transactionImportSchema>;
+
+/** Input to TransactionService.update() — pending transactions only. */
+export const transactionPatchSchema = z.object({
+  name: z.string().trim().min(1).max(200).optional(),
+  tracker_id: z.string().min(1).optional().nullable(),
+  amount: z.number().finite().optional(),
+  posted_at: z.string().datetime({ offset: true }).optional(),
+});
+export type TransactionPatch = z.infer<typeof transactionPatchSchema>;
+
+/**
+ * Input to TransactionService.confirm(): tracker override (falls back to the
+ * stored suggestion) and entry-value override (defaults to -amount).
+ */
+export const transactionConfirmSchema = z.object({
+  tracker_id: z.string().min(1).optional(),
+  value: z.number().finite().optional(),
+});
+export type TransactionConfirmInput = z.infer<typeof transactionConfirmSchema>;
+
 /** Input to GroupService.create() */
 export const groupInputSchema = z.object({
   name: z.string().trim().min(1).max(120),

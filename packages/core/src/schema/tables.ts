@@ -118,6 +118,52 @@ export interface TrackerGroup {
   updated_at: string;
 }
 
+/** Lifecycle of an imported credit-card transaction. */
+export type TransactionStatus = 'pending' | 'confirmed' | 'ignored';
+
+/**
+ * One imported credit-card transaction, staged for review. `pending` rows
+ * form the inbox; confirming files an Entry (value defaults to `-amount`,
+ * spend-positive since bank exports carry debits as negatives) plus a Note
+ * holding `name`, and links them via `entry_id`. Dismissed rows are kept as
+ * `ignored` so `dedupe_key` still blocks re-importing the same CSV row.
+ */
+export interface CardTransaction {
+  id: string;
+  /** Local-noon ISO timestamp of the transaction's calendar date. */
+  posted_at: string;
+  /** As exported by the bank: debits negative, credits positive. */
+  amount: number;
+  /** Sanitized, user-editable display name — becomes the note body. */
+  name: string;
+  /** The untouched CSV descriptor (also what category rules key on). */
+  raw_description: string;
+  account: string | null;
+  /** The aggregator's category column, used as a name-match fallback. */
+  category: string | null;
+  /** date|amount|description|account|ordinal — blocks re-import. */
+  dedupe_key: string;
+  status: TransactionStatus;
+  /** Suggested (pending) or actual (confirmed) tracker. */
+  tracker_id: string | null;
+  /** The entry created on confirmation. */
+  entry_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Learned auto-categorization: a normalized merchant key mapped to the
+ * tracker its transactions belong in. Upserted on every confirmation.
+ */
+export interface CategoryRule {
+  id: string;
+  merchant: string;
+  tracker_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // NOTE: the `reminders` table still exists in the schema (migrations are
 // append-only and old backups must round-trip), but the feature was removed —
 // no service reads or writes it anymore.

@@ -45,4 +45,12 @@ var backupTables = []backupTable{
 		"id", "tracker_id", "time_minute", "days_mask", "enabled",
 		"created_at", "updated_at",
 	}},
+	{Name: "category_rules", Columns: []string{
+		"id", "merchant", "tracker_id", "created_at", "updated_at",
+	}},
+	{Name: "card_transactions", Columns: []string{
+		"id", "posted_at", "amount", "name", "raw_description", "account",
+		"category", "dedupe_key", "status", "tracker_id", "entry_id",
+		"created_at", "updated_at",
+	}},
 }

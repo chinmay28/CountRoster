@@ -6,6 +6,10 @@ import { createEntryService, type EntryService } from './domain/entries.js';
 import { createNoteService, type NoteService } from './domain/notes.js';
 import { createGroupService, type GroupService } from './domain/groups.js';
 import { createStatsService, type StatsService } from './aggregations/stats.js';
+import {
+  createTransactionService,
+  type TransactionService,
+} from './domain/transactions.js';
 import { createBackupService, type BackupService } from './backup/bundle.js';
 
 /**
@@ -18,6 +22,7 @@ export interface CountRosterCore {
   notes: NoteService;
   groups: GroupService;
   stats: StatsService;
+  transactions: TransactionService;
   backup: BackupService;
   migrations: MigrationRunner;
 }
@@ -39,6 +44,7 @@ export function createApp(
     notes: createNoteService(storage, clock),
     groups: createGroupService(storage, clock),
     stats: createStatsService(storage, clock),
+    transactions: createTransactionService(storage, clock),
     backup: createBackupService(storage, clock),
     migrations: createMigrationRunner(storage),
   };

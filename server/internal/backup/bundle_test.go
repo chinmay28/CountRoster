@@ -223,14 +223,22 @@ func TestImportsNodeBundle(t *testing.T) {
 		}
 	}
 
-	// The imported DB is bit-for-bit the same data, so the Go manifest must
-	// carry the Node manifest's exact tables checksum.
-	m, err := f.backup.BuildManifest("0.1.0")
+	// The imported DB is bit-for-bit the same data for every table the Node
+	// bundle carried, so hashing just those tables must reproduce the Node
+	// manifest's exact checksum. (A full Go re-export also covers tables added
+	// to the schema since that bundle was written, so its own checksum
+	// legitimately differs.)
+	tables, err := f.backup.readAllTables()
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := m.Get("checksums").(*jsjson.Obj).Get("tables").(string)
-	if got != nodeManifest.Checksums.Tables {
+	shared := jsjson.NewObj()
+	for _, bt := range backupTables {
+		if _, ok := nodeManifest.RowCounts[bt.Name]; ok {
+			shared.Set(bt.Name, tables.Get(bt.Name))
+		}
+	}
+	if got := checksumTables(shared); got != nodeManifest.Checksums.Tables {
 		t.Errorf("Go checksum %s != Node checksum %s", got, nodeManifest.Checksums.Tables)
 	}
 

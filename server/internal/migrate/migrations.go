@@ -19,6 +19,7 @@ var Migrations = []Migration{
 	{Version: 2, Name: "002_derived_trackers", Up: m002DerivedTrackers},
 	{Version: 3, Name: "003_hidden_trackers", Up: m003HiddenTrackers},
 	{Version: 4, Name: "004_snapshot_trackers", Up: m004SnapshotTrackers},
+	{Version: 5, Name: "005_card_transactions", Up: m005CardTransactions},
 }
 
 // LatestVersion is the highest schema version known to this build.
@@ -158,4 +159,35 @@ const m004SnapshotTrackers = `
     ALTER TABLE trackers
       ADD COLUMN is_snapshot INTEGER NOT NULL DEFAULT 0
       CHECK (is_snapshot IN (0, 1));
+  `
+
+const m005CardTransactions = `
+    CREATE TABLE IF NOT EXISTS card_transactions (
+      id               TEXT PRIMARY KEY,
+      posted_at        TEXT NOT NULL,
+      amount           REAL NOT NULL,
+      name             TEXT NOT NULL,
+      raw_description  TEXT NOT NULL,
+      account          TEXT,
+      category         TEXT,
+      dedupe_key       TEXT NOT NULL UNIQUE,
+      status           TEXT NOT NULL DEFAULT 'pending'
+                       CHECK (status IN ('pending','confirmed','ignored')),
+      tracker_id       TEXT REFERENCES trackers (id) ON DELETE SET NULL,
+      entry_id         TEXT REFERENCES entries (id) ON DELETE SET NULL,
+      created_at       TEXT NOT NULL,
+      updated_at       TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS card_transactions_status_idx
+      ON card_transactions (status, posted_at, id);
+
+    CREATE TABLE IF NOT EXISTS category_rules (
+      id          TEXT PRIMARY KEY,
+      merchant    TEXT NOT NULL UNIQUE,
+      tracker_id  TEXT NOT NULL REFERENCES trackers (id) ON DELETE CASCADE,
+      created_at  TEXT NOT NULL,
+      updated_at  TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS category_rules_tracker_idx
+      ON category_rules (tracker_id);
   `
