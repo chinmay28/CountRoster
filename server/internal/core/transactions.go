@@ -358,23 +358,106 @@ func (s *TransactionService) Update(id string, raw any) (*CardTransaction, error
 	return updated, nil
 }
 
-// Delete dismisses a transaction from the inbox. The row is kept as
+// Delete dismisses or purges a transaction. A pending row is kept as
 // `ignored` (not removed) so the dedupe key still blocks re-import; deleting
-// a confirmed transaction is refused — delete its entry instead.
+// an already-ignored row removes it for good (a future import of the same
+// CSV row will stage it again). Confirmed transactions are refused — delete
+// their entry instead.
 func (s *TransactionService) Delete(id string) error {
 	existing, err := s.Get(id)
 	if err != nil || existing == nil {
 		return err
 	}
-	if existing.Status == "confirmed" {
-		return onlyPendingError("deleted")
+	switch existing.Status {
+	case "confirmed":
+		return &ValidationError{Issues: []Issue{{
+			Code: "invalid_state", Path: []any{"status"},
+			Message: "Confirmed transactions cannot be deleted; delete their entry instead",
+		}}}
+	case "ignored":
+		return s.st.Exec(`DELETE FROM card_transactions WHERE id = ?`, id)
+	default:
+		return s.st.Exec(
+			`UPDATE card_transactions SET status = 'ignored', updated_at = ? WHERE id = ?`,
+			s.clock.NowISO(), id)
 	}
-	if existing.Status == "ignored" {
-		return nil
+}
+
+// Unfile reverses Confirm: it deletes the entry that filing created (and the
+// notes attached to it, including the one carrying the transaction name) and
+// returns the row to `pending`, keeping the tracker as the suggestion. The
+// learned category rule is left in place — re-confirming (or confirming into
+// a different tracker) overwrites it anyway.
+func (s *TransactionService) Unfile(id string) (*CardTransaction, error) {
+	txn, err := s.Get(id)
+	if err != nil {
+		return nil, err
 	}
-	return s.st.Exec(
-		`UPDATE card_transactions SET status = 'ignored', updated_at = ? WHERE id = ?`,
-		s.clock.NowISO(), id)
+	if txn == nil {
+		return nil, &NotFoundError{Kind: "Transaction", ID: id}
+	}
+	if txn.Status != "confirmed" {
+		return nil, &ValidationError{Issues: []Issue{{
+			Code: "invalid_state", Path: []any{"status"},
+			Message: "Only filed transactions can be unfiled",
+		}}}
+	}
+
+	err = s.st.Transaction(func(tx storage.Storage) error {
+		if txn.EntryID != nil {
+			if err := tx.Exec(`DELETE FROM notes WHERE entry_id = ?`, *txn.EntryID); err != nil {
+				return err
+			}
+			if err := tx.Exec(`DELETE FROM entries WHERE id = ?`, *txn.EntryID); err != nil {
+				return err
+			}
+		}
+		return tx.Exec(
+			`UPDATE card_transactions
+          SET status = 'pending', entry_id = NULL, updated_at = ?
+        WHERE id = ?`,
+			s.clock.NowISO(), id)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	restored, err := s.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if restored == nil {
+		return nil, fmt.Errorf("transaction unfile succeeded but row not found: %s", id)
+	}
+	return restored, nil
+}
+
+// Clear bulk-purges every transaction in a terminal status — "confirmed"
+// (their tracker entries stay) or "ignored". Purged rows lose their dedupe
+// keys, so re-importing an old CSV can stage them again.
+func (s *TransactionService) Clear(status string) (int, error) {
+	if status != "confirmed" && status != "ignored" {
+		return 0, &ValidationError{Issues: []Issue{{
+			Code: "invalid_enum_value", Path: []any{"status"},
+			Message: `Invalid status "` + status + `"; expected confirmed or ignored`,
+		}}}
+	}
+	cleared := 0
+	err := s.st.Transaction(func(tx storage.Storage) error {
+		rows, err := tx.Query(
+			`SELECT COUNT(*) AS n FROM card_transactions WHERE status = ?`, status)
+		if err != nil {
+			return err
+		}
+		if len(rows) > 0 {
+			cleared = asInt(rows[0].Get("n"))
+		}
+		return tx.Exec(`DELETE FROM card_transactions WHERE status = ?`, status)
+	})
+	if err != nil {
+		return 0, err
+	}
+	return cleared, nil
 }
 
 // Confirm files a pending transaction into a tracker: it creates the Entry

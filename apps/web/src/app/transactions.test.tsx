@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
@@ -131,7 +131,7 @@ describe('transactions inbox', () => {
     });
   });
 
-  it('dismisses a transaction into the Dismissed filter', async () => {
+  it('dismisses a transaction, then deletes it for good from Dismissed', async () => {
     const user = userEvent.setup();
     await test.core.transactions.import({
       transactions: [{ date: '2026-07-01', description: 'SPAM', amount: -3 }],
@@ -145,6 +145,64 @@ describe('transactions inbox', () => {
     const list = document.querySelector('.txn__list') as HTMLElement;
     expect(await within(list).findByText('Spam')).toBeInTheDocument();
     expect(within(list).getByText('Dismissed')).toBeInTheDocument();
+
+    // Delete purges the row entirely.
+    await user.click(within(list).getByRole('button', { name: 'Delete' }));
+    expect(await screen.findByText('Nothing dismissed')).toBeInTheDocument();
+    expect(await test.core.transactions.list('all')).toHaveLength(0);
+  });
+
+  it('undoes a filed transaction back into the inbox', async () => {
+    const user = userEvent.setup();
+    const groceries = await test.createTracker({ name: 'Groceries' });
+    const res = await test.core.transactions.import({
+      transactions: [
+        { date: '2026-07-01', description: 'A MART', amount: -12, category: 'Groceries' },
+      ],
+    });
+    await test.core.transactions.confirm(res.transactions[0]!.id);
+
+    renderApp(test);
+    await user.click(await screen.findByRole('button', { name: 'Filed' }));
+    expect(await screen.findByText(/filed into groceries/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(await screen.findByText(/unfiled .*a mart/i)).toBeInTheDocument();
+    expect(await screen.findByText('Nothing filed yet')).toBeInTheDocument();
+
+    // Entry gone, row pending again with the suggestion kept.
+    expect(await test.core.entries.forTracker(groceries.id)).toHaveLength(0);
+    const [txn] = await test.core.transactions.list();
+    expect(txn!.status).toBe('pending');
+    expect(txn!.tracker_id).toBe(groceries.id);
+  });
+
+  it('clears all dismissed transactions after confirmation', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      const res = await test.core.transactions.import({
+        transactions: [
+          { date: '2026-07-01', description: 'SPAM A', amount: -1 },
+          { date: '2026-07-02', description: 'SPAM B', amount: -2 },
+        ],
+      });
+      await test.core.transactions.delete(res.transactions[0]!.id);
+      await test.core.transactions.delete(res.transactions[1]!.id);
+
+      renderApp(test);
+      await user.click(await screen.findByRole('button', { name: 'Dismissed' }));
+      await user.click(
+        await screen.findByRole('button', { name: /clear all 2 dismissed/i }),
+      );
+
+      expect(confirmSpy).toHaveBeenCalledOnce();
+      expect(await screen.findByText(/cleared 2 transactions/i)).toBeInTheDocument();
+      expect(await screen.findByText('Nothing dismissed')).toBeInTheDocument();
+      expect(await test.core.transactions.list('all')).toHaveLength(0);
+    } finally {
+      confirmSpy.mockRestore();
+    }
   });
 
   it('files all categorized rows in bulk', async () => {

@@ -281,6 +281,23 @@ func TestDeleteMarksIgnoredAndKeepsDedupe(t *testing.T) {
 		t.Fatalf("imported=%d duplicates=%d", again.Imported, again.Duplicates)
 	}
 
+	// Deleting the ignored row purges it for good…
+	if err := a.Transactions.Delete(res.Transactions[0].ID); err != nil {
+		t.Fatalf("delete ignored: %v", err)
+	}
+	ignored, err = a.Transactions.List("ignored")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ignored) != 0 {
+		t.Fatalf("ignored after purge = %d", len(ignored))
+	}
+	// …so the same CSV row imports fresh next time.
+	fresh := importRows(t, a, row)
+	if fresh.Imported != 1 || fresh.Duplicates != 0 {
+		t.Fatalf("imported=%d duplicates=%d", fresh.Imported, fresh.Duplicates)
+	}
+
 	// Deleting an unknown id is a silent no-op (like entries/notes).
 	if err := a.Transactions.Delete("nope"); err != nil {
 		t.Fatalf("delete missing: %v", err)
@@ -316,6 +333,103 @@ func TestListFiltersAndOrder(t *testing.T) {
 	}
 	if _, err := a.Transactions.List("bogus"); err == nil {
 		t.Fatal("expected validation error for bad status")
+	}
+}
+
+func TestUnfileRestoresPendingAndRemovesEntry(t *testing.T) {
+	a := newTestApp(t)
+	dining := mustCreate(t, a, obj("name", "Restaurants"))
+
+	res := importRows(t, a, txnRow("2026-07-01", "CAFE", -5))
+	txn := res.Transactions[0]
+	out, err := a.Transactions.Confirm(txn.ID, obj("tracker_id", dining.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	restored, err := a.Transactions.Unfile(txn.ID)
+	if err != nil {
+		t.Fatalf("unfile: %v", err)
+	}
+	if restored.Status != "pending" || restored.EntryID != nil {
+		t.Fatalf("restored = %+v", restored)
+	}
+	// The tracker stays as the suggestion for a quick re-file.
+	if restored.TrackerID == nil || *restored.TrackerID != dining.ID {
+		t.Fatalf("suggestion lost: %+v", restored)
+	}
+
+	// The entry and its note are gone from the tracker.
+	entries, err := a.Entries.ForTracker(dining.ID, TimeRange{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("entries = %d", len(entries))
+	}
+	notes, err := a.Notes.ForTracker(dining.ID, TimeRange{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notes) != 0 {
+		t.Fatalf("notes = %d", len(notes))
+	}
+	_ = out
+
+	// Re-confirming works; unfiling a pending row is refused.
+	if _, err := a.Transactions.Confirm(txn.ID, nil); err != nil {
+		t.Fatalf("re-confirm: %v", err)
+	}
+	res2 := importRows(t, a, txnRow("2026-07-02", "OTHER", -1))
+	if _, err := a.Transactions.Unfile(res2.Transactions[0].ID); err == nil {
+		t.Fatal("expected error unfiling a pending transaction")
+	}
+}
+
+func TestClearPurgesTerminalStatuses(t *testing.T) {
+	a := newTestApp(t)
+	dining := mustCreate(t, a, obj("name", "Restaurants"))
+
+	res := importRows(t, a,
+		txnRow("2026-07-01", "A", -1),
+		txnRow("2026-07-02", "B", -2),
+		txnRow("2026-07-03", "C", -3),
+	)
+	if _, err := a.Transactions.Confirm(res.Transactions[0].ID, obj("tracker_id", dining.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Transactions.Confirm(res.Transactions[1].ID, obj("tracker_id", dining.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Transactions.Delete(res.Transactions[2].ID); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := a.Transactions.Clear("confirmed")
+	if err != nil || n != 2 {
+		t.Fatalf("clear confirmed: n=%d err=%v", n, err)
+	}
+	// Entries survive the clear — only the staging rows go.
+	entries, _ := a.Entries.ForTracker(dining.ID, TimeRange{})
+	if len(entries) != 2 {
+		t.Fatalf("entries after clear = %d", len(entries))
+	}
+
+	n, err = a.Transactions.Clear("ignored")
+	if err != nil || n != 1 {
+		t.Fatalf("clear ignored: n=%d err=%v", n, err)
+	}
+	all, _ := a.Transactions.List("all")
+	if len(all) != 0 {
+		t.Fatalf("all after clears = %d", len(all))
+	}
+
+	// Pending rows are not clearable.
+	if _, err := a.Transactions.Clear("pending"); err == nil {
+		t.Fatal("expected validation error clearing pending")
+	}
+	if _, err := a.Transactions.Clear(""); err == nil {
+		t.Fatal("expected validation error clearing empty status")
 	}
 }
 

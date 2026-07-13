@@ -572,6 +572,14 @@ func TestTransactionsOverAPI(t *testing.T) {
 		t.Fatalf("ignored list: %d %v", status, ignored)
 	}
 
+	// DELETE on an ignored row purges it for good.
+	if res, _ := c.do("DELETE", "/api/transactions/"+cafeID, nil); res.StatusCode != 204 {
+		t.Fatalf("delete ignored: %d", res.StatusCode)
+	}
+	if status := c.getJSON("/api/transactions?status=ignored", &ignored); status != 200 || len(ignored) != 0 {
+		t.Fatalf("ignored list after purge: %d %v", status, ignored)
+	}
+
 	// Confirm without any tracker (no suggestion) → 400; unknown id → 404.
 	if status := c.getJSON("/api/transactions/nope", nil); status != 404 {
 		t.Fatalf("get unknown: %d", status)
@@ -585,5 +593,32 @@ func TestTransactionsOverAPI(t *testing.T) {
 	mysteryID := out["transactions"].([]any)[0].(m)["id"].(string)
 	if status := c.postJSON("/api/transactions/"+mysteryID+"/confirm", nil, nil); status != 400 {
 		t.Fatalf("confirm with no tracker should 400, got %d", status)
+	}
+
+	// Unfile returns the confirmed row to pending and deletes its entry.
+	var unfiled m
+	if status := c.postJSON("/api/transactions/"+tjID+"/unfile", nil, &unfiled); status != 200 {
+		t.Fatalf("unfile: %d %v", status, unfiled)
+	}
+	if unfiled["status"] != "pending" || unfiled["entry_id"] != nil {
+		t.Fatalf("unfiled shape: %v", unfiled)
+	}
+	if status := c.getJSON("/api/entries/"+entry["id"].(string), nil); status != 404 {
+		t.Fatalf("entry should be gone after unfile, got %d", status)
+	}
+	if status := c.postJSON("/api/transactions/"+tjID+"/unfile", nil, nil); status != 400 {
+		t.Fatalf("unfile of pending should 400, got %d", status)
+	}
+
+	// Bulk clear: only terminal statuses, returns the purge count.
+	res, data = c.do("DELETE", "/api/transactions?status=ignored", nil)
+	if res.StatusCode != 200 || string(data) != `{"cleared":0}` {
+		t.Fatalf("clear ignored: %d %s", res.StatusCode, data)
+	}
+	if res, _ := c.do("DELETE", "/api/transactions?status=pending", nil); res.StatusCode != 400 {
+		t.Fatalf("clear pending should 400, got %d", res.StatusCode)
+	}
+	if res, _ := c.do("DELETE", "/api/transactions", nil); res.StatusCode != 400 {
+		t.Fatalf("clear without status should 400, got %d", res.StatusCode)
 	}
 }

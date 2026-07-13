@@ -88,11 +88,13 @@ func New(app *core.App, bk *backup.Service, file FileSource) http.Handler {
 
 	// Transactions (imported credit-card rows staged for review).
 	mux.HandleFunc("GET /api/transactions", s.listTransactions)
+	mux.HandleFunc("DELETE /api/transactions", s.clearTransactions)
 	mux.HandleFunc("POST /api/transactions/import", s.importTransactions)
 	mux.HandleFunc("GET /api/transactions/{id}", s.getTransaction)
 	mux.HandleFunc("PATCH /api/transactions/{id}", s.updateTransaction)
 	mux.HandleFunc("DELETE /api/transactions/{id}", s.deleteTransaction)
 	mux.HandleFunc("POST /api/transactions/{id}/confirm", s.confirmTransaction)
+	mux.HandleFunc("POST /api/transactions/{id}/unfile", s.unfileTransaction)
 
 	// Stats.
 	mux.HandleFunc("GET /api/trackers/{id}/stats/buckets", s.statsBuckets)
@@ -673,6 +675,24 @@ func (s *server) confirmTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, result)
+}
+
+func (s *server) unfileTransaction(w http.ResponseWriter, r *http.Request) {
+	txn, err := s.app.Transactions.Unfile(r.PathValue("id"))
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, txn)
+}
+
+func (s *server) clearTransactions(w http.ResponseWriter, r *http.Request) {
+	cleared, err := s.app.Transactions.Clear(r.URL.Query().Get("status"))
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"cleared": cleared})
 }
 
 // --- stats ---------------------------------------------------------------------

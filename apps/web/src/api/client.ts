@@ -181,6 +181,9 @@ export function createApiClient(baseUrl = '/api'): ApiCore {
     delete: (id) => request('DELETE', `/transactions/${id}`),
     confirm: (id, input?: TransactionConfirmInput) =>
       request<TransactionConfirmResult>('POST', `/transactions/${id}/confirm`, input ?? {}),
+    unfile: (id) => request<CardTransaction>('POST', `/transactions/${id}/unfile`),
+    clear: (status) =>
+      request<{ cleared: number }>('DELETE', `/transactions${qs({ status })}`),
   };
 
   const stats: StatsService = {

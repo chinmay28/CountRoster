@@ -198,6 +198,23 @@ describe('TransactionService', () => {
     await expect(app.transactions.delete('nope')).resolves.toBeUndefined();
   });
 
+  it('deleting an ignored transaction purges it, so it can re-import', async () => {
+    const { app } = await makeTestApp();
+    const r = row('2026-07-01', 'SPAM MERCHANT', -3);
+
+    const res = await app.transactions.import({ transactions: [r] });
+    const id = res.transactions[0]!.id;
+    await app.transactions.delete(id); // pending → ignored
+    await app.transactions.delete(id); // ignored → gone
+
+    expect(await app.transactions.list('ignored')).toHaveLength(0);
+    expect(await app.transactions.list('all')).toHaveLength(0);
+
+    const fresh = await app.transactions.import({ transactions: [r] });
+    expect(fresh.imported).toBe(1);
+    expect(fresh.duplicates).toBe(0);
+  });
+
   it('list filters by status, newest first', async () => {
     const { app } = await makeTestApp();
     const dining = await app.trackers.create({ name: 'Restaurants' });
@@ -215,6 +232,55 @@ describe('TransactionService', () => {
     expect(pending.map((t) => t.name)).toEqual(['C', 'A']);
     const all = await app.transactions.list('all');
     expect(all.map((t) => t.name)).toEqual(['B', 'C', 'A']);
+  });
+
+  it('unfile removes the entry + note and returns the row to pending', async () => {
+    const { app } = await makeTestApp();
+    const dining = await app.trackers.create({ name: 'Restaurants' });
+
+    const res = await app.transactions.import({
+      transactions: [row('2026-07-01', 'CAFE', -5)],
+    });
+    const id = res.transactions[0]!.id;
+    await app.transactions.confirm(id, { tracker_id: dining.id });
+
+    const restored = await app.transactions.unfile(id);
+    expect(restored.status).toBe('pending');
+    expect(restored.entry_id).toBeNull();
+    expect(restored.tracker_id).toBe(dining.id); // suggestion kept
+
+    expect(await app.entries.forTracker(dining.id)).toHaveLength(0);
+    expect(await app.notes.forTracker(dining.id)).toHaveLength(0);
+
+    // Re-confirm works; unfiling a pending row is refused.
+    await app.transactions.confirm(id);
+    await app.transactions.unfile(id);
+    await expect(app.transactions.unfile(id)).rejects.toThrow(/Only filed/);
+  });
+
+  it('clear purges terminal statuses and leaves entries alone', async () => {
+    const { app } = await makeTestApp();
+    const dining = await app.trackers.create({ name: 'Restaurants' });
+
+    const res = await app.transactions.import({
+      transactions: [
+        row('2026-07-01', 'A', -1),
+        row('2026-07-02', 'B', -2),
+        row('2026-07-03', 'C', -3),
+      ],
+    });
+    await app.transactions.confirm(res.transactions[0]!.id, { tracker_id: dining.id });
+    await app.transactions.confirm(res.transactions[1]!.id, { tracker_id: dining.id });
+    await app.transactions.delete(res.transactions[2]!.id);
+
+    expect(await app.transactions.clear('confirmed')).toEqual({ cleared: 2 });
+    expect(await app.entries.forTracker(dining.id)).toHaveLength(2);
+    expect(await app.transactions.clear('ignored')).toEqual({ cleared: 1 });
+    expect(await app.transactions.list('all')).toHaveLength(0);
+
+    await expect(
+      app.transactions.clear('pending' as 'confirmed'),
+    ).rejects.toThrow(/Invalid status/);
   });
 
   it('validates import input', async () => {
