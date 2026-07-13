@@ -424,12 +424,26 @@ func TestClearPurgesTerminalStatuses(t *testing.T) {
 		t.Fatalf("all after clears = %d", len(all))
 	}
 
-	// Pending rows are not clearable.
-	if _, err := a.Transactions.Clear("pending"); err == nil {
-		t.Fatal("expected validation error clearing pending")
+	// Pending rows clear too — dropping a bad import wholesale.
+	res2 := importRows(t, a, txnRow("2026-07-04", "D", -4), txnRow("2026-07-05", "E", -5))
+	if res2.Imported != 2 {
+		t.Fatalf("imported = %d", res2.Imported)
 	}
+	n, err = a.Transactions.Clear("pending")
+	if err != nil || n != 2 {
+		t.Fatalf("clear pending: n=%d err=%v", n, err)
+	}
+	// The dedupe keys went with them, so the same rows import fresh.
+	res3 := importRows(t, a, txnRow("2026-07-04", "D", -4))
+	if res3.Imported != 1 || res3.Duplicates != 0 {
+		t.Fatalf("re-import after clear: %+v", res3)
+	}
+
 	if _, err := a.Transactions.Clear(""); err == nil {
 		t.Fatal("expected validation error clearing empty status")
+	}
+	if _, err := a.Transactions.Clear("all"); err == nil {
+		t.Fatal("expected validation error clearing 'all'")
 	}
 }
 

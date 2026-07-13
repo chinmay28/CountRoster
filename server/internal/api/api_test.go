@@ -610,13 +610,18 @@ func TestTransactionsOverAPI(t *testing.T) {
 		t.Fatalf("unfile of pending should 400, got %d", status)
 	}
 
-	// Bulk clear: only terminal statuses, returns the purge count.
+	// Bulk clear per status, returning the purge count.
 	res, data = c.do("DELETE", "/api/transactions?status=ignored", nil)
 	if res.StatusCode != 200 || string(data) != `{"cleared":0}` {
 		t.Fatalf("clear ignored: %d %s", res.StatusCode, data)
 	}
-	if res, _ := c.do("DELETE", "/api/transactions?status=pending", nil); res.StatusCode != 400 {
-		t.Fatalf("clear pending should 400, got %d", res.StatusCode)
+	// Two rows are pending at this point: the unfiled one and MYSTERY.
+	res, data = c.do("DELETE", "/api/transactions?status=pending", nil)
+	if res.StatusCode != 200 || string(data) != `{"cleared":2}` {
+		t.Fatalf("clear pending: %d %s", res.StatusCode, data)
+	}
+	if status := c.getJSON("/api/transactions", &pending); status != 200 || len(pending) != 0 {
+		t.Fatalf("pending after clear: %d %v", status, pending)
 	}
 	if res, _ := c.do("DELETE", "/api/transactions", nil); res.StatusCode != 400 {
 		t.Fatalf("clear without status should 400, got %d", res.StatusCode)

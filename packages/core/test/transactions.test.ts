@@ -278,8 +278,15 @@ describe('TransactionService', () => {
     expect(await app.transactions.clear('ignored')).toEqual({ cleared: 1 });
     expect(await app.transactions.list('all')).toHaveLength(0);
 
+    // Pending clears too — dropping a bad import; dedupe keys go with it.
+    const r = row('2026-07-04', 'D', -4);
+    await app.transactions.import({ transactions: [r] });
+    expect(await app.transactions.clear('pending')).toEqual({ cleared: 1 });
+    const fresh = await app.transactions.import({ transactions: [r] });
+    expect(fresh.imported).toBe(1);
+
     await expect(
-      app.transactions.clear('pending' as 'confirmed'),
+      app.transactions.clear('all' as 'confirmed'),
     ).rejects.toThrow(/Invalid status/);
   });
 

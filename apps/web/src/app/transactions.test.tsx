@@ -205,6 +205,31 @@ describe('transactions inbox', () => {
     }
   });
 
+  it('clears all imported rows from To review after confirmation', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      await test.core.transactions.import({
+        transactions: [
+          { date: '2026-07-01', description: 'A', amount: -1 },
+          { date: '2026-07-02', description: 'B', amount: -2 },
+        ],
+      });
+
+      renderApp(test);
+      await user.click(
+        await screen.findByRole('button', { name: /clear all 2 imported/i }),
+      );
+
+      expect(confirmSpy).toHaveBeenCalledOnce();
+      expect(await screen.findByText(/cleared 2 transactions/i)).toBeInTheDocument();
+      expect(await screen.findByText('Nothing to review')).toBeInTheDocument();
+      expect(await test.core.transactions.list('all')).toHaveLength(0);
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
   it('files all categorized rows in bulk', async () => {
     const user = userEvent.setup();
     const groceries = await test.createTracker({ name: 'Groceries' });
