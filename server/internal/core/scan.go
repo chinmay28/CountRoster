@@ -107,6 +107,24 @@ func noteEditFromRow(r storage.Row) NoteEdit {
 	}
 }
 
+func cardTransactionFromRow(r storage.Row) *CardTransaction {
+	return &CardTransaction{
+		ID:             asString(r.Get("id")),
+		PostedAt:       asString(r.Get("posted_at")),
+		Amount:         asFloat(r.Get("amount")),
+		Name:           asString(r.Get("name")),
+		RawDescription: asString(r.Get("raw_description")),
+		Account:        asNullString(r.Get("account")),
+		Category:       asNullString(r.Get("category")),
+		DedupeKey:      asString(r.Get("dedupe_key")),
+		Status:         asString(r.Get("status")),
+		TrackerID:      asNullString(r.Get("tracker_id")),
+		EntryID:        asNullString(r.Get("entry_id")),
+		CreatedAt:      asString(r.Get("created_at")),
+		UpdatedAt:      asString(r.Get("updated_at")),
+	}
+}
+
 func groupFromRow(r storage.Row) *TrackerGroup {
 	return &TrackerGroup{
 		ID:        asString(r.Get("id")),

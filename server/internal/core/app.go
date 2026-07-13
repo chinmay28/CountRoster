@@ -9,11 +9,12 @@ import (
 // createApp(). Build one after opening the storage adapter, then run
 // migrations (migrate.Run) before serving.
 type App struct {
-	Trackers *TrackerService
-	Entries  *EntryService
-	Notes    *NoteService
-	Groups   *GroupService
-	Stats    *StatsService
+	Trackers     *TrackerService
+	Entries      *EntryService
+	Notes        *NoteService
+	Groups       *GroupService
+	Stats        *StatsService
+	Transactions *TransactionService
 }
 
 // New wires every service over one Storage and Clock.
@@ -22,10 +23,11 @@ func New(st storage.Storage, clock timeutil.Clock) *App {
 		clock = timeutil.SystemClock
 	}
 	return &App{
-		Trackers: &TrackerService{st: st, clock: clock},
-		Entries:  &EntryService{st: st, clock: clock},
-		Notes:    &NoteService{st: st, clock: clock},
-		Groups:   &GroupService{st: st, clock: clock},
-		Stats:    &StatsService{st: st, clock: clock},
+		Trackers:     &TrackerService{st: st, clock: clock},
+		Entries:      &EntryService{st: st, clock: clock},
+		Notes:        &NoteService{st: st, clock: clock},
+		Groups:       &GroupService{st: st, clock: clock},
+		Stats:        &StatsService{st: st, clock: clock},
+		Transactions: &TransactionService{st: st, clock: clock},
 	}
 }

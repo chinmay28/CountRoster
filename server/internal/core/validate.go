@@ -493,6 +493,127 @@ func ParseNotePatch(v any) (*NotePatch, error) {
 	return &p, nil
 }
 
+// --- Transaction DTOs ----------------------------------------------------------
+
+// TransactionImportItem is one parsed CSV row of POST /transactions/import.
+type TransactionImportItem struct {
+	Date        string
+	Description string
+	Amount      float64
+	Account     Opt[string]
+	Category    Opt[string]
+}
+
+// ParseTransactionImport validates {"transactions": [...]}: 1..5000 rows,
+// each with a plain YYYY-MM-DD date, a non-empty description, and an amount.
+func ParseTransactionImport(v any) ([]TransactionImportItem, error) {
+	m, ok := asObject(v)
+	if !ok {
+		return nil, &ValidationError{Issues: []Issue{{Code: "invalid_type", Path: []any{}, Message: "Expected object"}}}
+	}
+	c := &vctx{}
+	arr, ok := m["transactions"].([]any)
+	if !ok {
+		c.add("invalid_type", "Expected array", "transactions")
+		return nil, c.err()
+	}
+	if len(arr) < 1 {
+		c.add("too_small", "Array must contain at least 1 element(s)", "transactions")
+	}
+	if len(arr) > 5000 {
+		c.add("too_big", "Array must contain at most 5000 element(s)", "transactions")
+	}
+	var items []TransactionImportItem
+	for i, raw := range arr {
+		im, ok := asObject(raw)
+		if !ok {
+			c.add("invalid_type", "Expected object", "transactions", i)
+			continue
+		}
+		ic := &vctx{}
+		date := ic.str(im, "date", true, false, 1, -1, true)
+		if date.Set() && !importDateRe.MatchString(date.Value) {
+			ic.add("invalid_string", "Expected a date like 2026-07-04", "date")
+		}
+		description := ic.str(im, "description", true, false, 1, 500, true)
+		account := ic.str(im, "account", false, true, 0, 120, true)
+		category := ic.str(im, "category", false, true, 0, 120, true)
+		amount := ic.num(im, "amount", false, false, false, 0, 0)
+		if !amount.Present {
+			ic.add("invalid_type", "Required", "amount")
+		}
+		for _, iss := range ic.issues {
+			c.add(iss.Code, iss.Message, append([]any{"transactions", i}, iss.Path...)...)
+		}
+		items = append(items, TransactionImportItem{
+			Date:        date.Value,
+			Description: description.Value,
+			Amount:      amount.Value,
+			Account:     account,
+			Category:    category,
+		})
+	}
+	if err := c.err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// TransactionPatch is the body of PATCH /transactions/:id.
+type TransactionPatch struct {
+	Name      Opt[string]
+	TrackerID Opt[string]
+	Amount    Opt[float64]
+	PostedAt  Opt[string]
+}
+
+// ParseTransactionPatch validates a transaction update body.
+func ParseTransactionPatch(v any) (*TransactionPatch, error) {
+	m, ok := asObject(v)
+	if !ok {
+		return nil, &ValidationError{Issues: []Issue{{Code: "invalid_type", Path: []any{}, Message: "Expected object"}}}
+	}
+	c := &vctx{}
+	p := TransactionPatch{
+		Name:      c.str(m, "name", false, false, 1, 200, true),
+		TrackerID: c.str(m, "tracker_id", false, true, 1, -1, false),
+		Amount:    c.num(m, "amount", false, false, false, 0, 0),
+		PostedAt:  c.datetime(m, "posted_at"),
+	}
+	if err := c.err(); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// TransactionConfirmInput is the body of POST /transactions/:id/confirm:
+// an optional tracker override (falls back to the stored suggestion) and an
+// optional entry value override (defaults to -amount, spend-positive).
+type TransactionConfirmInput struct {
+	TrackerID Opt[string]
+	Value     Opt[float64]
+}
+
+// ParseTransactionConfirm validates a confirm body (absent body allowed).
+func ParseTransactionConfirm(v any) (*TransactionConfirmInput, error) {
+	if v == nil {
+		v = map[string]any{}
+	}
+	m, ok := asObject(v)
+	if !ok {
+		return nil, &ValidationError{Issues: []Issue{{Code: "invalid_type", Path: []any{}, Message: "Expected object"}}}
+	}
+	c := &vctx{}
+	in := TransactionConfirmInput{
+		TrackerID: c.str(m, "tracker_id", false, false, 1, -1, false),
+		Value:     c.num(m, "value", false, false, false, 0, 0),
+	}
+	if err := c.err(); err != nil {
+		return nil, err
+	}
+	return &in, nil
+}
+
 // --- Group DTOs ----------------------------------------------------------------
 
 // GroupPatch mirrors groupPatchSchema (and groupInputSchema after defaults).

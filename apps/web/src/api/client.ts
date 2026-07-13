@@ -24,6 +24,14 @@ import type {
   NotePatch,
   GroupInput,
   GroupPatch,
+  TransactionService,
+  CardTransaction,
+  TransactionImportInput,
+  TransactionImportResult,
+  TransactionConfirmResult,
+  TransactionPatch,
+  TransactionConfirmInput,
+  TransactionListStatus,
 } from '@countroster/core';
 
 /**
@@ -39,6 +47,7 @@ export interface ApiCore {
   notes: NoteService;
   groups: GroupService;
   stats: StatsService;
+  transactions: TransactionService;
 }
 
 /** Error carrying the HTTP status and any structured body from the API. */
@@ -161,6 +170,19 @@ export function createApiClient(baseUrl = '/api'): ApiCore {
       request('POST', `/groups/${groupId}/reorder`, { orderedTrackerIds }),
   };
 
+  const transactions: TransactionService = {
+    import: (input: TransactionImportInput) =>
+      request<TransactionImportResult>('POST', '/transactions/import', input),
+    list: (status?: TransactionListStatus) =>
+      request<CardTransaction[]>('GET', `/transactions${qs({ status })}`),
+    get: (id) => getOrNull<CardTransaction>(`/transactions/${id}`),
+    update: (id, patch: TransactionPatch) =>
+      request<CardTransaction>('PATCH', `/transactions/${id}`, patch),
+    delete: (id) => request('DELETE', `/transactions/${id}`),
+    confirm: (id, input?: TransactionConfirmInput) =>
+      request<TransactionConfirmResult>('POST', `/transactions/${id}/confirm`, input ?? {}),
+  };
+
   const stats: StatsService = {
     bucket: (trackerId, range, period: BucketPeriod) =>
       request<StatBucket[]>(
@@ -180,7 +202,7 @@ export function createApiClient(baseUrl = '/api'): ApiCore {
       ),
   };
 
-  return { trackers, entries, notes, groups, stats };
+  return { trackers, entries, notes, groups, stats, transactions };
 }
 
 /** Default API mount point (same origin; dev server proxies it to the API). */

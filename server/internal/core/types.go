@@ -110,6 +110,50 @@ type Streak struct {
 	Longest int `json:"longest"`
 }
 
+// CardTransaction mirrors the card_transactions table row: one imported
+// credit-card transaction staged for review. Confirming it files an Entry
+// (plus a Note carrying the name) into a tracker.
+type CardTransaction struct {
+	ID             string  `json:"id"`
+	PostedAt       string  `json:"posted_at"`
+	Amount         float64 `json:"amount"`
+	Name           string  `json:"name"`
+	RawDescription string  `json:"raw_description"`
+	Account        *string `json:"account"`
+	Category       *string `json:"category"`
+	DedupeKey      string  `json:"dedupe_key"`
+	Status         string  `json:"status"`
+	TrackerID      *string `json:"tracker_id"`
+	EntryID        *string `json:"entry_id"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
+}
+
+// CategoryRule maps a normalized merchant key to the tracker its
+// transactions should be filed into. Learned from confirmations.
+type CategoryRule struct {
+	ID        string `json:"id"`
+	Merchant  string `json:"merchant"`
+	TrackerID string `json:"tracker_id"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// TransactionImportResult summarizes one CSV import: how many rows landed,
+// how many were already known, and the created rows.
+type TransactionImportResult struct {
+	Imported     int                `json:"imported"`
+	Duplicates   int                `json:"duplicates"`
+	Transactions []*CardTransaction `json:"transactions"`
+}
+
+// TransactionConfirmResult is what confirming a transaction produced.
+type TransactionConfirmResult struct {
+	Transaction *CardTransaction `json:"transaction"`
+	Entry       *Entry           `json:"entry"`
+	Note        *Note            `json:"note"`
+}
+
 // TimeRange bounds a query: inclusive Start, exclusive End, both ISO 8601.
 // Empty string means unbounded.
 type TimeRange struct {

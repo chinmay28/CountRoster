@@ -67,7 +67,7 @@ The PWA is compiled against the REST API's exact shapes: snake_case JSON field n
 
 ### Composition root
 
-`cmd/countroster/main.go` does: open storage → `migrate.Run` → `core.New(storage, clock)` → `api.New(...)` → serve. `core.App` bundles the services (`Trackers`, `Entries`, `Notes`, `Groups`, `Stats`); backup is `backup.Service`.
+`cmd/countroster/main.go` does: open storage → `migrate.Run` → `core.New(storage, clock)` → `api.New(...)` → serve. `core.App` bundles the services (`Trackers`, `Entries`, `Notes`, `Groups`, `Stats`, `Transactions`); backup is `backup.Service`.
 
 ### Service layer (`server/internal/core`)
 

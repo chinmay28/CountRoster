@@ -7,7 +7,7 @@ import { useKeyboardOpen } from './useKeyboardOpen.ts';
 /** Primary destinations, shown in the desktop header and the mobile tab bar. */
 const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
   { to: '/', label: 'Home', icon: <HomeIcon /> },
-  { to: '/compare', label: 'Compare', icon: <CompareIcon /> },
+  { to: '/transactions', label: 'Transactions', icon: <CardIcon /> },
   { to: '/groups', label: 'Groups', icon: <GroupsIcon /> },
   { to: '/data', label: 'Data', icon: <DataIcon /> },
 ];
@@ -133,14 +133,13 @@ function HomeIcon() {
   );
 }
 
-function CompareIcon() {
+function CardIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 20V10" />
-      <path d="M10 20V4" />
-      <path d="M16 20v-7" />
-      <path d="M22 20H2" />
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <path d="M2 10h20" />
+      <path d="M6 15h4" />
     </svg>
   );
 }

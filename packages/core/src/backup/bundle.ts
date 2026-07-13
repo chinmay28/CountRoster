@@ -190,8 +190,13 @@ async function checksumTables(
   tables: Record<string, Array<Record<string, unknown>>>,
 ): Promise<string> {
   // Canonical: emit tables in BACKUP_TABLES order so the hash is stable.
+  // Tables absent from the payload are skipped (not hashed as empty):
+  // bundles exported before a table existed must still verify against the
+  // checksum they were written with.
   const ordered: Record<string, unknown> = {};
-  for (const { name } of BACKUP_TABLES) ordered[name] = tables[name] ?? [];
+  for (const { name } of BACKUP_TABLES) {
+    if (name in tables) ordered[name] = tables[name] ?? [];
+  }
   const bytes = encoder.encode(JSON.stringify(ordered));
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   const hex = Array.from(new Uint8Array(digest))

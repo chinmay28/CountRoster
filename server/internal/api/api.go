@@ -86,6 +86,14 @@ func New(app *core.App, bk *backup.Service, file FileSource) http.Handler {
 	mux.HandleFunc("POST /api/groups/{id}/reorder", s.reorderGroupMembers)
 	mux.HandleFunc("DELETE /api/groups/{id}/trackers/{trackerId}", s.removeGroupTracker)
 
+	// Transactions (imported credit-card rows staged for review).
+	mux.HandleFunc("GET /api/transactions", s.listTransactions)
+	mux.HandleFunc("POST /api/transactions/import", s.importTransactions)
+	mux.HandleFunc("GET /api/transactions/{id}", s.getTransaction)
+	mux.HandleFunc("PATCH /api/transactions/{id}", s.updateTransaction)
+	mux.HandleFunc("DELETE /api/transactions/{id}", s.deleteTransaction)
+	mux.HandleFunc("POST /api/transactions/{id}/confirm", s.confirmTransaction)
+
 	// Stats.
 	mux.HandleFunc("GET /api/trackers/{id}/stats/buckets", s.statsBuckets)
 	mux.HandleFunc("GET /api/trackers/{id}/stats/streak", s.statsStreak)
@@ -591,6 +599,80 @@ func (s *server) removeGroupTracker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noContent(w)
+}
+
+// --- transactions ----------------------------------------------------------------
+
+func (s *server) listTransactions(w http.ResponseWriter, r *http.Request) {
+	list, err := s.app.Transactions.List(r.URL.Query().Get("status"))
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	if list == nil {
+		list = []*core.CardTransaction{}
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+func (s *server) importTransactions(w http.ResponseWriter, r *http.Request) {
+	body, ok := decodeBody(w, r)
+	if !ok {
+		return
+	}
+	result, err := s.app.Transactions.Import(body)
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, result)
+}
+
+func (s *server) getTransaction(w http.ResponseWriter, r *http.Request) {
+	txn, err := s.app.Transactions.Get(r.PathValue("id"))
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	if txn == nil {
+		notFoundEntity(w, "transaction")
+		return
+	}
+	writeJSON(w, http.StatusOK, txn)
+}
+
+func (s *server) updateTransaction(w http.ResponseWriter, r *http.Request) {
+	body, ok := decodeBody(w, r)
+	if !ok {
+		return
+	}
+	txn, err := s.app.Transactions.Update(r.PathValue("id"), body)
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, txn)
+}
+
+func (s *server) deleteTransaction(w http.ResponseWriter, r *http.Request) {
+	if err := s.app.Transactions.Delete(r.PathValue("id")); err != nil {
+		handleErr(w, err)
+		return
+	}
+	noContent(w)
+}
+
+func (s *server) confirmTransaction(w http.ResponseWriter, r *http.Request) {
+	body, ok := decodeBody(w, r)
+	if !ok {
+		return
+	}
+	result, err := s.app.Transactions.Confirm(r.PathValue("id"), body)
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, result)
 }
 
 // --- stats ---------------------------------------------------------------------
