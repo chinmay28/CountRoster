@@ -46,6 +46,33 @@ describe('parseTransactionsCsv', () => {
     ]);
   });
 
+  it('parses the real Empower shape: title line, Firm Name split, $-amounts', () => {
+    const csv = [
+      '"Transactions For All Accounts from Jan 2026 to Jul 2026"',
+      'Date,Description,Category,Firm Name,Account Name,Amount,Tags',
+      '"2026-07-12","Coffee Corner","Restaurants","Some Bank","Credit Card ( ) - Ending in 7291","-$12.34",""',
+      '"2026-07-03","Payment Thank You-mobile","Credit Card Payments","Some Bank","Credit Card ( ) - Ending in 5162","$1,234.56",""',
+    ].join('\n');
+    const { transactions, skipped } = parseTransactionsCsv(csv);
+    expect(skipped).toBe(0);
+    expect(transactions).toEqual([
+      {
+        date: '2026-07-12',
+        description: 'Coffee Corner',
+        amount: -12.34,
+        account: 'Some Bank · Credit Card ( ) - Ending in 7291',
+        category: 'Restaurants',
+      },
+      {
+        date: '2026-07-03',
+        description: 'Payment Thank You-mobile',
+        amount: 1234.56,
+        account: 'Some Bank · Credit Card ( ) - Ending in 5162',
+        category: 'Credit Card Payments',
+      },
+    ]);
+  });
+
   it('is header-driven: column order and case do not matter', () => {
     const csv = 'AMOUNT,description,DATE\n"-$1,234.56",Rent,7/1/2026\n(12.00),Cafe,07/09/2026';
     const { transactions } = parseTransactionsCsv(csv);
