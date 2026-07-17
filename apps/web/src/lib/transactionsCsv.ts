@@ -1,15 +1,23 @@
 import type { TransactionImportItem } from '@countroster/core';
 
 /**
- * Parse a transactions CSV (Empower Personal Dashboard's export, US Bank's
- * credit-card export, and any other bank/aggregator CSV with recognizable
- * columns) into the rows the server's import endpoint takes. Pure format
- * decoding — sanitizing, dedupe and categorization all happen server-side.
+ * Parse a transactions CSV (Empower Personal Dashboard's export, Chase's and
+ * US Bank's credit-card exports, and any other bank/aggregator CSV with
+ * recognizable columns) into the rows the server's import endpoint takes. Pure
+ * format decoding — sanitizing, dedupe and categorization all happen
+ * server-side.
  *
  * Empower's export looks like:
  *   "Transactions For All Accounts from Jan 2026 to Jul 2026"
  *   Date,Description,Category,Firm Name,Account Name,Amount,Tags
  *   "2026-07-12","Coffee Corner","Restaurants","Some Bank","Credit Card - Ending in 7291","-$12.34",""
+ *
+ * Chase's export looks like:
+ *   Transaction Date,Post Date,Description,Category,Type,Amount,Memo
+ *   06/26/2026,06/28/2026,DD *DOORDASH TARAHTHAI,Food & Drink,Sale,-37.68,
+ * Its MM/DD/YYYY dates and Category column are picked up directly; we key off
+ * the transaction date (not the post date) and ignore the Type column, since
+ * the amount's sign already carries sale/return/payment direction.
  *
  * US Bank's export looks like:
  *   "Date","Transaction","Name","Memo","Amount"
@@ -155,14 +163,17 @@ const MCC_CATEGORIES: Record<string, string> = {
 /**
  * US Bank puts the MCC in the Memo's second ';'-delimited field, zero-padded:
  *   "24431066181458859822737; 05814; ; ; ;" → MCC 5814 → "Dining".
- * Returns '' when there's no recognizable MCC or we don't map it.
+ * The field must be a bare, zero-padded number so this never misreads a
+ * free-text memo from another export (Chase, for one, also has a Memo column
+ * but fills it with human notes). Returns '' when there's no MCC to map.
  */
 function categoryFromMemo(memo: string): string {
   const parts = memo.split(';');
   if (parts.length < 2) return '';
-  const code = parseInt((parts[1] ?? '').trim(), 10);
-  if (!Number.isInteger(code) || code <= 0) return '';
-  return MCC_CATEGORIES[String(code)] ?? '';
+  const field = (parts[1] ?? '').trim();
+  if (!/^\d{3,5}$/.test(field)) return '';
+  const code = parseInt(field, 10);
+  return code > 0 ? (MCC_CATEGORIES[String(code)] ?? '') : '';
 }
 
 function findColumn(header: string[], ...names: string[]): number {
@@ -186,7 +197,7 @@ export function parseTransactionsCsv(text: string): ParsedTransactionsCsv {
   // ("Transactions For All Accounts from …") above it. Scan the first rows
   // for the one that carries the columns we need.
   const isHeader = (row: string[]) =>
-    findColumn(row, 'date', 'transaction date', 'posted date') !== -1 &&
+    findColumn(row, 'date', 'transaction date', 'posted date', 'post date') !== -1 &&
     findColumn(row, 'description', 'merchant', 'payee', 'name') !== -1 &&
     findColumn(row, 'amount') !== -1;
   const headerIdx = rows.slice(0, 10).findIndex(isHeader);
@@ -198,7 +209,10 @@ export function parseTransactionsCsv(text: string): ParsedTransactionsCsv {
   }
 
   const header = rows[headerIdx]!;
-  const dateCol = findColumn(header, 'date', 'transaction date', 'posted date');
+  // Chase gives both a "Transaction Date" and a "Post Date"; the alias order
+  // prefers the transaction date (when the purchase happened) over the later
+  // posting date.
+  const dateCol = findColumn(header, 'date', 'transaction date', 'posted date', 'post date');
   const descCol = findColumn(header, 'description', 'merchant', 'payee', 'name');
   const amountCol = findColumn(header, 'amount');
   const accountCol = findColumn(header, 'account', 'account name');

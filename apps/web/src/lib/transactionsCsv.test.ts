@@ -73,6 +73,24 @@ describe('parseTransactionsCsv', () => {
     ]);
   });
 
+  it('parses Chase credit-card exports: MM/DD/YYYY, transaction date, Category, empty Memo', () => {
+    const csv = [
+      'Transaction Date,Post Date,Description,Category,Type,Amount,Memo',
+      '06/26/2026,06/28/2026,DD *DOORDASH TARAHTHAI,Food & Drink,Sale,-37.68,',
+      '03/17/2026,03/18/2026,CL *Chase Travel,Travel,Return,439.37,',
+      '06/21/2026,06/21/2026,AUTOMATIC PAYMENT - THANK,,Payment,633.24,',
+    ].join('\n');
+    const { transactions, skipped } = parseTransactionsCsv(csv);
+    expect(skipped).toBe(0);
+    expect(transactions).toEqual([
+      // Transaction Date (not Post Date) is used; the empty Memo is not mistaken for an MCC.
+      { date: '2026-06-26', description: 'DD *DOORDASH TARAHTHAI', amount: -37.68, category: 'Food & Drink' },
+      { date: '2026-03-17', description: 'CL *Chase Travel', amount: 439.37, category: 'Travel' },
+      // A payment carries no category, so it stays uncategorized for review.
+      { date: '2026-06-21', description: 'AUTOMATIC PAYMENT - THANK', amount: 633.24 },
+    ]);
+  });
+
   it('parses US Bank credit-card exports: Name column, MCC from Memo → category', () => {
     const csv = [
       '"Date","Transaction","Name","Memo","Amount"',
@@ -98,6 +116,16 @@ describe('parseTransactionsCsv', () => {
       // MCC 00300 isn't a spending category, so a card payment stays uncategorized.
       { date: '2026-06-17', description: 'PAYMENT   THANK YOU', amount: 6327.9 },
     ]);
+  });
+
+  it('does not read an MCC out of a free-text memo', () => {
+    const csv = [
+      'Date,Description,Amount,Memo',
+      '"2026-07-01","Corner Cafe","-4.00","paid 5411 ref"',
+    ].join('\n');
+    const { transactions } = parseTransactionsCsv(csv);
+    // The memo isn't a bare zero-padded MCC field, so no category is inferred.
+    expect(transactions).toEqual([{ date: '2026-07-01', description: 'Corner Cafe', amount: -4 }]);
   });
 
   it('does not derive a Memo MCC when the export already has a Category column', () => {
