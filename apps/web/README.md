@@ -83,12 +83,13 @@ Visualizations & organization:
   day-streak card and a target-progress bar — or, for snapshot stats, a
   time-axis line of readings with zoom in/out and an all-time high/low card.
 - **Transactions** (`/transactions`) — a credit-card import inbox: upload a
-  transactions CSV (Empower Personal Dashboard's export, or any CSV with Date,
-  Description and Amount columns), and the server deduplicates rows, cleans up
-  merchant names, and suggests a tracker per transaction (learned from your past
-  confirmations, falling back to the CSV's category column). Review, rename or
-  dismiss rows, then file them: each confirmed transaction becomes an entry in
-  its tracker with a note carrying the transaction name.
+  transactions CSV (Empower Personal Dashboard's export, US Bank's credit-card
+  export, or any CSV with Date, Description and Amount columns), and the server
+  deduplicates rows, cleans up merchant names, and suggests a tracker per
+  transaction (learned from your past confirmations, falling back to the CSV's
+  category — for US Bank, derived from each row's Merchant Category Code).
+  Review, rename or dismiss rows, then file them: each confirmed transaction
+  becomes an entry in its tracker with a note carrying the transaction name.
 - **Groups** (`/groups`) — organize trackers into groups; the home screen renders
   them under group headings.
 - **Data** (`/data`) — backup export (bundle / raw SQLite) and restore.
