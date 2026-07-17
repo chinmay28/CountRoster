@@ -1,15 +1,32 @@
 import type { TransactionImportItem } from '@countroster/core';
 
 /**
- * Parse a transactions CSV (Empower Personal Dashboard's export, and any
- * other bank/aggregator CSV with recognizable columns) into the rows the
- * server's import endpoint takes. Pure format decoding — sanitizing,
- * dedupe and categorization all happen server-side.
+ * Parse a transactions CSV (Empower Personal Dashboard's export, Chase's and
+ * US Bank's credit-card exports, and any other bank/aggregator CSV with
+ * recognizable columns) into the rows the server's import endpoint takes. Pure
+ * format decoding — sanitizing, dedupe and categorization all happen
+ * server-side.
  *
  * Empower's export looks like:
  *   "Transactions For All Accounts from Jan 2026 to Jul 2026"
  *   Date,Description,Category,Firm Name,Account Name,Amount,Tags
  *   "2026-07-12","Coffee Corner","Restaurants","Some Bank","Credit Card - Ending in 7291","-$12.34",""
+ *
+ * Chase's export looks like:
+ *   Transaction Date,Post Date,Description,Category,Type,Amount,Memo
+ *   06/26/2026,06/28/2026,DD *DOORDASH TARAHTHAI,Food & Drink,Sale,-37.68,
+ * Its MM/DD/YYYY dates and Category column are picked up directly; we key off
+ * the transaction date (not the post date) and ignore the Type column, since
+ * the amount's sign already carries sale/return/payment direction.
+ *
+ * US Bank's export looks like:
+ *   "Date","Transaction","Name","Memo","Amount"
+ *   "2026-06-30","DEBIT","CHIPOTLE 3293          SANTA CLARA   CA","24431066181458859822737; 05814; ; ; ;","-15.91"
+ * Its "Name" column is the merchant (matched by the 'name' alias below) and
+ * it carries no Category column — instead each Memo embeds the card-network
+ * MCC (Merchant Category Code) as its second ';'-delimited field, which we
+ * map to a category label so US Bank rows auto-categorize like Empower's do
+ * (see categoryFromMemo).
  *
  * Column matching is header-driven and case-insensitive, and the header row
  * is located by scanning the first rows (Empower puts a title line above
@@ -89,6 +106,76 @@ function normalizeAmount(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * Best-effort map of card-network MCCs (Merchant Category Codes) to a plain
+ * category label, used for US Bank exports that carry an MCC but no Category
+ * column. Labels are broad, conventional spending buckets so they have a
+ * chance of matching a tracker's name server-side; it's only a suggestion the
+ * user reviews, so codes we don't list simply import uncategorized (and once a
+ * merchant is filed the server's learned rule takes over regardless).
+ */
+const MCC_CATEGORIES: Record<string, string> = {
+  // Dining — caterers, restaurants, bars, fast food.
+  '5811': 'Dining', '5812': 'Dining', '5813': 'Dining', '5814': 'Dining',
+  // Groceries — supermarkets, meat/freezer, dairy, bakeries, specialty food.
+  '5411': 'Groceries', '5422': 'Groceries', '5451': 'Groceries',
+  '5462': 'Groceries', '5499': 'Groceries',
+  // Gas & auto — fuel, EV charging, parts, service, car washes.
+  '5541': 'Gas', '5542': 'Gas',
+  '5533': 'Auto', '5552': 'Auto', '7538': 'Auto', '7542': 'Auto', '7549': 'Auto',
+  // Health — pharmacies, medical supplies, doctors, dentists, hospitals, labs.
+  '5047': 'Health', '5122': 'Health', '5912': 'Health',
+  '8011': 'Health', '8021': 'Health', '8031': 'Health', '8041': 'Health',
+  '8042': 'Health', '8049': 'Health', '8062': 'Health', '8071': 'Health',
+  '8099': 'Health',
+  // Home — home-improvement warehouses, building materials, hardware,
+  // appliances, and the trade contractors who install them.
+  '1799': 'Home', '5200': 'Home', '5211': 'Home', '5231': 'Home',
+  '5251': 'Home', '5261': 'Home', '5722': 'Home',
+  // Clothing — apparel of every stripe plus cosmetics.
+  '5611': 'Clothing', '5621': 'Clothing', '5631': 'Clothing', '5641': 'Clothing',
+  '5651': 'Clothing', '5661': 'Clothing', '5691': 'Clothing', '5699': 'Clothing',
+  '5977': 'Clothing',
+  // Shopping — wholesale clubs, discount/department/variety, electronics,
+  // books, office/craft/toy supplies, and misc retail.
+  '5065': 'Shopping', '5300': 'Shopping', '5310': 'Shopping', '5311': 'Shopping',
+  '5331': 'Shopping', '5732': 'Shopping', '5942': 'Shopping', '5943': 'Shopping',
+  '5945': 'Shopping', '5970': 'Shopping', '5999': 'Shopping',
+  // Fitness — gyms, membership clubs, recreation.
+  '7941': 'Fitness', '7991': 'Fitness', '7997': 'Fitness',
+  // Subscriptions & digital — software, digital goods, online services.
+  '4816': 'Subscriptions', '5734': 'Subscriptions', '5815': 'Subscriptions',
+  '5816': 'Subscriptions', '5817': 'Subscriptions', '5818': 'Subscriptions',
+  '5968': 'Subscriptions',
+  // Bills — insurance and utilities.
+  '6300': 'Insurance',
+  '4814': 'Utilities', '4899': 'Utilities', '4900': 'Utilities',
+  // Government — agencies, tax payments, courts.
+  '9211': 'Government', '9222': 'Government', '9311': 'Government',
+  '9399': 'Government',
+  // Family — childcare and schools.
+  '8211': 'Childcare', '8351': 'Childcare',
+  // Travel — airlines/taxis/transit, tolls, hotels, car rental, agencies.
+  '4111': 'Travel', '4121': 'Travel', '4131': 'Travel', '4784': 'Travel',
+  '5962': 'Travel', '7011': 'Travel', '7512': 'Travel',
+};
+
+/**
+ * US Bank puts the MCC in the Memo's second ';'-delimited field, zero-padded:
+ *   "24431066181458859822737; 05814; ; ; ;" → MCC 5814 → "Dining".
+ * The field must be a bare, zero-padded number so this never misreads a
+ * free-text memo from another export (Chase, for one, also has a Memo column
+ * but fills it with human notes). Returns '' when there's no MCC to map.
+ */
+function categoryFromMemo(memo: string): string {
+  const parts = memo.split(';');
+  if (parts.length < 2) return '';
+  const field = (parts[1] ?? '').trim();
+  if (!/^\d{3,5}$/.test(field)) return '';
+  const code = parseInt(field, 10);
+  return code > 0 ? (MCC_CATEGORIES[String(code)] ?? '') : '';
+}
+
 function findColumn(header: string[], ...names: string[]): number {
   const lowered = header.map((h) => h.trim().toLowerCase());
   for (const name of names) {
@@ -110,7 +197,7 @@ export function parseTransactionsCsv(text: string): ParsedTransactionsCsv {
   // ("Transactions For All Accounts from …") above it. Scan the first rows
   // for the one that carries the columns we need.
   const isHeader = (row: string[]) =>
-    findColumn(row, 'date', 'transaction date', 'posted date') !== -1 &&
+    findColumn(row, 'date', 'transaction date', 'posted date', 'post date') !== -1 &&
     findColumn(row, 'description', 'merchant', 'payee', 'name') !== -1 &&
     findColumn(row, 'amount') !== -1;
   const headerIdx = rows.slice(0, 10).findIndex(isHeader);
@@ -122,7 +209,10 @@ export function parseTransactionsCsv(text: string): ParsedTransactionsCsv {
   }
 
   const header = rows[headerIdx]!;
-  const dateCol = findColumn(header, 'date', 'transaction date', 'posted date');
+  // Chase gives both a "Transaction Date" and a "Post Date"; the alias order
+  // prefers the transaction date (when the purchase happened) over the later
+  // posting date.
+  const dateCol = findColumn(header, 'date', 'transaction date', 'posted date', 'post date');
   const descCol = findColumn(header, 'description', 'merchant', 'payee', 'name');
   const amountCol = findColumn(header, 'amount');
   const accountCol = findColumn(header, 'account', 'account name');
@@ -130,6 +220,8 @@ export function parseTransactionsCsv(text: string): ParsedTransactionsCsv {
   // Card - Ending in 7291"); joined they make the account label unambiguous.
   const firmCol = findColumn(header, 'firm name', 'firm', 'institution');
   const categoryCol = findColumn(header, 'category');
+  // US Bank has no Category column but embeds an MCC in the Memo field.
+  const memoCol = findColumn(header, 'memo');
 
   const transactions: TransactionImportItem[] = [];
   let skipped = 0;
@@ -144,7 +236,10 @@ export function parseTransactionsCsv(text: string): ParsedTransactionsCsv {
     const accountName = accountCol === -1 ? '' : (row[accountCol] ?? '').trim();
     const firm = firmCol === -1 ? '' : (row[firmCol] ?? '').trim();
     const account = [firm, accountName].filter((s) => s !== '').join(' · ').slice(0, 120);
-    const category = categoryCol === -1 ? '' : (row[categoryCol] ?? '').trim();
+    let category = categoryCol === -1 ? '' : (row[categoryCol] ?? '').trim();
+    if (category === '' && memoCol !== -1) {
+      category = categoryFromMemo(row[memoCol] ?? '');
+    }
     transactions.push({
       date,
       description,

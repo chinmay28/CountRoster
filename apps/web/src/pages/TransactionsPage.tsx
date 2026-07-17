@@ -122,9 +122,9 @@ export function TransactionsPage() {
 
       <section className="card txn__import">
         <p className="muted">
-          Upload a transactions CSV exported from Empower (or any export with
-          Date, Description and Amount columns). Already-imported rows are
-          skipped automatically.
+          Upload a transactions CSV exported from Empower, Chase or US Bank (or
+          any export with Date, Description and Amount columns). Already-imported
+          rows are skipped automatically.
         </p>
         <input
           ref={fileInput}
