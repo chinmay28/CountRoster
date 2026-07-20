@@ -59,6 +59,31 @@ describe('derived snapshot trackers', () => {
     expect(entries.every((e) => e.tracker_id === netWorth.id)).toBe(true);
   });
 
+  it('collapses sources read at the same instant into one combined level', async () => {
+    const ctx = await makeTestApp('2026-05-25T12:00:00.000-07:00');
+    const { app } = ctx;
+    const checking = await app.trackers.create({ name: 'Checking', kind: 'number', is_snapshot: 1 });
+    const brokerage = await app.trackers.create({ name: 'Brokerage', kind: 'number', is_snapshot: 1 });
+    // Both accounts updated in the same instant, then Checking alone later.
+    await app.entries.log(checking.id, { value: 1000, occurred_at: '2026-03-05T10:00:00.000-07:00' });
+    await app.entries.log(brokerage.id, { value: 500, occurred_at: '2026-03-05T10:00:00.000-07:00' });
+    await app.entries.log(checking.id, { value: 1200, occurred_at: '2026-04-20T10:00:00.000-07:00' });
+    const netWorth = await app.trackers.create({
+      name: 'Net worth',
+      kind: 'number',
+      is_snapshot: 1,
+      links: [
+        { source_id: checking.id, coefficient: 1 },
+        { source_id: brokerage.id, coefficient: 1 },
+      ],
+    });
+
+    const entries = await app.entries.forTracker(netWorth.id);
+    // One point per distinct instant: 1500 (both), then 1700 — never a
+    // partial-sum 1000 step from Checking's reading alone.
+    expect(entries.map((e) => e.value)).toEqual([1500, 1700]);
+  });
+
   it('targetProgress reads the current combined level, not a sum or last raw reading', async () => {
     const { app, netWorth } = await netWorthSetup();
     await app.trackers.update(netWorth.id, { target: 3200 });

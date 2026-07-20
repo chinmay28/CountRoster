@@ -45,6 +45,32 @@ func TestDerivedSnapshotEffectiveEntries(t *testing.T) {
 	}
 }
 
+// Sources read at the same instant must plot as ONE derived level (their
+// combined total), not a partial-sum step for each contributing reading.
+func TestDerivedSnapshotCollapsesSimultaneousReadings(t *testing.T) {
+	a := newTestApp(t)
+	checking := mustCreate(t, a, obj("name", "Checking", "kind", "number", "is_snapshot", 1))
+	brokerage := mustCreate(t, a, obj("name", "Brokerage", "kind", "number", "is_snapshot", 1))
+	// Both accounts updated in the same instant (e.g. one "update everything"
+	// session), then Checking alone later at a distinct instant.
+	mustLog(t, a, checking.ID, obj("value", 1000, "occurred_at", "2026-03-05T10:00:00.000-07:00"))
+	mustLog(t, a, brokerage.ID, obj("value", 500, "occurred_at", "2026-03-05T10:00:00.000-07:00"))
+	mustLog(t, a, checking.ID, obj("value", 1200, "occurred_at", "2026-04-20T10:00:00.000-07:00"))
+
+	netWorth := mustCreate(t, a, obj("name", "Net worth", "kind", "number", "is_snapshot", 1,
+		"links", []any{
+			obj("source_id", checking.ID, "coefficient", 1),
+			obj("source_id", brokerage.ID, "coefficient", 1),
+		}))
+
+	entries, _ := a.Entries.ForTracker(netWorth.ID, TimeRange{})
+	// One point per distinct instant: the simultaneous readings are a single
+	// 1500 (not 1000 then 1500), then 1700 at the later instant.
+	if !equalFloats(entryValues(entries), []float64{1500, 1700}) {
+		t.Errorf("simultaneous readings should collapse to one level: %v", entryValues(entries))
+	}
+}
+
 func TestDerivedSnapshotTargetProgress(t *testing.T) {
 	a, _, _, netWorth := netWorthSetup(t)
 	if _, err := a.Trackers.Update(netWorth.ID, obj("target", 3200)); err != nil {

@@ -41,12 +41,14 @@ export interface EntrySource {
  * works on a derived tracker without special-casing.
  *
  * A derived *snapshot* tracker combines levels, not amounts, so its stream is
- * different: every source reading becomes a row whose value is the *combined
- * level* at that instant — Σ coefficient × (that source's latest reading at or
- * before it). A source with no reading yet simply contributes nothing (best
- * effort), and one that skipped a period carries its previous reading forward.
- * The latest row is therefore the current combined level, and a line through
- * the rows is the level-over-time chart.
+ * different: every *distinct reading instant* becomes a row whose value is the
+ * *combined level* at that instant — Σ coefficient × (that source's latest
+ * reading at or before it). A source with no reading yet simply contributes
+ * nothing (best effort), and one that skipped a period carries its previous
+ * reading forward. Several sources read at the same instant collapse to a
+ * single row at the final combined level (not a partial-sum step per source),
+ * so the latest row is the current combined level and a line through the rows
+ * plots the derived level over time.
  *
  * Callers wrap this as `... FROM <source> WHERE …`; the returned params bind
  * first, before any range filters the caller appends.
@@ -72,6 +74,14 @@ export async function effectiveEntrySource(
     // carry mixed offsets; simultaneous readings tie-break on id (UUIDv7,
     // time-sortable). SUM skips a NULL operand — a source with no reading at
     // or before the row's instant — which is what carries partial data.
+    //
+    // The trailing NOT EXISTS keeps, per instant, only the source entry with
+    // the greatest id: when several sources are read at the same instant its
+    // combined level already sums them all (the inner `e2.id <= e.id` gate
+    // includes every reading at that instant), while the lower-id rows are
+    // partial sums that step through the sources. Dropping them leaves one row
+    // per distinct instant at the final level, so the derived line plots the
+    // level itself rather than a jump per contributing source's reading.
     return {
       sql: `(SELECT e.id AS id, ? AS tracker_id,
                     (SELECT SUM(l2.coefficient * (
@@ -89,8 +99,14 @@ export async function effectiveEntrySource(
                     e.updated_at AS updated_at
                FROM tracker_links l
                JOIN entries e ON e.tracker_id = l.source_id
-              WHERE l.tracker_id = ?)`,
-      params: [trackerId, trackerId, trackerId],
+              WHERE l.tracker_id = ?
+                AND NOT EXISTS (
+                      SELECT 1 FROM tracker_links l3
+                       JOIN entries e3 ON e3.tracker_id = l3.source_id
+                      WHERE l3.tracker_id = ?
+                        AND julianday(e3.occurred_at) = julianday(e.occurred_at)
+                        AND e3.id > e.id))`,
+      params: [trackerId, trackerId, trackerId, trackerId],
     };
   }
   return {
