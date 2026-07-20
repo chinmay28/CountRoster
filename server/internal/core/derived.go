@@ -17,9 +17,12 @@ type entrySource struct {
 // tracker it's a virtual stream: every source entry `(value v at time t)`
 // becomes a row of `coefficient × v` at `t`, so every sum-based aggregation
 // works on a derived tracker without special-casing. A derived *snapshot*
-// tracker combines levels, not amounts: every source reading becomes a row
-// whose value is the combined level at that instant — Σ coefficient × (that
-// source's latest reading at or before it).
+// tracker combines levels, not amounts: every instant with a source reading
+// becomes a *single* row whose value is the combined level there — Σ
+// coefficient × (that source's latest reading at or before it). When several
+// sources are read at the same instant, only the settled level (after all of
+// them apply) is emitted; the partial sums as each reading lands are artifacts
+// of the per-source join, not distinct points in time.
 func effectiveEntrySource(st storage.Storage, trackerID string) (entrySource, error) {
 	rows, err := st.Query(
 		`SELECT is_derived, is_snapshot FROM trackers WHERE id = ?`, trackerID)
@@ -43,6 +46,12 @@ func effectiveEntrySource(st storage.Storage, trackerID string) (entrySource, er
 		// carry mixed offsets; simultaneous readings tie-break on id (UUIDv7,
 		// time-sortable). SUM skips a NULL operand — a source with no reading
 		// at or before the row's instant — which is what carries partial data.
+		//
+		// The NOT EXISTS collapses each instant to one point: it keeps only the
+		// source reading with the highest id at its instant, and that row's SUM
+		// already folds in every simultaneous reading (id <= e.id), so its value
+		// is the settled combined level. Dropping the rest is what plots one
+		// composite value per point in time instead of every contributing value.
 		return entrySource{
 			sql: `(SELECT e.id AS id, ? AS tracker_id,
                     (SELECT SUM(l2.coefficient * (
@@ -60,8 +69,14 @@ func effectiveEntrySource(st storage.Storage, trackerID string) (entrySource, er
                     e.updated_at AS updated_at
                FROM tracker_links l
                JOIN entries e ON e.tracker_id = l.source_id
-              WHERE l.tracker_id = ?)`,
-			params: []any{trackerID, trackerID, trackerID},
+              WHERE l.tracker_id = ?
+                AND NOT EXISTS (
+                      SELECT 1 FROM tracker_links l3
+                       JOIN entries e3 ON e3.tracker_id = l3.source_id
+                      WHERE l3.tracker_id = ?
+                        AND julianday(e3.occurred_at) = julianday(e.occurred_at)
+                        AND e3.id > e.id))`,
+			params: []any{trackerID, trackerID, trackerID, trackerID},
 		}, nil
 	}
 	return entrySource{

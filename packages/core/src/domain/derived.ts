@@ -41,12 +41,15 @@ export interface EntrySource {
  * works on a derived tracker without special-casing.
  *
  * A derived *snapshot* tracker combines levels, not amounts, so its stream is
- * different: every source reading becomes a row whose value is the *combined
- * level* at that instant — Σ coefficient × (that source's latest reading at or
- * before it). A source with no reading yet simply contributes nothing (best
- * effort), and one that skipped a period carries its previous reading forward.
- * The latest row is therefore the current combined level, and a line through
- * the rows is the level-over-time chart.
+ * different: every instant with a source reading becomes a *single* row whose
+ * value is the *combined level* there — Σ coefficient × (that source's latest
+ * reading at or before it). A source with no reading yet simply contributes
+ * nothing (best effort), and one that skipped a period carries its previous
+ * reading forward. When several sources are read at the same instant, only the
+ * settled level (after all of them apply) is emitted — the partial sums as each
+ * reading lands are artifacts of the per-source join, not distinct points in
+ * time. The latest row is therefore the current combined level, and a line
+ * through the rows is the level-over-time chart, one point per point in time.
  *
  * Callers wrap this as `... FROM <source> WHERE …`; the returned params bind
  * first, before any range filters the caller appends.
@@ -72,6 +75,12 @@ export async function effectiveEntrySource(
     // carry mixed offsets; simultaneous readings tie-break on id (UUIDv7,
     // time-sortable). SUM skips a NULL operand — a source with no reading at
     // or before the row's instant — which is what carries partial data.
+    //
+    // The NOT EXISTS collapses each instant to one point: it keeps only the
+    // source reading with the highest id at its instant, and that row's SUM
+    // already folds in every simultaneous reading (id <= e.id), so its value is
+    // the settled combined level. Dropping the rest is what plots one composite
+    // value per point in time instead of every contributing value.
     return {
       sql: `(SELECT e.id AS id, ? AS tracker_id,
                     (SELECT SUM(l2.coefficient * (
@@ -89,8 +98,14 @@ export async function effectiveEntrySource(
                     e.updated_at AS updated_at
                FROM tracker_links l
                JOIN entries e ON e.tracker_id = l.source_id
-              WHERE l.tracker_id = ?)`,
-      params: [trackerId, trackerId, trackerId],
+              WHERE l.tracker_id = ?
+                AND NOT EXISTS (
+                      SELECT 1 FROM tracker_links l3
+                       JOIN entries e3 ON e3.tracker_id = l3.source_id
+                      WHERE l3.tracker_id = ?
+                        AND julianday(e3.occurred_at) = julianday(e.occurred_at)
+                        AND e3.id > e.id))`,
+      params: [trackerId, trackerId, trackerId, trackerId],
     };
   }
   return {

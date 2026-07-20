@@ -59,6 +59,34 @@ describe('derived snapshot trackers', () => {
     expect(entries.every((e) => e.tracker_id === netWorth.id)).toBe(true);
   });
 
+  it('collapses several sources read at the same instant to one settled level', async () => {
+    const ctx = await makeTestApp('2026-06-05T12:00:00.000-07:00');
+    const { app } = ctx;
+    const checking = await app.trackers.create({ name: 'Checking', kind: 'number', is_snapshot: 1 });
+    const savings = await app.trackers.create({ name: 'Savings', kind: 'number', is_snapshot: 1 });
+    const broker = await app.trackers.create({ name: 'Broker', kind: 'number', is_snapshot: 1 });
+    // All three first recorded at the same instant (e.g. "as of today" balances).
+    const ts = '2026-06-04T10:25:00.000-07:00';
+    await app.entries.log(checking.id, { value: 66000, occurred_at: ts });
+    await app.entries.log(savings.id, { value: 234000, occurred_at: ts });
+    await app.entries.log(broker.id, { value: 1681284, occurred_at: ts });
+    const netWorth = await app.trackers.create({
+      name: 'Net worth',
+      kind: 'number',
+      is_snapshot: 1,
+      links: [
+        { source_id: checking.id, coefficient: 1 },
+        { source_id: savings.id, coefficient: 1 },
+        { source_id: broker.id, coefficient: 1 },
+      ],
+    });
+
+    const entries = await app.entries.forTracker(netWorth.id);
+    // One point per point in time: the combined level, not the partial sums
+    // (66000 → 300000 → 1981284) the per-source join would otherwise emit.
+    expect(entries.map((e) => e.value)).toEqual([1981284]);
+  });
+
   it('targetProgress reads the current combined level, not a sum or last raw reading', async () => {
     const { app, netWorth } = await netWorthSetup();
     await app.trackers.update(netWorth.id, { target: 3200 });
