@@ -47,11 +47,14 @@ func effectiveEntrySource(st storage.Storage, trackerID string) (entrySource, er
 		// time-sortable). SUM skips a NULL operand — a source with no reading
 		// at or before the row's instant — which is what carries partial data.
 		//
-		// The NOT EXISTS collapses each instant to one point: it keeps only the
-		// source reading with the highest id at its instant, and that row's SUM
-		// already folds in every simultaneous reading (id <= e.id), so its value
-		// is the settled combined level. Dropping the rest is what plots one
-		// composite value per point in time instead of every contributing value.
+		// One point per day, not per source reading. Updating a composite's
+		// sources one at a time (each a distinct instant seconds/minutes apart)
+		// otherwise emits a row per touch, each a partial level while the other
+		// sources are momentarily stale — a vertical ramp on the chart and bogus
+		// all-time highs/lows. The NOT EXISTS keeps only the last reading of each
+		// local day (`substr` is the stored local date); that row's SUM already
+		// folds every earlier reading in via carry-forward, so its value is the
+		// day's settled combined level. Genuinely different days stay distinct.
 		return entrySource{
 			sql: `(SELECT e.id AS id, ? AS tracker_id,
                     (SELECT SUM(l2.coefficient * (
@@ -74,8 +77,10 @@ func effectiveEntrySource(st storage.Storage, trackerID string) (entrySource, er
                       SELECT 1 FROM tracker_links l3
                        JOIN entries e3 ON e3.tracker_id = l3.source_id
                       WHERE l3.tracker_id = ?
-                        AND julianday(e3.occurred_at) = julianday(e.occurred_at)
-                        AND e3.id > e.id))`,
+                        AND substr(e3.occurred_at, 1, 10) = substr(e.occurred_at, 1, 10)
+                        AND (julianday(e3.occurred_at) > julianday(e.occurred_at)
+                             OR (julianday(e3.occurred_at) = julianday(e.occurred_at)
+                                 AND e3.id > e.id))))`,
 			params: []any{trackerID, trackerID, trackerID, trackerID},
 		}, nil
 	}
