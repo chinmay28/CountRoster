@@ -59,17 +59,17 @@ describe('derived snapshot trackers', () => {
     expect(entries.every((e) => e.tracker_id === netWorth.id)).toBe(true);
   });
 
-  it('collapses several sources read at the same instant to one settled level', async () => {
+  it('collapses several sources updated within a day to one settled level', async () => {
     const ctx = await makeTestApp('2026-06-05T12:00:00.000-07:00');
     const { app } = ctx;
     const checking = await app.trackers.create({ name: 'Checking', kind: 'number', is_snapshot: 1 });
     const savings = await app.trackers.create({ name: 'Savings', kind: 'number', is_snapshot: 1 });
     const broker = await app.trackers.create({ name: 'Broker', kind: 'number', is_snapshot: 1 });
-    // All three first recorded at the same instant (e.g. "as of today" balances).
-    const ts = '2026-06-04T10:25:00.000-07:00';
-    await app.entries.log(checking.id, { value: 66000, occurred_at: ts });
-    await app.entries.log(savings.id, { value: 234000, occurred_at: ts });
-    await app.entries.log(broker.id, { value: 1681284, occurred_at: ts });
+    // Updated one at a time within the same day, a minute apart — how a person
+    // records "as of today" balances account by account.
+    await app.entries.log(checking.id, { value: 66000, occurred_at: '2026-06-04T10:23:00.000-07:00' });
+    await app.entries.log(savings.id, { value: 234000, occurred_at: '2026-06-04T10:24:00.000-07:00' });
+    await app.entries.log(broker.id, { value: 1681284, occurred_at: '2026-06-04T10:25:00.000-07:00' });
     const netWorth = await app.trackers.create({
       name: 'Net worth',
       kind: 'number',
@@ -82,7 +82,7 @@ describe('derived snapshot trackers', () => {
     });
 
     const entries = await app.entries.forTracker(netWorth.id);
-    // One point per point in time: the combined level, not the partial sums
+    // One point for the day: the combined level, not the partial sums
     // (66000 → 300000 → 1981284) the per-source join would otherwise emit.
     expect(entries.map((e) => e.value)).toEqual([1981284]);
   });
