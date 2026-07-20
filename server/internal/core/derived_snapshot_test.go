@@ -45,6 +45,43 @@ func TestDerivedSnapshotEffectiveEntries(t *testing.T) {
 	}
 }
 
+func TestDerivedSnapshotCollapsesSameInstantReadings(t *testing.T) {
+	a := newTestApp(t)
+	// Three accounts, all first recorded at the *same* instant — as when
+	// entering "as of today" balances or importing a statement date. The
+	// per-source join would otherwise emit one row per reading (66000 →
+	// 300000 → 1981284); only the settled combined level is a real point.
+	checking := mustCreate(t, a, obj("name", "Checking", "kind", "number", "is_snapshot", 1))
+	savings := mustCreate(t, a, obj("name", "Savings", "kind", "number", "is_snapshot", 1))
+	broker := mustCreate(t, a, obj("name", "Broker", "kind", "number", "is_snapshot", 1))
+	ts := "2026-06-04T10:25:00.000-07:00"
+	mustLog(t, a, checking.ID, obj("value", 66000, "occurred_at", ts))
+	mustLog(t, a, savings.ID, obj("value", 234000, "occurred_at", ts))
+	mustLog(t, a, broker.ID, obj("value", 1681284, "occurred_at", ts))
+	net := mustCreate(t, a, obj("name", "Net worth", "kind", "number", "is_snapshot", 1,
+		"links", []any{
+			obj("source_id", checking.ID, "coefficient", 1),
+			obj("source_id", savings.ID, "coefficient", 1),
+			obj("source_id", broker.ID, "coefficient", 1),
+		}))
+
+	entries, _ := a.Entries.ForTracker(net.ID, TimeRange{})
+	// One point at that instant: the fully-combined level, not the partial sums.
+	if !equalFloats(entryValues(entries), []float64{1981284}) {
+		t.Errorf("expected a single settled level, got %v", entryValues(entries))
+	}
+}
+
+func TestDerivedSnapshotKeepsDistinctInstants(t *testing.T) {
+	// A reading at a genuinely later instant is its own point — collapsing only
+	// applies within a single instant, so the net-worth fixture is unchanged.
+	a, _, _, netWorth := netWorthSetup(t)
+	entries, _ := a.Entries.ForTracker(netWorth.ID, TimeRange{})
+	if !equalFloats(entryValues(entries), []float64{1000, 1500, 1700, 1600}) {
+		t.Errorf("distinct instants should each survive: %v", entryValues(entries))
+	}
+}
+
 func TestDerivedSnapshotTargetProgress(t *testing.T) {
 	a, _, _, netWorth := netWorthSetup(t)
 	if _, err := a.Trackers.Update(netWorth.ID, obj("target", 3200)); err != nil {
