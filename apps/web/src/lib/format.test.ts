@@ -4,6 +4,7 @@ import {
   formatDuration,
   formatNumber,
   formatValue,
+  formatRelativeTime,
   toDatetimeLocalValue,
   fromDatetimeLocalValue,
 } from './format.ts';
@@ -74,6 +75,31 @@ describe('formatValue', () => {
     expect(formatValue(makeTracker({ kind: 'number', unit: 'mg' }), 200)).toBe(
       '200 mg',
     );
+  });
+});
+
+describe('formatRelativeTime', () => {
+  const now = new Date('2026-05-25T12:00:00-07:00');
+  const ago = (minutes: number) =>
+    formatRelativeTime(
+      new Date(now.getTime() - minutes * 60_000).toISOString(),
+      now,
+    );
+
+  it('counts down through minutes, hours, and days', () => {
+    expect(ago(0)).toBe('just now');
+    expect(ago(12)).toBe('12m ago');
+    expect(ago(60 * 3)).toBe('3h ago');
+    expect(ago(60 * 24)).toBe('Yesterday');
+    expect(ago(60 * 24 * 3)).toBe('3d ago');
+  });
+
+  it('falls back to a date once it is a week out', () => {
+    expect(ago(60 * 24 * 9)).toBe('May 16, 2026');
+  });
+
+  it('reads a forward-dated entry as just now rather than a negative age', () => {
+    expect(ago(-30)).toBe('just now');
   });
 });
 

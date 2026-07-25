@@ -58,8 +58,8 @@ src/
     CoreContext.tsx   # provides the API client; runs a /api/health check for the offline banner
     AppLayout.tsx     # chrome + connectivity banner
     useAsync.ts       # small async-loader hook (reload() after mutations)
-  pages/              # Home, TrackerDetail, TrackerForm, Data (backup/restore), NotFound
-  components/         # TrackerCard, EntryList, NotesSection
+  pages/              # Home, TrackerDetail, TrackerForm, QuickLog, Data (backup/restore), NotFound
+  components/         # TrackerCard, EntryList, NotesSection, Quick*Panel
   lib/                # value/date formatting, today-range helpers
   test/               # MemoryAdapter-backed test core (interchangeable with the API client) + setup
 ```
@@ -90,6 +90,16 @@ Visualizations & organization:
   category — for US Bank, derived from each row's Merchant Category Code).
   Review, rename or dismiss rows, then file them: each confirmed transaction
   becomes an entry in its tracker with a note carrying the transaction name.
+- **Quick log** (`/trackers/:id/quick`) — a dedicated full-screen logging page for
+  one tracker, reached from the "Quick log" button on its detail page. It renders
+  outside the app chrome (no header, tab bar or footer) so it can be bookmarked
+  or added to the Home Screen as a one-tap entry button for that tracker. The
+  control follows the tracker's kind: counts and yes/no habits get a single big
+  tap target that logs the default value, amounts that vary (money, durations)
+  get an on-screen keypad with preset chips mined from that tracker's own
+  history, and snapshot stats get a stepper that starts from the last reading.
+  Nothing asks for confirmation — a five-second undo bar takes the entry (and any
+  note logged with it) back.
 - **Groups** (`/groups`) — organize trackers into groups; the home screen renders
   them under group headings.
 - **Data** (`/data`) — backup export (bundle / raw SQLite) and restore.
