@@ -459,12 +459,12 @@ describe('quick log — installing it to the Home Screen', () => {
     expect(head.themeColor()).toBe('#ff6b6b');
   });
 
-  it('restores the app manifest index.html parked, not the tracker’s', async () => {
-    // What a fresh load of the quick URL looks like: the inline script in
-    // index.html has already swapped the link and stashed the original.
+  it('never restores a tracker manifest, even when the server pre-set one', async () => {
+    // What a fresh (non-iOS) load of the quick URL looks like: the server
+    // already served the document with a per-tracker manifest link, so the
+    // href this effect finds is NOT the app's own manifest.
     const head = seedHead();
     const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]')!;
-    link.dataset.appManifest = '/manifest.webmanifest';
     link.setAttribute('href', '/trackers/stale/app.webmanifest');
 
     const t = await test.createTracker({ name: 'Water' });
@@ -473,8 +473,24 @@ describe('quick log — installing it to the Home Screen', () => {
     await screen.findByText('Water');
     expect(head.manifest()).toBe(`/trackers/${t.id}/app.webmanifest`);
 
+    // Navigating away must hand back the *app's* manifest — parking the
+    // pre-set tracker href would pin this tracker onto every other page.
     unmount();
     expect(head.manifest()).toBe('/manifest.webmanifest');
+  });
+
+  it('leaves an iOS-style manifest-less document alone', async () => {
+    // The server serves quick pages to iOS with no manifest link at all;
+    // the effect must not conjure one back.
+    document.head.innerHTML =
+      '<meta name="theme-color" content="#1f2933">' +
+      '<meta name="apple-mobile-web-app-title" content="CountRoster">';
+
+    const t = await test.createTracker({ name: 'Water' });
+    renderQuick(test, `/trackers/${t.id}/quick`);
+
+    await screen.findByText('Water');
+    expect(document.querySelector('link[rel="manifest"]')).toBeNull();
   });
 
   it('restores the app’s own manifest on the way out', async () => {
