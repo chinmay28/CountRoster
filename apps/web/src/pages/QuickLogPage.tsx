@@ -62,13 +62,13 @@ export function QuickLogPage() {
 
   // Make this page installable *as itself*.
   //
-  // Both the theme color and — crucially — the manifest are swapped while the
-  // screen is up. The app's own manifest declares `start_url: "/"`, and Safari
-  // (16.4+) and Chrome install what the manifest says, not the page you were
-  // on: an icon added from here would open the app's home screen. Pointing at
-  // the tracker's own manifest makes the icon launch this screen, and carry
-  // the tracker's name and color. `apple-mobile-web-app-title` covers older
-  // iOS, which labels the icon from that meta instead.
+  // On a fresh load index.html has already repointed the manifest link at this
+  // tracker during head parsing — browsers install what the manifest declares,
+  // and the app's own says `start_url: "/"`, which is why an icon added here
+  // used to open the home screen. This covers the client-side navigation case
+  // (no document parse happens), restores the app's manifest on the way out,
+  // and sets the tint plus the icon label older iOS reads from
+  // `apple-mobile-web-app-title`.
   useEffect(() => {
     if (!tracker) return;
     const restore: (() => void)[] = [];
@@ -88,10 +88,13 @@ export function QuickLogPage() {
 
     const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     if (link) {
-      const previous = link.getAttribute('href');
+      // `data-app-manifest` is where index.html parked the app's own manifest
+      // before swapping; without it we'd "restore" this tracker's manifest
+      // onto every page the user browses to next.
+      const previous = link.dataset.appManifest || link.getAttribute('href');
       link.setAttribute('href', `/trackers/${tracker.id}/app.webmanifest`);
       restore.push(() => {
-        if (previous != null) link.setAttribute('href', previous);
+        if (previous) link.setAttribute('href', previous);
       });
     }
 

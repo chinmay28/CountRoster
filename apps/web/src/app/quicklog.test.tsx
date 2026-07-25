@@ -286,6 +286,24 @@ describe('quick log — installing it to the Home Screen', () => {
     expect(head.themeColor()).toBe('#ff6b6b');
   });
 
+  it('restores the app manifest index.html parked, not the tracker’s', async () => {
+    // What a fresh load of the quick URL looks like: the inline script in
+    // index.html has already swapped the link and stashed the original.
+    const head = seedHead();
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]')!;
+    link.dataset.appManifest = '/manifest.webmanifest';
+    link.setAttribute('href', '/trackers/stale/app.webmanifest');
+
+    const t = await test.createTracker({ name: 'Water' });
+    const { unmount } = renderQuick(test, `/trackers/${t.id}/quick`);
+
+    await screen.findByText('Water');
+    expect(head.manifest()).toBe(`/trackers/${t.id}/app.webmanifest`);
+
+    unmount();
+    expect(head.manifest()).toBe('/manifest.webmanifest');
+  });
+
   it('restores the app’s own manifest on the way out', async () => {
     const head = seedHead();
     const t = await test.createTracker({ name: 'Water', color: '#ff6b6b' });
