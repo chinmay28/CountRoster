@@ -166,7 +166,12 @@ func withWebClient(apiHandler http.Handler, webDist string) http.Handler {
 	log.Printf("[countroster] serving web client from %s", origin)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api") {
+		// The per-tracker web app manifest is generated from the database
+		// (name, color), so it goes to the handler rather than the SPA
+		// fallback — which would hand the browser index.html and leave
+		// "Add to Home Screen" installing the app's start_url instead.
+		if strings.HasPrefix(r.URL.Path, "/api") ||
+			strings.HasSuffix(r.URL.Path, "/app.webmanifest") {
 			apiHandler.ServeHTTP(w, r)
 			return
 		}

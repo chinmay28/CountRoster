@@ -99,7 +99,12 @@ Visualizations & organization:
   get an on-screen keypad with preset chips mined from that tracker's own
   history, and snapshot stats get a stepper that starts from the last reading.
   Nothing asks for confirmation — a five-second undo bar takes the entry (and any
-  note logged with it) back.
+  note logged with it) back. Adding one to the Home Screen gives an icon named
+  after the tracker that launches straight onto its log button: the page swaps in
+  a per-tracker web app manifest (`GET /trackers/:id/app.webmanifest`, generated
+  by the server from the tracker's name and color) whose `start_url` is the quick
+  screen — the app's own manifest says `start_url: "/"`, and browsers install what
+  the manifest declares rather than the page you added.
 - **Groups** (`/groups`) — organize trackers into groups; the home screen renders
   them under group headings.
 - **Data** (`/data`) — backup export (bundle / raw SQLite) and restore.

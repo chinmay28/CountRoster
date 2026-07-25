@@ -60,18 +60,45 @@ export function QuickLogPage() {
 
   const tracker = data?.tracker ?? null;
 
-  // Tint the iOS status bar / Android chrome to match the tracker while this
-  // screen is up, so a Home Screen launch looks purpose-built. Restored on
-  // the way out so the rest of the app keeps its own color.
+  // Make this page installable *as itself*.
+  //
+  // On a fresh load index.html has already repointed the manifest link at this
+  // tracker during head parsing — browsers install what the manifest declares,
+  // and the app's own says `start_url: "/"`, which is why an icon added here
+  // used to open the home screen. This covers the client-side navigation case
+  // (no document parse happens), restores the app's manifest on the way out,
+  // and sets the tint plus the icon label older iOS reads from
+  // `apple-mobile-web-app-title`.
   useEffect(() => {
     if (!tracker) return;
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (!meta) return;
-    const previous = meta.getAttribute('content');
-    meta.setAttribute('content', tracker.color);
-    return () => {
-      if (previous != null) meta.setAttribute('content', previous);
+    const restore: (() => void)[] = [];
+
+    const setMeta = (name: string, value: string) => {
+      const meta = document.querySelector(`meta[name="${name}"]`);
+      if (!meta) return;
+      const previous = meta.getAttribute('content');
+      meta.setAttribute('content', value);
+      restore.push(() => {
+        if (previous != null) meta.setAttribute('content', previous);
+      });
     };
+
+    setMeta('theme-color', tracker.color);
+    setMeta('apple-mobile-web-app-title', tracker.name);
+
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    if (link) {
+      // `data-app-manifest` is where index.html parked the app's own manifest
+      // before swapping; without it we'd "restore" this tracker's manifest
+      // onto every page the user browses to next.
+      const previous = link.dataset.appManifest || link.getAttribute('href');
+      link.setAttribute('href', `/trackers/${tracker.id}/app.webmanifest`);
+      restore.push(() => {
+        if (previous) link.setAttribute('href', previous);
+      });
+    }
+
+    return () => restore.forEach((undoChange) => undoChange());
   }, [tracker]);
 
   useEffect(() => () => window.clearTimeout(undoTimer.current), []);

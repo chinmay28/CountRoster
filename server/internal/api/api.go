@@ -110,6 +110,10 @@ func New(app *core.App, bk *backup.Service, file FileSource) http.Handler {
 
 	mux.HandleFunc("GET /api/health", s.health)
 
+	// Not part of the REST contract: a web app manifest per tracker, served
+	// off /api so it sits at the same origin as the page that links it.
+	mux.HandleFunc("GET /trackers/{id}/app.webmanifest", s.trackerManifest)
+
 	return mux
 }
 
@@ -277,6 +281,63 @@ func (s *server) getTracker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, t)
+}
+
+// trackerManifest serves a web app manifest for one tracker's quick-log
+// screen, so "Add to Home Screen" pins *that* screen.
+//
+// The static manifest the PWA ships declares `start_url: "/"`, and Safari
+// (16.4+) and Chrome both honor the manifest when installing — so an icon
+// added from any deep link opens the app's home screen instead of the page
+// it was added from. A manifest whose `start_url` is the quick screen fixes
+// that, and since it's per tracker the icon also carries the tracker's own
+// name and color instead of a row of identical "CountRoster" icons.
+//
+// `scope` stays "/" so tapping through to Details or Home from the launched
+// window stays inside the standalone app rather than kicking out to Safari.
+func (s *server) trackerManifest(w http.ResponseWriter, r *http.Request) {
+	t, err := s.app.Trackers.Get(r.PathValue("id"))
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	if t == nil {
+		notFoundEntity(w, "tracker")
+		return
+	}
+
+	start := "/trackers/" + t.ID + "/quick"
+	description := "Quick log for " + t.Name + "."
+	if t.Description != nil && *t.Description != "" {
+		description = *t.Description
+	}
+
+	icon := jsjson.NewObj()
+	icon.Set("src", "/icon.svg")
+	icon.Set("sizes", "any")
+	icon.Set("type", "image/svg+xml")
+	icon.Set("purpose", "any maskable")
+
+	// Insertion-ordered so the document reads the way a hand-written manifest
+	// would; `id` keeps each tracker a distinct installable app.
+	manifest := jsjson.NewObj()
+	manifest.Set("id", start)
+	manifest.Set("name", t.Name)
+	manifest.Set("short_name", t.Name)
+	manifest.Set("description", description)
+	manifest.Set("start_url", start)
+	manifest.Set("scope", "/")
+	manifest.Set("display", "standalone")
+	manifest.Set("background_color", t.Color)
+	manifest.Set("theme_color", t.Color)
+	manifest.Set("lang", "en")
+	manifest.Set("icons", []any{icon})
+
+	w.Header().Set("Content-Type", "application/manifest+json; charset=utf-8")
+	// A renamed or recolored tracker should reach the next install.
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsjson.Stringify(manifest))
 }
 
 func (s *server) updateTracker(w http.ResponseWriter, r *http.Request) {
