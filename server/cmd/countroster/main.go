@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/chinmay28/countroster/server/internal/api"
@@ -164,7 +165,12 @@ func withWebClient(apiHandler http.Handler, webDist string) http.Handler {
 		return apiHandler
 	}
 	log.Printf("[countroster] serving web client from %s", origin)
+	return webHandler(apiHandler, files)
+}
 
+// webHandler is withWebClient's routing, split out from asset discovery so it
+// can be exercised against an in-memory file set.
+func webHandler(apiHandler http.Handler, files fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// The per-tracker web app manifest is generated from the database
 		// (name, color), so it goes to the handler rather than the SPA
@@ -184,11 +190,54 @@ func withWebClient(apiHandler http.Handler, webDist string) http.Handler {
 			return
 		}
 		if r.Method == http.MethodGet {
+			// A quick-log deep link gets the app shell with its manifest link
+			// already pointing at that tracker (see quickShell).
+			if m := quickPathRe.FindStringSubmatch(r.URL.Path); m != nil {
+				if shell, err := fs.ReadFile(files, "index.html"); err == nil {
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					// Never let a cached shell keep pointing at the app's
+					// manifest — the icon it installs depends on this markup.
+					w.Header().Set("Cache-Control", "no-cache")
+					w.Write(quickShell(shell, m[1]))
+					return
+				}
+			}
 			http.ServeFileFS(w, r, files, "index.html")
 			return
 		}
 		http.NotFound(w, r)
 	})
+}
+
+// A quick-log screen's URL. The id charset is deliberately narrow: it is
+// substituted into an HTML attribute below, so anything else is served the
+// unmodified shell rather than escaped (the SPA reports the tracker missing,
+// which is what such a URL deserves anyway).
+var quickPathRe = regexp.MustCompile(`^/trackers/([A-Za-z0-9_-]{1,64})/quick/?$`)
+
+// The app shell's web app manifest link, either attribute order.
+var (
+	manifestRelFirst  = regexp.MustCompile(`(?i)(<link[^>]*\brel="manifest"[^>]*\bhref=")([^"]*)(")`)
+	manifestHrefFirst = regexp.MustCompile(`(?i)(<link[^>]*\bhref=")([^"]*)("[^>]*\brel="manifest")`)
+)
+
+// quickShell serves the quick-log screen an app shell whose manifest link
+// already names its tracker.
+//
+// Browsers install what the manifest declares, and the app's own manifest
+// says start_url "/", so an icon added from a quick-log URL opens the app's
+// home screen. The client repoints the link too, but only from script: the
+// PWA plugin injects that link at the *end* of the built <head>, after the
+// inline script that would rewrite it, so on a fresh load the browser parses
+// the app manifest first and a quick "Add to Home Screen" can beat the
+// rewrite. Serving the right href in the markup removes the race — by the
+// time Safari sees the document, the link already points at the tracker.
+func quickShell(shell []byte, trackerID string) []byte {
+	href := "/trackers/" + trackerID + "/app.webmanifest"
+	if manifestRelFirst.Match(shell) {
+		return manifestRelFirst.ReplaceAll(shell, []byte("${1}"+href+"${3}"))
+	}
+	return manifestHrefFirst.ReplaceAll(shell, []byte("${1}"+href+"${3}"))
 }
 
 // webFiles picks the client asset source: an explicit web-dist directory
