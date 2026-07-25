@@ -9,6 +9,7 @@ import { TrackerFormPage } from './pages/TrackerFormPage.tsx';
 import { GroupsPage } from './pages/GroupsPage.tsx';
 import { TransactionsPage } from './pages/TransactionsPage.tsx';
 import { DataPage } from './pages/DataPage.tsx';
+import { QuickLogPage } from './pages/QuickLogPage.tsx';
 import { NotFoundPage } from './pages/NotFoundPage.tsx';
 import './styles.css';
 
@@ -17,6 +18,10 @@ import './styles.css';
  * any non-API GET (SPA fallback), so deep links and refreshes resolve.
  */
 const router = createBrowserRouter([
+  // The quick-log screen sits *outside* the app shell: it's the bookmark /
+  // Home Screen target for a single tracker, so it renders full-bleed with no
+  // header, tab bar, or footer competing for the tap.
+  { path: '/trackers/:id/quick', element: <QuickLogPage /> },
   {
     path: '/',
     element: <AppLayout />,

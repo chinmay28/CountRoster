@@ -194,6 +194,16 @@ export function TrackerDetailPage() {
           {tracker.description && <p>{tracker.description}</p>}
         </div>
         <div className="detail__header-actions">
+          {!isDerived && (
+            <Link
+              to={`/trackers/${tracker.id}/quick`}
+              className="btn"
+              style={{ borderColor: tracker.color, color: tracker.color }}
+              title="A full-screen logging page for this tracker — bookmark it for one-tap entries"
+            >
+              Quick log
+            </Link>
+          )}
           <Link to={`/trackers/${tracker.id}/edit`} className="btn">
             Edit
           </Link>

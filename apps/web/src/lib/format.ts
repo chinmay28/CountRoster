@@ -105,6 +105,25 @@ export function formatDateTime(iso: string): string {
   });
 }
 
+/**
+ * Compact "how long ago" label for a tight screen: "just now", "12m ago",
+ * "3h ago", "Yesterday", then the calendar date once it's a week out.
+ * Future instants (a backdated-forward entry) read as "just now".
+ */
+export function formatRelativeTime(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const minutes = Math.floor((now.getTime() - d.getTime()) / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days}d ago`;
+  return formatDate(iso);
+}
+
 /** Friendly local date only, e.g. "May 25, 2026". */
 export function formatDate(iso: string): string {
   const d = new Date(iso);
