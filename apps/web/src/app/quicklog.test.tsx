@@ -66,6 +66,18 @@ describe('quick log — one tap (count)', () => {
     expect(screen.getByText(/today/)).toBeInTheDocument();
   });
 
+  it('puts Details on the left and Home on the right', async () => {
+    const t = await test.createTracker({ name: 'Water' });
+    renderQuick(test, `/trackers/${t.id}/quick`);
+
+    await screen.findByText('Water');
+    const links = screen.getAllByRole('link');
+    expect(links[0]).toHaveTextContent('Details');
+    expect(links[0]).toHaveAttribute('href', `/trackers/${t.id}`);
+    expect(links[1]).toHaveTextContent('Home');
+    expect(links[1]).toHaveAttribute('href', '/');
+  });
+
   it('renders without the app shell, so nothing competes with the tap', async () => {
     const t = await test.createTracker({ name: 'Water' });
     renderQuick(test, `/trackers/${t.id}/quick`);

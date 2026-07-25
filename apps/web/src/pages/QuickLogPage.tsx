@@ -220,12 +220,14 @@ export function QuickLogPage() {
       className={`quick${painted ? ' quick--painted' : ''}`}
       style={{ '--quick-accent': tracker.color, '--quick-ink': readableInk(tracker.color) } as React.CSSProperties}
     >
+      {/* Details sits left because it's this screen's parent — the back
+          direction — leaving Home on the right. */}
       <header className="quick__bar">
-        <Link to="/" className="quick__bar-link">
-          ‹ Home
-        </Link>
         <Link to={`/trackers/${tracker.id}`} className="quick__bar-link">
-          Details ›
+          ‹ Details
+        </Link>
+        <Link to="/" className="quick__bar-link">
+          Home ›
         </Link>
       </header>
 
