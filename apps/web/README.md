@@ -94,6 +94,11 @@ Visualizations & organization:
   one tracker, reached from the "Quick log" button on its detail page. It renders
   outside the app chrome (no header, tab bar or footer) so it can be bookmarked
   or added to the Home Screen as a one-tap entry button for that tracker. The
+  server serves this URL a shell carrying the tracker's identity, so the icon is
+  named and tinted for it: on iOS with no manifest link at all (Safari then
+  installs the page being viewed, its behavior since long before manifests), and
+  elsewhere pointing at `GET /trackers/:id/app.webmanifest`, whose `start_url` is
+  the quick screen. The
   control follows the tracker's kind: counts and yes/no habits get a single big
   tap target that logs the default value, amounts that vary (money, durations)
   get an on-screen keypad with preset chips mined from that tracker's own
