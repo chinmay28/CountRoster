@@ -60,18 +60,42 @@ export function QuickLogPage() {
 
   const tracker = data?.tracker ?? null;
 
-  // Tint the iOS status bar / Android chrome to match the tracker while this
-  // screen is up, so a Home Screen launch looks purpose-built. Restored on
-  // the way out so the rest of the app keeps its own color.
+  // Make this page installable *as itself*.
+  //
+  // Both the theme color and — crucially — the manifest are swapped while the
+  // screen is up. The app's own manifest declares `start_url: "/"`, and Safari
+  // (16.4+) and Chrome install what the manifest says, not the page you were
+  // on: an icon added from here would open the app's home screen. Pointing at
+  // the tracker's own manifest makes the icon launch this screen, and carry
+  // the tracker's name and color. `apple-mobile-web-app-title` covers older
+  // iOS, which labels the icon from that meta instead.
   useEffect(() => {
     if (!tracker) return;
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (!meta) return;
-    const previous = meta.getAttribute('content');
-    meta.setAttribute('content', tracker.color);
-    return () => {
-      if (previous != null) meta.setAttribute('content', previous);
+    const restore: (() => void)[] = [];
+
+    const setMeta = (name: string, value: string) => {
+      const meta = document.querySelector(`meta[name="${name}"]`);
+      if (!meta) return;
+      const previous = meta.getAttribute('content');
+      meta.setAttribute('content', value);
+      restore.push(() => {
+        if (previous != null) meta.setAttribute('content', previous);
+      });
     };
+
+    setMeta('theme-color', tracker.color);
+    setMeta('apple-mobile-web-app-title', tracker.name);
+
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    if (link) {
+      const previous = link.getAttribute('href');
+      link.setAttribute('href', `/trackers/${tracker.id}/app.webmanifest`);
+      restore.push(() => {
+        if (previous != null) link.setAttribute('href', previous);
+      });
+    }
+
+    return () => restore.forEach((undoChange) => undoChange());
   }, [tracker]);
 
   useEffect(() => () => window.clearTimeout(undoTimer.current), []);

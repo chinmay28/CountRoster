@@ -627,3 +627,52 @@ func TestTransactionsOverAPI(t *testing.T) {
 		t.Fatalf("clear without status should 400, got %d", res.StatusCode)
 	}
 }
+
+// The per-tracker web app manifest: what "Add to Home Screen" installs. Not
+// part of the REST contract the PWA client is compiled against, but the
+// Home Screen icon is only useful if start_url points at that tracker's
+// quick-log screen.
+func TestTrackerManifest(t *testing.T) {
+	c := &client{t: t, base: newServer(t).URL}
+
+	var tracker m
+	if status := c.postJSON("/api/trackers", m{"name": "Water", "color": "#ff6b6b"}, &tracker); status != 201 {
+		t.Fatalf("create status %d", status)
+	}
+	id := tracker["id"].(string)
+
+	res, data := c.do("GET", "/trackers/"+id+"/app.webmanifest", nil)
+	if res.StatusCode != 200 {
+		t.Fatalf("manifest status %d: %s", res.StatusCode, data)
+	}
+	if ct := res.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/manifest+json") {
+		t.Errorf("content-type %q", ct)
+	}
+
+	var manifest m
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("bad JSON %q: %v", data, err)
+	}
+	// The whole point: the icon opens this tracker's quick screen, not "/".
+	if want := "/trackers/" + id + "/quick"; manifest["start_url"] != want {
+		t.Errorf("start_url = %v, want %s", manifest["start_url"], want)
+	}
+	// A distinct id per tracker keeps each icon its own installed app.
+	if manifest["id"] != manifest["start_url"] {
+		t.Errorf("id = %v, want it to match start_url", manifest["id"])
+	}
+	if manifest["name"] != "Water" {
+		t.Errorf("name = %v", manifest["name"])
+	}
+	if manifest["theme_color"] != "#ff6b6b" {
+		t.Errorf("theme_color = %v", manifest["theme_color"])
+	}
+	// Scope covers the rest of the app, so Details/Home stay standalone.
+	if manifest["scope"] != "/" || manifest["display"] != "standalone" {
+		t.Errorf("scope/display wrong: %v", manifest)
+	}
+
+	if res, _ := c.do("GET", "/trackers/does-not-exist/app.webmanifest", nil); res.StatusCode != 404 {
+		t.Errorf("unknown tracker manifest status %d, want 404", res.StatusCode)
+	}
+}

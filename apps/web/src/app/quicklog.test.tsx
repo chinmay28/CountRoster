@@ -255,6 +255,51 @@ describe('quick log — trackers with nothing to log', () => {
   });
 });
 
+describe('quick log — installing it to the Home Screen', () => {
+  /** The head tags index.html ships, which the screen swaps while it's up. */
+  function seedHead() {
+    document.head.innerHTML =
+      '<link rel="manifest" href="/manifest.webmanifest">' +
+      '<meta name="theme-color" content="#1f2933">' +
+      '<meta name="apple-mobile-web-app-title" content="CountRoster">';
+    return {
+      manifest: () => document.querySelector('link[rel="manifest"]')!.getAttribute('href'),
+      title: () =>
+        document
+          .querySelector('meta[name="apple-mobile-web-app-title"]')!
+          .getAttribute('content'),
+      themeColor: () =>
+        document.querySelector('meta[name="theme-color"]')!.getAttribute('content'),
+    };
+  }
+
+  it('points the manifest at this tracker, so the icon opens this screen', async () => {
+    const head = seedHead();
+    const t = await test.createTracker({ name: 'Water', color: '#ff6b6b' });
+    renderQuick(test, `/trackers/${t.id}/quick`);
+
+    await screen.findByText('Water');
+    // Without this the browser installs the app manifest's start_url ("/")
+    // and the Home Screen icon opens the app's home screen instead.
+    expect(head.manifest()).toBe(`/trackers/${t.id}/app.webmanifest`);
+    expect(head.title()).toBe('Water');
+    expect(head.themeColor()).toBe('#ff6b6b');
+  });
+
+  it('restores the app’s own manifest on the way out', async () => {
+    const head = seedHead();
+    const t = await test.createTracker({ name: 'Water', color: '#ff6b6b' });
+    const { unmount } = renderQuick(test, `/trackers/${t.id}/quick`);
+
+    await screen.findByText('Water');
+    unmount();
+
+    expect(head.manifest()).toBe('/manifest.webmanifest');
+    expect(head.title()).toBe('CountRoster');
+    expect(head.themeColor()).toBe('#1f2933');
+  });
+});
+
 describe('detail page', () => {
   it('links to the tracker’s quick screen', async () => {
     const t = await test.createTracker({ name: 'Water' });
