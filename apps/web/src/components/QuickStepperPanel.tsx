@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { formatNumber, formatRelativeTime, formatValue } from '../lib/format.ts';
+import {
+  formatNumber,
+  formatRelativeTime,
+  formatValue,
+  fromDatetimeLocalValue,
+} from '../lib/format.ts';
 import { latestValue } from '../lib/range.ts';
 import { applyStep, roundToStep, stepSize, type QuickPanelProps } from '../lib/quick.ts';
+import { QuickWhenField } from './QuickWhenField.tsx';
 
 /** Delay before a held +/− starts repeating, and the interval once it does. */
 const HOLD_DELAY_MS = 450;
@@ -23,6 +29,7 @@ export function QuickStepperPanel({ tracker, entries, busy, onLog }: QuickPanelP
   const [value, setValue] = useState(previous ?? tracker.default_value);
   const [typing, setTyping] = useState(false);
   const [draft, setDraft] = useState('');
+  const [when, setWhen] = useState('');
   const hold = useRef<{ timeout?: number; interval?: number }>({});
 
   // The last reading only arrives once the tracker's entries have loaded, and
@@ -133,6 +140,8 @@ export function QuickStepperPanel({ tracker, entries, busy, onLog }: QuickPanelP
         </div>
       </div>
 
+      <QuickWhenField value={when} onChange={setWhen} />
+
       <div className="quick-stepper__controls">
         <button
           type="button"
@@ -148,7 +157,7 @@ export function QuickStepperPanel({ tracker, entries, busy, onLog }: QuickPanelP
         <button
           type="button"
           className="quick__commit quick-stepper__commit"
-          onClick={() => onLog(value)}
+          onClick={() => onLog(value, undefined, when ? fromDatetimeLocalValue(when) : undefined)}
           disabled={busy}
         >
           Log reading

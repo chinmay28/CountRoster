@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { formatNumber } from '../lib/format.ts';
+import { formatNumber, fromDatetimeLocalValue } from '../lib/format.ts';
 import type { QuickPanelProps } from '../lib/quick.ts';
 import { QuickNoteField } from './QuickNoteField.tsx';
+import { QuickWhenField } from './QuickWhenField.tsx';
 
 /**
  * The one-tap control, for counts and yes/no habits: the tracker's default
@@ -13,14 +14,18 @@ export function QuickTapPanel({ tracker, busy, onLog }: QuickPanelProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [value, setValue] = useState('');
   const [note, setNote] = useState('');
+  const [when, setWhen] = useState('');
 
   const isBoolean = tracker.kind === 'boolean';
+  // Kept beside the tap button rather than inside the drawer, so a backdated
+  // time applies to the one-tap path too — not just to a custom value.
+  const occurredAt = when ? fromDatetimeLocalValue(when) : undefined;
 
   function submitCustom(e: React.FormEvent) {
     e.preventDefault();
     const amount = value.trim() === '' ? tracker.default_value : Number(value);
     if (!Number.isFinite(amount)) return;
-    onLog(amount, note.trim() || undefined);
+    onLog(amount, note.trim() || undefined, occurredAt);
     setValue('');
     setNote('');
     setDrawerOpen(false);
@@ -33,7 +38,7 @@ export function QuickTapPanel({ tracker, busy, onLog }: QuickPanelProps) {
           <button
             type="button"
             className="quick-tap__half"
-            onClick={() => onLog(1)}
+            onClick={() => onLog(1, undefined, occurredAt)}
             disabled={busy}
           >
             Yes
@@ -41,7 +46,7 @@ export function QuickTapPanel({ tracker, busy, onLog }: QuickPanelProps) {
           <button
             type="button"
             className="quick-tap__half quick-tap__half--muted"
-            onClick={() => onLog(0)}
+            onClick={() => onLog(0, undefined, occurredAt)}
             disabled={busy}
           >
             No
@@ -51,7 +56,7 @@ export function QuickTapPanel({ tracker, busy, onLog }: QuickPanelProps) {
         <button
           type="button"
           className="quick-tap__button"
-          onClick={() => onLog(tracker.default_value)}
+          onClick={() => onLog(tracker.default_value, undefined, occurredAt)}
           disabled={busy}
           aria-label={`Log ${formatNumber(tracker.default_value, tracker.unit)}`}
         >
@@ -64,6 +69,7 @@ export function QuickTapPanel({ tracker, busy, onLog }: QuickPanelProps) {
       )}
 
       <div className="quick__secondary">
+        <QuickWhenField value={when} onChange={setWhen} />
         <button
           type="button"
           className="quick__chip"

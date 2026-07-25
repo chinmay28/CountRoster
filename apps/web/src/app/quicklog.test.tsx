@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { CoreValueProvider } from './CoreContext.tsx';
@@ -252,6 +252,167 @@ describe('quick log — trackers with nothing to log', () => {
     const t = await test.createTracker({ name: 'Private', is_hidden: 1 });
     renderQuick(test, `/trackers/${t.id}/quick`);
     expect(await screen.findByText('Private')).toBeInTheDocument();
+  });
+});
+
+describe('quick log — backdating', () => {
+  /**
+   * Open the picker and set a time. `fireEvent.change` rather than typing:
+   * jsdom's datetime-local doesn't accept per-segment keystrokes.
+   */
+  async function pickWhen(user: ReturnType<typeof userEvent.setup>, value: string) {
+    await user.click(await screen.findByRole('button', { name: 'Logging now' }));
+    fireEvent.change(screen.getByLabelText('When'), { target: { value } });
+  }
+
+  /** A datetime-local value a couple of hours before now. */
+  function hoursAgo(hours: number): string {
+    const d = new Date(Date.now() - hours * 3_600_000);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+      `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
+  }
+
+  it('logs a keypad amount at the time you pick', async () => {
+    const user = userEvent.setup();
+    const when = hoursAgo(3);
+    const t = await test.createTracker({ name: 'Feeds', kind: 'number', unit: 'ml' });
+    renderQuick(test, `/trackers/${t.id}/quick`);
+
+    await pickWhen(user, when);
+    await user.click(screen.getByRole('button', { name: '6' }));
+    await user.click(screen.getByRole('button', { name: '0' }));
+    await user.click(screen.getByRole('button', { name: 'Log entry' }));
+
+    await waitFor(async () => {
+      const entries = await test.core.entries.forTracker(t.id);
+      expect(entries).toHaveLength(1);
+      expect(entries[0]!.value).toBe(60);
+      // Stored with a local offset, at the chosen wall-clock time.
+      expect(entries[0]!.occurred_at).not.toMatch(/Z$/);
+      expect(new Date(entries[0]!.occurred_at).getHours()).toBe(
+        new Date(when).getHours(),
+      );
+    });
+  });
+
+  it('names the time in the undo bar, so a backdate can’t apply silently', async () => {
+    const user = userEvent.setup();
+    const t = await test.createTracker({ name: 'Feeds', kind: 'number' });
+    renderQuick(test, `/trackers/${t.id}/quick`);
+
+    await pickWhen(user, hoursAgo(2));
+    await user.click(screen.getByRole('button', { name: '5' }));
+    await user.click(screen.getByRole('button', { name: 'Log entry' }));
+
+    expect(await screen.findByText(/Logged 5 · Today,/)).toBeInTheDocument();
+  });
+
+  it('backdates a one-tap count without opening the drawer', async () => {
+    const user = userEvent.setup();
+    const when = hoursAgo(5);
+    const t = await test.createTracker({ name: 'Water', kind: 'count' });
+    renderQuick(test, `/trackers/${t.id}/quick`);
+
+    await pickWhen(user, when);
+    await user.click(screen.getByRole('button', { name: 'Log 1' }));
+
+    await waitFor(async () => {
+      const entries = await test.core.entries.forTracker(t.id);
+      expect(entries).toHaveLength(1);
+      expect(new Date(entries[0]!.occurred_at).getHours()).toBe(
+        new Date(when).getHours(),
+      );
+    });
+  });
+
+  it('gives a note the same instant as the entry it describes', async () => {
+    const user = userEvent.setup();
+    const when = hoursAgo(4);
+    const t = await test.createTracker({ name: 'Water', kind: 'count' });
+    renderQuick(test, `/trackers/${t.id}/quick`);
+
+    await pickWhen(user, when);
+    await user.click(screen.getByRole('button', { name: 'Custom value' }));
+    await user.type(screen.getByLabelText('Note'), 'left side');
+    await user.click(screen.getByRole('button', { name: 'Log entry' }));
+
+    await waitFor(async () => {
+      const notes = await test.core.notes.forTracker(t.id);
+      expect(notes).toHaveLength(1);
+      expect(new Date(notes[0]!.occurred_at).getHours()).toBe(
+        new Date(when).getHours(),
+      );
+    });
+  });
+
+  it('keeps the chosen time across entries, instead of resetting on each log', async () => {
+    const user = userEvent.setup();
+    const when = hoursAgo(3);
+    const t = await test.createTracker({ name: 'Feeds', kind: 'number', default_value: 30 });
+    renderQuick(test, `/trackers/${t.id}/quick`);
+
+    await pickWhen(user, when);
+    await user.click(screen.getByRole('button', { name: 'Log 30' }));
+    await waitFor(async () => {
+      expect(await test.core.entries.forTracker(t.id)).toHaveLength(1);
+    });
+
+    // The refresh after a log must not remount the panel — that would drop
+    // the chosen time (and a half-typed note) on the floor.
+    expect(screen.getByRole('button', { name: /^Logging at Today,/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Log 30' }));
+    await waitFor(async () => {
+      const entries = await test.core.entries.forTracker(t.id);
+      expect(entries).toHaveLength(2);
+      for (const entry of entries) {
+        expect(new Date(entry.occurred_at).getHours()).toBe(new Date(when).getHours());
+      }
+    });
+  });
+
+  it('goes back to now on request', async () => {
+    const user = userEvent.setup();
+    const t = await test.createTracker({ name: 'Water', kind: 'count' });
+    renderQuick(test, `/trackers/${t.id}/quick`);
+
+    await pickWhen(user, hoursAgo(2));
+    // The chip now shows the chosen time rather than "Now".
+    expect(screen.getByRole('button', { name: /^Logging at Today,/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back to now' }));
+    expect(screen.getByRole('button', { name: 'Logging now' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Log 1' }));
+    await waitFor(async () => {
+      const entries = await test.core.entries.forTracker(t.id);
+      expect(entries).toHaveLength(1);
+      // Logged at the current instant: within a minute of now.
+      expect(Date.now() - new Date(entries[0]!.occurred_at).getTime()).toBeLessThan(60_000);
+    });
+  });
+
+  it('backdates a snapshot reading', async () => {
+    const user = userEvent.setup();
+    const when = hoursAgo(20);
+    const t = await test.createTracker({ name: 'Weight', is_snapshot: 1, default_value: 0.2 });
+    const seeded = await test.core.entries.log(t.id, { value: 179.2 });
+    renderQuick(test, `/trackers/${t.id}/quick`);
+
+    await pickWhen(user, when);
+    await user.click(screen.getByRole('button', { name: 'Log reading' }));
+
+    await waitFor(async () => {
+      const entries = await test.core.entries.forTracker(t.id);
+      expect(entries).toHaveLength(2);
+      // Entries come back oldest-first, so a backdated reading sorts ahead of
+      // the seeded one — find it by id, not by position.
+      const logged = entries.find((e) => e.id !== seeded.id);
+      expect(new Date(logged!.occurred_at).getHours()).toBe(new Date(when).getHours());
+    });
   });
 });
 

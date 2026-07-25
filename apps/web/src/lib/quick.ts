@@ -34,8 +34,11 @@ export interface QuickPanelProps {
   tracker: Tracker;
   entries: readonly Entry[];
   busy: boolean;
-  /** Record one entry, optionally with a note describing it. */
-  onLog: (value: number, note?: string) => void;
+  /**
+   * Record one entry: optionally with a note describing it, and optionally at
+   * an instant other than now (ISO 8601 with a local offset) for backdating.
+   */
+  onLog: (value: number, note?: string, occurredAt?: string) => void;
 }
 
 /** How many of the most recent entries the preset amounts are mined from. */

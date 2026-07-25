@@ -1761,6 +1761,33 @@ input.txn__name:focus {
   filter: brightness(0.94);
 }
 
+/* "When": a chip that reads "Now" until it's tapped, then the picker. */
+.quick__when {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+.quick__when-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.quick__when-input {
+  font: inherit;
+  /* 16px keeps iOS Safari from zooming the page when the picker opens. */
+  font-size: 16px;
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+.quick--painted .quick__when-input {
+  border-color: transparent;
+}
+
 .quick__drawer {
   width: 100%;
   display: grid;
