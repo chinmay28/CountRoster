@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { formatNumber, formatValue } from '../lib/format.ts';
+import { formatNumber, formatValue, fromDatetimeLocalValue } from '../lib/format.ts';
 import { topValues, type QuickPanelProps } from '../lib/quick.ts';
 import { NumberKeypad } from './NumberKeypad.tsx';
 import { QuickNoteField } from './QuickNoteField.tsx';
+import { QuickWhenField } from './QuickWhenField.tsx';
 
 /**
  * The keypad control, for trackers whose amount varies (money, durations,
@@ -15,6 +16,9 @@ export function QuickKeypadPanel({ tracker, entries, busy, onLog }: QuickPanelPr
   const [typed, setTyped] = useState('');
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState('');
+  const [when, setWhen] = useState('');
+
+  const occurredAt = when ? fromDatetimeLocalValue(when) : undefined;
 
   const presets = [
     tracker.default_value,
@@ -25,7 +29,7 @@ export function QuickKeypadPanel({ tracker, entries, busy, onLog }: QuickPanelPr
 
   function submit() {
     if (!valid) return;
-    onLog(amount, note.trim() || undefined);
+    onLog(amount, note.trim() || undefined, occurredAt);
     setTyped('');
     setNote('');
     setNoteOpen(false);
@@ -48,13 +52,15 @@ export function QuickKeypadPanel({ tracker, entries, busy, onLog }: QuickPanelPr
         )}
       </div>
 
+      <QuickWhenField value={when} onChange={setWhen} />
+
       <div className="quick__secondary" role="group" aria-label="Quick amounts">
         {presets.map((preset) => (
           <button
             key={preset}
             type="button"
             className="quick__chip quick__chip--accent"
-            onClick={() => onLog(preset, note.trim() || undefined)}
+            onClick={() => onLog(preset, note.trim() || undefined, occurredAt)}
             disabled={busy}
             aria-label={`Log ${formatValue(tracker, preset)}`}
           >

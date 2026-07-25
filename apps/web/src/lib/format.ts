@@ -181,6 +181,19 @@ export function dateInputLabel(value: string, now: Date = new Date()): string {
 }
 
 /**
+ * Compact label for a datetime-input value: "Today, 1:15 AM",
+ * "Yesterday, 11:40 PM", "Tue, Jun 9, 8:05 AM". Used where a backdated
+ * timestamp has to read at a glance on a phone.
+ */
+export function datetimeInputLabel(value: string, now: Date = new Date()): string {
+  const date = value.split('T')[0];
+  const at = new Date(value);
+  if (!date || Number.isNaN(at.getTime())) return value;
+  const clock = at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return `${dateInputLabel(date, now)}, ${clock}`;
+}
+
+/**
  * Convert a <input type="datetime-local"> value back to ISO 8601 with the
  * local timezone offset — the format the core stores (never UTC "Z").
  */

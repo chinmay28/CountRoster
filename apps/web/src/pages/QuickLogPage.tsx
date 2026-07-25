@@ -5,7 +5,7 @@ import { useAsync } from '../app/useAsync.ts';
 import { QuickKeypadPanel } from '../components/QuickKeypadPanel.tsx';
 import { QuickStepperPanel } from '../components/QuickStepperPanel.tsx';
 import { QuickTapPanel } from '../components/QuickTapPanel.tsx';
-import { formatValue } from '../lib/format.ts';
+import { datetimeInputLabel, formatValue, toDatetimeLocalValue } from '../lib/format.ts';
 import { quickMode } from '../lib/quick.ts';
 import { readableInk } from '../lib/color.ts';
 import {
@@ -109,21 +109,36 @@ export function QuickLogPage() {
     undoTimer.current = window.setTimeout(() => setUndoable(null), UNDO_MS);
   }
 
-  async function log(value: number, note?: string) {
+  async function log(value: number, note?: string, occurredAt?: string) {
     if (!tracker) return;
     setBusy(true);
     setLogError(null);
     try {
-      const entry = await core.entries.log(tracker.id, { value });
+      const entry = await core.entries.log(tracker.id, {
+        value,
+        ...(occurredAt ? { occurred_at: occurredAt } : {}),
+      });
       // A note typed alongside the value describes this very entry, so link
-      // it — and remember it, since undo has to take both back.
+      // it — and remember it, since undo has to take both back. It carries
+      // the same instant, so the journal reads in the right order too.
       const created = note
-        ? await core.notes.create({ tracker_id: tracker.id, entry_id: entry.id, body: note })
+        ? await core.notes.create({
+            tracker_id: tracker.id,
+            entry_id: entry.id,
+            body: note,
+            ...(occurredAt ? { occurred_at: occurredAt } : {}),
+          })
         : null;
       armUndo({
         entryId: entry.id,
         noteId: created?.id ?? null,
-        label: `Logged ${formatValue(tracker, value)}`,
+        // Name the time when it isn't now, so a backdate left set from the
+        // previous entry can't file this one silently in the past.
+        label: occurredAt
+          ? `Logged ${formatValue(tracker, value)} · ${datetimeInputLabel(
+              toDatetimeLocalValue(occurredAt),
+            )}`
+          : `Logged ${formatValue(tracker, value)}`,
       });
       reload();
     } catch (err) {
@@ -153,7 +168,11 @@ export function QuickLogPage() {
     }
   }
 
-  if (loading) {
+  // Only the *first* load takes over the screen. Every log refreshes the
+  // totals, and swapping the control out for "Loading…" each time would both
+  // flash the screen and unmount the panel — losing a note half-typed or a
+  // backdated time set for the entry you're about to log next.
+  if (loading && !data) {
     return (
       <div className="quick quick--bare">
         <p className="quick__status">Loading…</p>
@@ -161,7 +180,7 @@ export function QuickLogPage() {
     );
   }
 
-  if (error || !tracker) {
+  if (!tracker) {
     return (
       <div className="quick quick--bare">
         <div className="quick__empty">
