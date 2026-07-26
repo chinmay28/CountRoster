@@ -105,17 +105,17 @@ describe('current-period tab', () => {
       within(table)
         .getAllByRole('columnheader')
         .map((h) => h.textContent),
-    ).toEqual(['Time', 'Value', 'Running']);
+    ).toEqual(['Time', 'Value', 'Change']);
 
     // Three entries all told, but only today's two are tabulated — newest
-    // first, and the Running column accumulates from the window's start, so
-    // the top row carries the window total.
+    // first, each compared with the entry before it.
     const rows = windowRows('Today');
     expect(rows).toHaveLength(3); // 2 entries + the footer
     expect(rows[0]![1]).toBe('2 glasses'); // 14:00, the later of the two
-    expect(rows[0]![2]).toBe('3 glasses'); // running: 1 + 2
+    expect(rows[0]![2]).toContain('▲ 1 glasses'); // up from the 09:00 entry
     expect(rows[1]![1]).toBe('1 glasses'); // 09:00
-    expect(rows[1]![2]).toBe('1 glasses');
+    // The window's first entry has nothing behind it to compare against.
+    expect(rows[1]![2]).toBe('—');
     expect(rows[2]!.slice(0, 2)).toEqual(['2 entries', '3 glasses']);
   });
 
@@ -196,7 +196,7 @@ describe('current-period tab', () => {
       within(within(screen.getByRole('tabpanel', { name: 'This month' })).getByRole('table'))
         .getAllByRole('columnheader')
         .map((h) => h.textContent),
-    ).toEqual(['Time', 'Value', 'Note', 'Running']);
+    ).toEqual(['Time', 'Value', 'Note', 'Change']);
   });
 
   it('reads but never writes — editing belongs to the All entries tab', async () => {
@@ -245,6 +245,7 @@ describe('current-period tab', () => {
     expect(rows[0]![2]).toContain('▼ 2 lb');
     // …and the first reading of the window has nothing to step from.
     expect(rows[1]![2]).toBe('—');
+    // A level's step and an amount's step are the same column now.
     // The "total" is the latest level — 181 + 179 would be nonsense.
     expect(rows[2]!.slice(0, 2)).toEqual(['2 entries', '179 lb']);
   });

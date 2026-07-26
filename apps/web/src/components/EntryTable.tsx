@@ -30,13 +30,9 @@ interface EntryTableProps {
 
 /**
  * Every entry in the tracker's current reset window, as a table — the same
- * shape as the per-period breakdown, one row down. Where that table asks
- * "how did each period go", this one asks "what makes up the period I'm in",
- * so the running total is the interesting column: each row shows where the
- * window stood once that entry landed, and the top row is the window's total.
- *
- * A snapshot tracker's readings are levels, so they neither accumulate nor
- * total: the column becomes the change from the reading before.
+ * shape as the per-period breakdown, one row down. Where that table compares
+ * each period with the period before it, this one compares each entry with
+ * the entry before it, so the two read the same way at both scales.
  *
  * Read-only, like the per-period table beside it. Changing an entry is a
  * different kind of act from reading one, and it lives in one place — the
@@ -58,19 +54,18 @@ export function EntryTable({
     return <p className="muted">Nothing logged {windowLabel} yet.</p>;
   }
 
-  // Walk oldest → newest to accumulate, then flip: the table reads newest
-  // first, like the per-period one.
-  let running = 0;
+  // Each row against the one before it, then flipped: the table reads newest
+  // first, like the per-period one. The oldest entry in the window has
+  // nothing behind it to compare against — whatever came before it belongs
+  // to a window this table isn't showing.
   const rows = entries
     .map((entry, i) => {
-      running += entry.value;
       const previous = i > 0 ? entries[i - 1]! : null;
       return {
         entry,
         note: notesByEntry?.get(entry.id)?.[0] ?? null,
         chips: entryChips(entry, fields),
-        // For a level, "so far" is the step from the previous reading.
-        trail: isSnapshot ? (previous ? entry.value - previous.value : null) : running,
+        change: previous ? entry.value - previous.value : null,
       };
     })
     .reverse();
@@ -103,12 +98,12 @@ export function EntryTable({
               {showChips && <th scope="col">Answers</th>}
               {showNotes && <th scope="col">Note</th>}
               <th scope="col" className="periods__num">
-                {isSnapshot ? 'Change' : 'Running'}
+                Change
               </th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ entry, note, chips, trail }) => (
+            {rows.map(({ entry, note, chips, change }) => (
               <EntryTableRow
                 key={entry.id}
                 tracker={tracker}
@@ -116,8 +111,7 @@ export function EntryTable({
                 note={note}
                 chips={chips}
                 showChips={showChips}
-                trail={trail}
-                isSnapshot={isSnapshot}
+                change={change}
                 showNotes={showNotes}
                 windowPeriod={windowPeriod}
               />
@@ -163,8 +157,7 @@ function EntryTableRow({
   note,
   chips,
   showChips,
-  trail,
-  isSnapshot,
+  change,
   showNotes,
   windowPeriod,
 }: {
@@ -175,9 +168,8 @@ function EntryTableRow({
   chips: { key: string; label: string; color: string | null }[];
   /** Whether the table is rendering an Answers column at all. */
   showChips: boolean;
-  /** Running total, or the step from the previous reading; null if neither. */
-  trail: number | null;
-  isSnapshot: boolean;
+  /** Step from the entry before it; null for the window's first. */
+  change: number | null;
   /** Whether the table is rendering a Note column at all. */
   showNotes: boolean;
   windowPeriod: BucketPeriod;
@@ -220,19 +212,17 @@ function EntryTableRow({
         </td>
       )}
       <td className="periods__num">
-        {trail === null ? (
+        {change === null ? (
           <span className="muted">—</span>
-        ) : isSnapshot ? (
-          <Step tracker={tracker} delta={trail} />
         ) : (
-          formatValue(tracker, trail)
+          <Step tracker={tracker} delta={change} />
         )}
       </td>
     </tr>
   );
 }
 
-/** A level's move since the previous reading, as an arrow and a magnitude. */
+/** The move since the entry before, as an arrow and a magnitude. */
 function Step({ tracker, delta }: { tracker: Tracker; delta: number }) {
   if (delta === 0) return <span className="muted">±0</span>;
   return (
