@@ -90,6 +90,59 @@ export interface TrackerOption {
   sort_order: number;
 }
 
+/**
+ * What a custom field captures. `choice` picks one of the field's options,
+ * `flag` is a yes/no toggle, `number` an extra measurement, `text` a short
+ * free-form label.
+ */
+export type TrackerFieldKind = 'choice' | 'flag' | 'number' | 'text';
+
+/**
+ * One piece of custom data a tracker records alongside each entry's primary
+ * value. A milk-feeding tracker counts millilitres and carries a "Feed type"
+ * choice field ("bottle / formula / breast") plus a "Wet diaper" flag, so the
+ * same volume can be broken down by either without splitting the tracker.
+ */
+export interface TrackerField {
+  id: string;
+  tracker_id: string;
+  name: string;
+  kind: TrackerFieldKind;
+  unit: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  /**
+   * The alternatives of a `choice` field, in order — empty for every other
+   * kind. A join rather than a column, but always present so callers never
+   * have to check for a missing key.
+   */
+  options: TrackerFieldOption[];
+}
+
+/** One alternative of a `choice` field. */
+export interface TrackerFieldOption {
+  id: string;
+  field_id: string;
+  label: string;
+  color: string | null;
+  sort_order: number;
+}
+
+/**
+ * One entry's answer to one field. Which column carries it follows the field's
+ * kind: choice → option_id, flag/number → number_value (0|1 for a flag),
+ * text → text_value. The other two are null.
+ */
+export interface EntryFieldValue {
+  id: string;
+  entry_id: string;
+  field_id: string;
+  option_id: string | null;
+  number_value: number | null;
+  text_value: string | null;
+}
+
 export interface Entry {
   id: string;
   tracker_id: string;
@@ -99,6 +152,11 @@ export interface Entry {
   /** When the row was created (may differ from occurred_at if backdated). */
   created_at: string;
   updated_at: string;
+  /**
+   * This entry's custom-field answers, ordered by the owning field's
+   * sort_order. Always an array — `[]` for a tracker that defines no fields.
+   */
+  fields: EntryFieldValue[];
 }
 
 export interface Note {

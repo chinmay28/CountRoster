@@ -16,6 +16,10 @@ import {
   timeInputFromValue,
   type ResetChoice,
 } from '../lib/format.ts';
+import {
+  TrackerFieldsEditor,
+  type FieldRow,
+} from '../components/TrackerFieldsEditor.tsx';
 
 /** One row of the derived-sources editor. */
 interface LinkRow {
@@ -43,6 +47,8 @@ interface FormValues {
   monthStartDay: number;
   yearStartMonth: number;
   links: LinkRow[];
+  /** Custom fields recorded alongside each entry's value. */
+  fields: FieldRow[];
 }
 
 const DEFAULTS: FormValues = {
@@ -61,6 +67,7 @@ const DEFAULTS: FormValues = {
   monthStartDay: 1,
   yearStartMonth: 1,
   links: [],
+  fields: [],
 };
 
 /** Create a new tracker, or edit an existing one when `:id` is present. */
@@ -103,7 +110,11 @@ export function TrackerFormPage() {
         return;
       }
       const isDerived = t.is_derived === 1;
-      const linkRows = isDerived ? await core.trackers.links(id) : [];
+      // A derived tracker has no entries of its own, so no fields either.
+      const [linkRows, fieldRows] = await Promise.all([
+        isDerived ? core.trackers.links(id) : Promise.resolve([]),
+        isDerived ? Promise.resolve([]) : core.fields.list(id),
+      ]);
       if (cancelled) return;
       setValues({
         name: t.name,
@@ -123,6 +134,19 @@ export function TrackerFormPage() {
         links: linkRows.map((l) => ({
           source_id: l.source_id,
           coefficient: String(l.coefficient),
+        })),
+        // Ids ride along so saving preserves the fields — and every answer
+        // already recorded against them — instead of replacing them.
+        fields: fieldRows.map((f) => ({
+          id: f.id,
+          name: f.name,
+          kind: f.kind,
+          unit: f.unit ?? '',
+          options: f.options.map((o) => ({
+            id: o.id,
+            label: o.label,
+            color: o.color ?? '',
+          })),
         })),
       });
       setLoading(false);
@@ -163,6 +187,36 @@ export function TrackerFormPage() {
 
     if (values.isDerived && links.length === 0) {
       setError('A derived tracker needs at least one source.');
+      setSaving(false);
+      return;
+    }
+
+    // Half-filled rows are what an editor looks like mid-thought, not an
+    // intent to save — drop the nameless ones and the blank options.
+    const fields = values.isDerived
+      ? []
+      : values.fields
+          .filter((f) => f.name.trim())
+          .map((f) => ({
+            ...(f.id ? { id: f.id } : {}),
+            name: f.name.trim(),
+            kind: f.kind,
+            unit: f.kind === 'number' && f.unit.trim() ? f.unit.trim() : null,
+            options:
+              f.kind === 'choice'
+                ? f.options
+                    .filter((o) => o.label.trim())
+                    .map((o) => ({
+                      ...(o.id ? { id: o.id } : {}),
+                      label: o.label.trim(),
+                      color: o.color || null,
+                    }))
+                : [],
+          }));
+
+    const emptyChoice = fields.find((f) => f.kind === 'choice' && f.options.length === 0);
+    if (emptyChoice) {
+      setError(`"${emptyChoice.name}" is a choice field, so it needs at least one option.`);
       setSaving(false);
       return;
     }
@@ -210,9 +264,14 @@ export function TrackerFormPage() {
           // Always send links so toggling derived off clears any prior ones.
           links: values.isDerived ? links : [],
         });
+        // Fields live on their own endpoint (they carry entry answers, so a
+        // rewrite has to be explicit). Skipped for a derived tracker, which
+        // rejects them outright.
+        if (!values.isDerived) await core.fields.replace(id, fields);
         navigate(`/trackers/${id}`);
       } else {
         const created = await core.trackers.create(input);
+        if (fields.length > 0) await core.fields.replace(created.id, fields);
         navigate(`/trackers/${created.id}`);
       }
     } catch (err) {
@@ -366,6 +425,14 @@ export function TrackerFormPage() {
             onChange={(e) => set('description', e.target.value)}
           />
         </label>
+
+        {/* A derived tracker has no entries of its own to describe. */}
+        {!values.isDerived && (
+          <TrackerFieldsEditor
+            fields={values.fields}
+            onChange={(fields) => set('fields', fields)}
+          />
+        )}
 
         {error && <p className="error">{error}</p>}
 

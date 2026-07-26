@@ -47,10 +47,22 @@ func (s *EntryService) Log(trackerID string, raw any) (*Entry, error) {
 		occurredAt = input.OccurredAt.Value
 	}
 
-	if err := s.st.Exec(
-		`INSERT INTO entries (id, tracker_id, value, occurred_at, created_at, updated_at)
+	// Resolved before the insert so a bad answer fails without leaving a
+	// half-described entry behind.
+	fields, err := resolveEntryFields(s.st, trackerID, input.Fields)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.st.Transaction(func(tx storage.Storage) error {
+		if err := tx.Exec(
+			`INSERT INTO entries (id, tracker_id, value, occurred_at, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
-		id, trackerID, value, occurredAt, now, now); err != nil {
+			id, trackerID, value, occurredAt, now, now); err != nil {
+			return err
+		}
+		return writeEntryFields(tx, id, fields)
+	}); err != nil {
 		return nil, err
 	}
 
@@ -104,10 +116,19 @@ func (s *EntryService) LogMany(raw any) ([]*Entry, error) {
 			if in.OccurredAt.Set() {
 				occurredAt = in.OccurredAt.Value
 			}
+			// Same rule as a single log: a rejected answer aborts the batch,
+			// which the surrounding transaction already rolls back.
+			fields, err := resolveEntryFields(tx, in.TrackerID, in.Fields)
+			if err != nil {
+				return err
+			}
 			if err := tx.Exec(
 				`INSERT INTO entries (id, tracker_id, value, occurred_at, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
 				id, in.TrackerID, value, occurredAt, now, now); err != nil {
+				return err
+			}
+			if err := writeEntryFields(tx, id, fields); err != nil {
 				return err
 			}
 			insertedIDs = append(insertedIDs, id)
@@ -130,9 +151,14 @@ func (s *EntryService) LogMany(raw any) ([]*Entry, error) {
 		return nil, err
 	}
 	byID := map[string]*Entry{}
+	all := make([]*Entry, 0, len(rows))
 	for _, r := range rows {
 		e := entryFromRow(r)
 		byID[e.ID] = e
+		all = append(all, e)
+	}
+	if err := attachEntryFields(s.st, all); err != nil {
+		return nil, err
 	}
 	out := make([]*Entry, len(insertedIDs))
 	for i, id := range insertedIDs {
@@ -158,6 +184,16 @@ func (s *EntryService) Update(id string, raw any) (*Entry, error) {
 		return nil, &NotFoundError{Kind: "Entry", ID: id}
 	}
 
+	// Only the fields the patch names are rewritten, so the entry's other
+	// answers survive untouched.
+	var fields []resolvedField
+	if patch.HasFields {
+		fields, err = resolveEntryFields(s.st, existing.TrackerID, patch.Fields)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	var sets []string
 	var params []any
 	if patch.Value.Set() {
@@ -168,14 +204,21 @@ func (s *EntryService) Update(id string, raw any) (*Entry, error) {
 		sets = append(sets, "occurred_at = ?")
 		params = append(params, patch.OccurredAt.Value)
 	}
-	if len(sets) == 0 {
+	if len(sets) == 0 && len(fields) == 0 {
 		return existing, nil
 	}
 
-	sets = append(sets, "updated_at = ?")
-	params = append(params, s.clock.NowISO(), id)
-	if err := s.st.Exec(
-		"UPDATE entries SET "+strings.Join(sets, ", ")+" WHERE id = ?", params...); err != nil {
+	if err := s.st.Transaction(func(tx storage.Storage) error {
+		if len(sets) > 0 {
+			sets = append(sets, "updated_at = ?")
+			params = append(params, s.clock.NowISO(), id)
+			if err := tx.Exec(
+				"UPDATE entries SET "+strings.Join(sets, ", ")+" WHERE id = ?", params...); err != nil {
+				return err
+			}
+		}
+		return writeEntryFields(tx, id, fields)
+	}); err != nil {
 		return nil, err
 	}
 
@@ -198,7 +241,11 @@ func (s *EntryService) Get(id string) (*Entry, error) {
 	if err != nil || len(rows) == 0 {
 		return nil, err
 	}
-	return entryFromRow(rows[0]), nil
+	entry := entryFromRow(rows[0])
+	if err := attachEntryFields(s.st, []*Entry{entry}); err != nil {
+		return nil, err
+	}
+	return entry, nil
 }
 
 func (s *EntryService) ForTracker(trackerID string, r TimeRange) ([]*Entry, error) {
@@ -236,6 +283,12 @@ func (s *EntryService) ForTracker(trackerID string, r TimeRange) ([]*Entry, erro
 	out := make([]*Entry, len(rows))
 	for i, row := range rows {
 		out[i] = entryFromRow(row)
+	}
+	// A derived tracker's rows are its *sources'* entries, so this attaches
+	// the answers those entries were logged with — which is exactly what they
+	// describe.
+	if err := attachEntryFields(s.st, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

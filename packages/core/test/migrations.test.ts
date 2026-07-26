@@ -48,6 +48,9 @@ describe('migrations', () => {
       'tracker_groups',
       'tracker_options',
       'trackers',
+      'tracker_fields',
+      'tracker_field_options',
+      'entry_field_values',
     ]) {
       expect(names).toContain(expected);
     }

@@ -5,7 +5,11 @@ import type {
   NoteEdit,
   TrackerGroup,
   TrackerLink,
+  TrackerField,
+  TrackerFieldInput,
+  FieldBreakdownSlice,
   TrackerService,
+  FieldService,
   EntryService,
   NoteService,
   GroupService,
@@ -43,6 +47,7 @@ import type {
  */
 export interface ApiCore {
   trackers: TrackerService;
+  fields: FieldService;
   entries: EntryService;
   notes: NoteService;
   groups: GroupService;
@@ -130,6 +135,12 @@ export function createApiClient(baseUrl = '/api'): ApiCore {
     setLinks: (id, links) => request('PUT', `/trackers/${id}/links`, { links }),
   };
 
+  const fields: FieldService = {
+    list: (trackerId) => request<TrackerField[]>('GET', `/trackers/${trackerId}/fields`),
+    replace: (trackerId, input: readonly TrackerFieldInput[]) =>
+      request('PUT', `/trackers/${trackerId}/fields`, { fields: input }),
+  };
+
   const entries: EntryService = {
     forTracker: (trackerId, range) =>
       request('GET', `/trackers/${trackerId}/entries${rangeQuery(range)}`),
@@ -203,9 +214,18 @@ export function createApiClient(baseUrl = '/api'): ApiCore {
         'GET',
         `/trackers/${trackerId}/stats/composition${rangeQuery(range)}`,
       ),
+    fieldBreakdown: (trackerId, fieldId, range) =>
+      request<FieldBreakdownSlice[]>(
+        'GET',
+        `/trackers/${trackerId}/stats/field-breakdown${qs({
+          field_id: fieldId,
+          start: range?.start,
+          end: range?.end,
+        })}`,
+      ),
   };
 
-  return { trackers, entries, notes, groups, stats, transactions };
+  return { trackers, fields, entries, notes, groups, stats, transactions };
 }
 
 /** Default API mount point (same origin; dev server proxies it to the API). */

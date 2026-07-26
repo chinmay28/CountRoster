@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import type { ResetPeriod, TrackerKind, WeekStart } from './tables.js';
+import type {
+  ResetPeriod,
+  TrackerFieldKind,
+  TrackerKind,
+  WeekStart,
+} from './tables.js';
 
 /**
  * Zod schemas for *inputs* to the domain layer (create / update DTOs).
@@ -80,10 +85,76 @@ export type TrackerInput = z.infer<typeof trackerInputSchema>;
 export const trackerPatchSchema = trackerInputSchema.partial();
 export type TrackerPatch = z.infer<typeof trackerPatchSchema>;
 
+export const trackerFieldKindSchema: z.ZodType<TrackerFieldKind> = z.enum([
+  'choice',
+  'flag',
+  'number',
+  'text',
+]);
+
+/**
+ * One alternative of a `choice` field. A supplied `id` names an existing row
+ * so rewriting the field set keeps it — and the entry answers pointing at it —
+ * rather than replacing it with a fresh one.
+ */
+export const trackerFieldOptionInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  label: z.string().trim().min(1).max(60),
+  color: hexColor.optional().nullable(),
+});
+/**
+ * What a caller may *send*. Unlike the tracker/group DTOs this is Zod's input
+ * type, not its output — the output marks defaulted fields (`options`)
+ * required, which would force every caller to spell out defaults Zod exists
+ * to fill in.
+ */
+export type TrackerFieldOptionInput = z.input<typeof trackerFieldOptionInputSchema>;
+
+/**
+ * One field in a replace-the-whole-set write. As with options, a supplied `id`
+ * preserves the existing row and everything recorded against it.
+ */
+export const trackerFieldInputSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    name: z.string().trim().min(1).max(60),
+    kind: trackerFieldKindSchema,
+    unit: z.string().max(30).optional().nullable(),
+    options: z.array(trackerFieldOptionInputSchema).max(50).default([]),
+  })
+  // Options only mean something for a choice field, and a choice field with
+  // nothing to choose from can never be answered.
+  .refine((f) => f.kind !== 'choice' || f.options.length > 0, {
+    message: 'A choice field needs at least one option',
+    path: ['options'],
+  })
+  .refine((f) => f.kind === 'choice' || f.options.length === 0, {
+    message: 'Only a choice field can carry options',
+    path: ['options'],
+  });
+export type TrackerFieldInput = z.input<typeof trackerFieldInputSchema>;
+
+/** Input to FieldService.replace() — the tracker's whole field set. */
+export const trackerFieldsInputSchema = z.array(trackerFieldInputSchema).max(20);
+export type TrackerFieldsInput = z.input<typeof trackerFieldsInputSchema>;
+
+/**
+ * Custom-field answers on a log or patch: field id → answer. The value stays
+ * loose here because interpreting it needs the field's declared kind, which
+ * only the DB knows — an option id, a 0|1 flag, a number, a string, or null to
+ * clear it. Every field is optional: leaving one blank is always legitimate.
+ */
+export const entryFieldAnswersSchema = z.record(
+  z.string().min(1),
+  z.union([z.string(), z.number().finite(), z.boolean(), z.null()]),
+);
+export type EntryFieldAnswers = z.infer<typeof entryFieldAnswersSchema>;
+
 /** Input to EntryService.log() */
 export const entryLogInputSchema = z.object({
   value: z.number().finite().optional(),
   occurred_at: z.string().datetime({ offset: true }).optional(),
+  fields: entryFieldAnswersSchema.optional(),
 });
 export type EntryLogInput = z.infer<typeof entryLogInputSchema>;
 
@@ -110,6 +181,8 @@ export type EntryLogManyInput = z.infer<typeof entryLogManyInputSchema>;
 export const entryPatchSchema = z.object({
   value: z.number().finite().optional(),
   occurred_at: z.string().datetime({ offset: true }).optional(),
+  /** Only the fields named here are rewritten; the rest are left alone. */
+  fields: entryFieldAnswersSchema.optional(),
 });
 export type EntryPatch = z.infer<typeof entryPatchSchema>;
 

@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useCore } from '../app/CoreContext.tsx';
 import { useAsync } from '../app/useAsync.ts';
+import { EntryFieldsInput } from '../components/EntryFieldsInput.tsx';
 import { QuickKeypadPanel } from '../components/QuickKeypadPanel.tsx';
 import { QuickStepperPanel } from '../components/QuickStepperPanel.tsx';
 import { QuickTapPanel } from '../components/QuickTapPanel.tsx';
 import { datetimeInputLabel, formatValue, toDatetimeLocalValue } from '../lib/format.ts';
 import { quickMode } from '../lib/quick.ts';
 import { readableInk } from '../lib/color.ts';
+import { emptyAnswers, hasAnyAnswer, type FieldAnswers } from '../lib/fields.ts';
 import {
   latestValue,
   resetPeriodRange,
@@ -49,13 +51,22 @@ export function QuickLogPage() {
     // unguessable id — and that bookmark is the deliberate act the unlock
     // stands in for. There is no way to browse to a tracker from here.
     const tracker = await core.trackers.get(id);
-    if (!tracker) return { tracker: null, entries: [] };
-    return { tracker, entries: await core.entries.forTracker(id) };
+    if (!tracker) return { tracker: null, entries: [], fields: [] };
+    const [entries, fields] = await Promise.all([
+      core.entries.forTracker(id),
+      // A derived tracker has no entries of its own, so no fields either.
+      tracker.is_derived === 1 ? Promise.resolve([]) : core.fields.list(id),
+    ]);
+    return { tracker, entries, fields };
   }, [id]);
 
   const [busy, setBusy] = useState(false);
   const [undoable, setUndoable] = useState<Undoable | null>(null);
   const [logError, setLogError] = useState<string | null>(null);
+  // The custom-field answers the next tap will carry. They live on the page
+  // rather than inside a control because they describe the entry whichever
+  // control produced its value.
+  const [answers, setAnswers] = useState<FieldAnswers>({});
   const undoTimer = useRef<number | undefined>(undefined);
 
   const tracker = data?.tracker ?? null;
@@ -118,6 +129,7 @@ export function QuickLogPage() {
       const entry = await core.entries.log(tracker.id, {
         value,
         ...(occurredAt ? { occurred_at: occurredAt } : {}),
+        ...(hasAnyAnswer(answers) ? { fields: answers } : {}),
       });
       // A note typed alongside the value describes this very entry, so link
       // it — and remember it, since undo has to take both back. It carries
@@ -141,6 +153,10 @@ export function QuickLogPage() {
             )}`
           : `Logged ${formatValue(tracker, value)}`,
       });
+      // Clear the answers rather than carrying them into the next tap: a
+      // sticky "wet diaper: yes" would quietly attach itself to every feed
+      // that followed.
+      setAnswers(emptyAnswers(data?.fields ?? []));
       reload();
     } catch (err) {
       setLogError(err instanceof Error ? err.message : String(err));
@@ -198,6 +214,7 @@ export function QuickLogPage() {
   }
 
   const entries = data?.entries ?? [];
+  const fields = data?.fields ?? [];
   const mode = quickMode(tracker);
   // Painted screens carry the tracker's color edge to edge; the keypad and
   // stepper need a neutral ground for their controls to read against.
@@ -257,6 +274,20 @@ export function QuickLogPage() {
       </div>
 
       {logError && <p className="quick__error">{logError}</p>}
+
+      {/* Above the control, so the details are answered on the way to the tap
+          that commits them. */}
+      {fields.length > 0 && mode !== 'readonly' && (
+        <div className="quick__fields">
+          <EntryFieldsInput
+            fields={fields}
+            answers={answers}
+            onChange={setAnswers}
+            disabled={busy}
+            accent={tracker.color}
+          />
+        </div>
+      )}
 
       {mode === 'readonly' ? (
         <div className="quick__control quick__readonly">

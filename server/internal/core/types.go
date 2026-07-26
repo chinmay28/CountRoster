@@ -39,6 +39,47 @@ type TrackerLink struct {
 	CreatedAt   string  `json:"created_at"`
 }
 
+// TrackerField is one piece of custom data a tracker captures alongside each
+// entry's primary value. A milk-feeding tracker counts millilitres and carries
+// a "Feed type" choice field and a "Wet diaper" flag field, so the same volume
+// can be broken down by either.
+//
+// Options is the choice field's alternatives, empty for every other kind. It
+// is a join, not a column — always present in JSON so the client never has to
+// second-guess a missing key.
+type TrackerField struct {
+	ID        string               `json:"id"`
+	TrackerID string               `json:"tracker_id"`
+	Name      string               `json:"name"`
+	Kind      string               `json:"kind"`
+	Unit      *string              `json:"unit"`
+	SortOrder int                  `json:"sort_order"`
+	CreatedAt string               `json:"created_at"`
+	UpdatedAt string               `json:"updated_at"`
+	Options   []TrackerFieldOption `json:"options"`
+}
+
+// TrackerFieldOption is one alternative of a `choice` field.
+type TrackerFieldOption struct {
+	ID        string  `json:"id"`
+	FieldID   string  `json:"field_id"`
+	Label     string  `json:"label"`
+	Color     *string `json:"color"`
+	SortOrder int     `json:"sort_order"`
+}
+
+// EntryFieldValue is one entry's answer to one field. Which column carries it
+// follows the field's kind: choice → OptionID, flag/number → NumberValue
+// (0|1 for a flag), text → TextValue. The other two are null.
+type EntryFieldValue struct {
+	ID          string   `json:"id"`
+	EntryID     string   `json:"entry_id"`
+	FieldID     string   `json:"field_id"`
+	OptionID    *string  `json:"option_id"`
+	NumberValue *float64 `json:"number_value"`
+	TextValue   *string  `json:"text_value"`
+}
+
 // Entry is one logged value.
 type Entry struct {
 	ID         string  `json:"id"`
@@ -47,6 +88,9 @@ type Entry struct {
 	OccurredAt string  `json:"occurred_at"`
 	CreatedAt  string  `json:"created_at"`
 	UpdatedAt  string  `json:"updated_at"`
+	// Fields holds this entry's custom-field answers, ordered by the field's
+	// sort_order. Always an array — `[]` for a tracker that defines no fields.
+	Fields []EntryFieldValue `json:"fields"`
 }
 
 // Note is a free-text annotation, optionally linked to an entry.
@@ -104,6 +148,19 @@ type CompositionSlice struct {
 	Coefficient float64 `json:"coefficient"`
 	Total       float64 `json:"total"`
 	Count       int     `json:"count"`
+}
+
+// FieldBreakdownSlice is one bucket of a custom-field breakdown: how much of
+// a tracker's total was logged against a given answer. Key identifies the
+// bucket — an option id for a `choice` field, "1"/"0" for a `flag`, and ""
+// for entries that left the field blank.
+type FieldBreakdownSlice struct {
+	FieldID string  `json:"field_id"`
+	Key     string  `json:"key"`
+	Label   string  `json:"label"`
+	Color   *string `json:"color"`
+	Total   float64 `json:"total"`
+	Count   int     `json:"count"`
 }
 
 // Streak is the consecutive-day logging streak.

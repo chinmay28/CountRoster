@@ -4,6 +4,8 @@ import { useCore } from '../app/CoreContext.tsx';
 import { useHiddenMode } from '../app/HiddenMode.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import { CompositionSection } from '../components/CompositionSection.tsx';
+import { EntryFieldsInput } from '../components/EntryFieldsInput.tsx';
+import { FieldBreakdownSection } from '../components/FieldBreakdownSection.tsx';
 import { EntryList } from '../components/EntryList.tsx';
 import { MultiLogPanel } from '../components/MultiLogPanel.tsx';
 import { NotesSection } from '../components/NotesSection.tsx';
@@ -25,6 +27,7 @@ import {
 } from '../lib/range.ts';
 import { fromDatetimeLocalValue } from '../lib/format.ts';
 import { readableInk } from '../lib/color.ts';
+import { emptyAnswers, hasAnyAnswer, type FieldAnswers } from '../lib/fields.ts';
 
 /** Per-tracker detail: header, custom log, entry timeline, notes. */
 export function TrackerDetailPage() {
@@ -40,11 +43,20 @@ export function TrackerDetailPage() {
     // exactly like a missing one — it doesn't exist as far as this session
     // can tell.
     if (!tracker || (tracker.is_hidden === 1 && !hiddenMode)) {
-      return { tracker: null, entries: [], notes: [], links: [], sourceNames: new Map() };
+      return {
+        tracker: null,
+        entries: [],
+        notes: [],
+        fields: [],
+        links: [],
+        sourceNames: new Map(),
+      };
     }
-    const [entries, notes] = await Promise.all([
+    const [entries, notes, fields] = await Promise.all([
       core.entries.forTracker(id),
       core.notes.forTracker(id),
+      // A derived tracker's rows belong to its sources, so it has no fields.
+      tracker.is_derived === 1 ? Promise.resolve([]) : core.fields.list(id),
     ]);
     // For a derived tracker, also resolve its source operands (which may be
     // archived) so the detail can show what it's computed from.
@@ -58,13 +70,17 @@ export function TrackerDetailPage() {
       links = linkRows;
       sourceNames = new Map(all.map((t) => [t.id, t.name]));
     }
-    return { tracker, entries, notes, links, sourceNames };
+    return { tracker, entries, notes, fields, links, sourceNames };
   }, [id, hiddenMode]);
 
   const [customValue, setCustomValue] = useState('');
   const [customWhen, setCustomWhen] = useState('');
   const [customNote, setCustomNote] = useState('');
+  const [customFields, setCustomFields] = useState<FieldAnswers>({});
   const [logging, setLogging] = useState(false);
+  // Surfaces a rejected answer (an unanswered required field, say) instead of
+  // failing silently.
+  const [logError, setLogError] = useState<string | null>(null);
   // Which logging mode the user is in: one detailed entry, or a batch sheet.
   const [logTab, setLogTab] = useState<'single' | 'multi'>('single');
   // Surfaces failures from header actions like archive (e.g. a tracker still in
@@ -91,7 +107,7 @@ export function TrackerDetailPage() {
     );
   }
 
-  const { tracker, entries, notes, links, sourceNames } = data;
+  const { tracker, entries, notes, fields, links, sourceNames } = data;
   const isDerived = tracker.is_derived === 1;
   const isSnapshot = tracker.is_snapshot === 1;
   const total = sumValues(entries);
@@ -139,11 +155,16 @@ export function TrackerDetailPage() {
   async function customLog(e: React.FormEvent) {
     e.preventDefault();
     setLogging(true);
+    setLogError(null);
     try {
       const occurredAt = customWhen ? fromDatetimeLocalValue(customWhen) : undefined;
+      // Send the answers only when the form has any — an empty object would
+      // read as "clear them all", which is meaningless on a new entry, and
+      // omitting it lets a tracker with no fields log exactly as before.
       const entry = await core.entries.log(tracker!.id, {
         ...(customValue.trim() ? { value: Number(customValue) } : {}),
         ...(occurredAt ? { occurred_at: occurredAt } : {}),
+        ...(hasAnyAnswer(customFields) ? { fields: customFields } : {}),
       });
       // A note typed alongside the value describes this very entry, so link it.
       if (customNote.trim()) {
@@ -157,7 +178,10 @@ export function TrackerDetailPage() {
       setCustomValue('');
       setCustomWhen('');
       setCustomNote('');
+      setCustomFields(emptyAnswers(fields));
       refresh();
+    } catch (err) {
+      setLogError(err instanceof Error ? err.message : String(err));
     } finally {
       setLogging(false);
     }
@@ -261,6 +285,17 @@ export function TrackerDetailPage() {
           oldest-first; their instants scope the period dropdown. */}
       {isDerived && <CompositionSection tracker={tracker} entries={entries} />}
 
+      {/* What the tracker's total splits into, once it captures anything to
+          split it by. */}
+      {fields.length > 0 && (
+        <FieldBreakdownSection
+          tracker={tracker}
+          fields={fields}
+          entries={entries}
+          refreshKey={statsKey}
+        />
+      )}
+
       <Suspense fallback={<p className="muted">Loading charts…</p>}>
         <StatsPanel tracker={tracker} refreshKey={statsKey} />
       </Suspense>
@@ -324,6 +359,15 @@ export function TrackerDetailPage() {
                 onChange={(e) => setCustomWhen(e.target.value)}
               />
             </label>
+            {fields.length > 0 && (
+              <EntryFieldsInput
+                fields={fields}
+                answers={customFields}
+                onChange={setCustomFields}
+                disabled={logging}
+                accent={tracker.color}
+              />
+            )}
             <label className="field detail__custom-note">
               <span>Note (optional)</span>
               <textarea
@@ -333,6 +377,7 @@ export function TrackerDetailPage() {
                 onChange={(e) => setCustomNote(e.target.value)}
               />
             </label>
+            {logError && <p className="error">{logError}</p>}
             <button
               type="submit"
               className="btn btn--primary"
@@ -359,6 +404,7 @@ export function TrackerDetailPage() {
         <EntryList
           tracker={tracker}
           entries={entries}
+          fields={fields}
           notesByEntry={notesByEntry}
           onChanged={refresh}
           readOnly={isDerived}

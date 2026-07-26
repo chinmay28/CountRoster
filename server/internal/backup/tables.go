@@ -54,4 +54,17 @@ var backupTables = []backupTable{
 		"category", "dedupe_key", "status", "tracker_id", "entry_id",
 		"created_at", "updated_at",
 	}},
+	// Appended after `entries`, whose rows the values reference. New tables
+	// go at the end so the checksum's table order — and therefore every
+	// bundle written before they existed — stays stable.
+	{Name: "tracker_fields", Columns: []string{
+		"id", "tracker_id", "name", "kind", "unit", "sort_order",
+		"created_at", "updated_at",
+	}},
+	{Name: "tracker_field_options", Columns: []string{
+		"id", "field_id", "label", "color", "sort_order",
+	}},
+	{Name: "entry_field_values", Columns: []string{
+		"id", "entry_id", "field_id", "option_id", "number_value", "text_value",
+	}},
 }

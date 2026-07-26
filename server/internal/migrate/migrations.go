@@ -21,6 +21,7 @@ var Migrations = []Migration{
 	{Version: 4, Name: "004_snapshot_trackers", Up: m004SnapshotTrackers},
 	{Version: 5, Name: "005_card_transactions", Up: m005CardTransactions},
 	{Version: 6, Name: "006_period_windows", Up: m006PeriodWindows},
+	{Version: 7, Name: "007_tracker_fields", Up: m007TrackerFields},
 }
 
 // LatestVersion is the highest schema version known to this build.
@@ -201,4 +202,44 @@ const m006PeriodWindows = `
     ALTER TABLE trackers
       ADD COLUMN year_start_month INTEGER NOT NULL DEFAULT 1
       CHECK (year_start_month BETWEEN 1 AND 12);
+  `
+
+const m007TrackerFields = `
+    CREATE TABLE IF NOT EXISTS tracker_fields (
+      id          TEXT PRIMARY KEY,
+      tracker_id  TEXT NOT NULL REFERENCES trackers (id) ON DELETE CASCADE,
+      name        TEXT NOT NULL,
+      kind        TEXT NOT NULL
+                  CHECK (kind IN ('choice','flag','number','text')),
+      unit        TEXT,
+      sort_order  INTEGER NOT NULL DEFAULT 0,
+      created_at  TEXT NOT NULL,
+      updated_at  TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS tracker_fields_tracker_idx
+      ON tracker_fields (tracker_id, sort_order);
+
+    CREATE TABLE IF NOT EXISTS tracker_field_options (
+      id          TEXT PRIMARY KEY,
+      field_id    TEXT NOT NULL REFERENCES tracker_fields (id) ON DELETE CASCADE,
+      label       TEXT NOT NULL,
+      color       TEXT,
+      sort_order  INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS tracker_field_options_field_idx
+      ON tracker_field_options (field_id, sort_order);
+
+    CREATE TABLE IF NOT EXISTS entry_field_values (
+      id            TEXT PRIMARY KEY,
+      entry_id      TEXT NOT NULL REFERENCES entries (id) ON DELETE CASCADE,
+      field_id      TEXT NOT NULL REFERENCES tracker_fields (id) ON DELETE CASCADE,
+      option_id     TEXT REFERENCES tracker_field_options (id) ON DELETE CASCADE,
+      number_value  REAL,
+      text_value    TEXT,
+      UNIQUE (entry_id, field_id)
+    );
+    CREATE INDEX IF NOT EXISTS entry_field_values_entry_idx
+      ON entry_field_values (entry_id);
+    CREATE INDEX IF NOT EXISTS entry_field_values_field_idx
+      ON entry_field_values (field_id, option_id);
   `

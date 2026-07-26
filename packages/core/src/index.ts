@@ -13,6 +13,10 @@ export type {
   TrackerKind,
   TrackerOption,
   TrackerLink,
+  TrackerField,
+  TrackerFieldKind,
+  TrackerFieldOption,
+  EntryFieldValue,
   ResetPeriod,
   WeekStart,
   Entry,
@@ -29,6 +33,11 @@ export {
   trackerInputSchema,
   trackerPatchSchema,
   trackerLinkInputSchema,
+  trackerFieldKindSchema,
+  trackerFieldOptionInputSchema,
+  trackerFieldInputSchema,
+  trackerFieldsInputSchema,
+  entryFieldAnswersSchema,
   entryLogInputSchema,
   entryLogManyItemSchema,
   entryLogManyInputSchema,
@@ -44,6 +53,10 @@ export {
   type TrackerInput,
   type TrackerPatch,
   type TrackerLinkInput,
+  type TrackerFieldOptionInput,
+  type TrackerFieldInput,
+  type TrackerFieldsInput,
+  type EntryFieldAnswers,
   type EntryLogInput,
   type EntryLogManyItem,
   type EntryLogManyInput,
@@ -65,6 +78,12 @@ export {
   TrackerInUseError,
 } from './domain/trackers.js';
 export { DerivedTrackerError } from './domain/derived.js';
+export {
+  type FieldService,
+  FieldNotFoundError,
+  FieldValueError,
+  MAX_FIELD_TEXT_LENGTH,
+} from './domain/fields.js';
 export {
   type EntryService,
   type TimeRange,
@@ -92,6 +111,7 @@ export type {
   StatBucket,
   TargetProgress,
   CompositionSlice,
+  FieldBreakdownSlice,
 } from './aggregations/stats.js';
 
 // Aggregation primitives

@@ -70,4 +70,24 @@ export const BACKUP_TABLES: ReadonlyArray<{
       'created_at', 'updated_at',
     ],
   },
+  // Appended after `entries`, whose rows the values reference. New tables go
+  // at the end so the checksum's table order — and therefore every bundle
+  // written before they existed — stays stable.
+  {
+    name: 'tracker_fields',
+    columns: [
+      'id', 'tracker_id', 'name', 'kind', 'unit', 'sort_order',
+      'created_at', 'updated_at',
+    ],
+  },
+  {
+    name: 'tracker_field_options',
+    columns: ['id', 'field_id', 'label', 'color', 'sort_order'],
+  },
+  {
+    name: 'entry_field_values',
+    columns: [
+      'id', 'entry_id', 'field_id', 'option_id', 'number_value', 'text_value',
+    ],
+  },
 ];

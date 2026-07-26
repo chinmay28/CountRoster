@@ -10,6 +10,10 @@ built as a **client-server** app so every device shares one dataset:
   on a phone — no app store, no native build.
 - **Real data export.** Backups are documented open formats (a `.countroster.zip`
   bundle of JSON + per-table CSVs, plus a raw SQLite download).
+- **Custom fields per tracker.** A tracker's value is *how much*; fields record
+  everything else about the same entry. A milk-feeding tracker counts millilitres
+  and tags each feed as bottle / formula / breast, flags a wet diaper — then
+  breaks the total down by either.
 - **Editable journal notes.** With an append-only edit log so history isn't lost.
 - **No accounts, no auth.** Meant to run on a trusted network (your LAN, a
   Tailscale tailnet, a VPN). Anyone who can reach the server can use it.
