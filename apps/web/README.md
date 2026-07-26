@@ -77,6 +77,13 @@ levels best-effort (a source that skipped a period carries its last reading
 forward), and its composition donut can step back through past months to show
 how the split looked then.
 
+The form's **Period windows** section says where a tracker's periods begin,
+for trackers whose life doesn't follow the calendar: a day can run 7:00 AM →
+6:59 AM (so a 3 AM log still counts for "yesterday"), a week from Sunday, a
+month the 8th → the 7th, a year from April. Every total, chart bucket, target
+window and streak the tracker reports uses those boundaries; the defaults are
+plain calendar periods.
+
 Visualizations & organization:
 
 - **Trends** — per tracker: a bucketed bar chart (day/week/month/year) with a

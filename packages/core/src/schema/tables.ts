@@ -23,6 +23,17 @@ export interface Tracker {
   week_start: WeekStart;
   /** Minutes since local midnight when a "day" begins, e.g. 240 = 4:00 AM */
   day_start_minute: number;
+  /**
+   * Day-of-month a monthly window opens on, 1..28 — 8 means a month runs the
+   * 8th through the 7th of the next month. Capped at 28 so every month has
+   * the day. Also the day-of-month a yearly window opens on.
+   */
+  month_start_day: number;
+  /**
+   * Month a yearly window opens on, 1..12 — 4 gives a fiscal year running
+   * April through March. The window opens on `month_start_day` of it.
+   */
+  year_start_month: number;
   default_value: number;
   /** ISO 8601 timestamp, or null if active */
   archived_at: string | null;

@@ -43,10 +43,11 @@ func (s *TrackerService) Create(raw any) (*Tracker, error) {
 		if err := tx.Exec(
 			`INSERT INTO trackers (
           id, name, description, color, icon, kind, unit, target,
-          reset_period, week_start, day_start_minute, default_value,
+          reset_period, week_start, day_start_minute, month_start_day,
+          year_start_month, default_value,
           archived_at, sort_order, is_derived, is_hidden, is_snapshot,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
 			id,
 			input.Name.Value,
 			nullableString(input.Description),
@@ -58,6 +59,8 @@ func (s *TrackerService) Create(raw any) (*Tracker, error) {
 			resetPeriod,
 			input.WeekStart.Value,
 			input.DayStartMinute.Value,
+			input.MonthStartDay.Value,
+			input.YearStartMonth.Value,
 			input.DefaultValue.Value,
 			input.SortOrder.Value,
 			isDerived,
@@ -141,6 +144,8 @@ func (s *TrackerService) Update(id string, raw any) (*Tracker, error) {
 	}
 	assignInt(patch.WeekStart, "week_start")
 	assignInt(patch.DayStartMinute, "day_start_minute")
+	assignInt(patch.MonthStartDay, "month_start_day")
+	assignInt(patch.YearStartMonth, "year_start_month")
 	assignFloat(patch.DefaultValue, "default_value")
 	assignInt(patch.SortOrder, "sort_order")
 	assignInt(patch.IsHidden, "is_hidden")

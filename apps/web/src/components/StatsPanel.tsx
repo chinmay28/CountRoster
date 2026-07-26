@@ -42,7 +42,7 @@ function BucketedStats({ tracker, refreshKey }: StatsPanelProps) {
   const count = PERIODS.find((p) => p.period === period)!.count;
 
   const { data, loading, error } = useAsync(async () => {
-    const range = lastNBuckets(period, count, tracker.week_start);
+    const range = lastNBuckets(period, count, tracker);
     const [buckets, streak, target] = await Promise.all([
       core.stats.bucket(tracker.id, range, period),
       core.stats.streak(tracker.id),

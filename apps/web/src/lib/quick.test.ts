@@ -15,6 +15,8 @@ function tracker(overrides: Partial<Tracker> = {}): Tracker {
     reset_period: 'daily',
     week_start: 1,
     day_start_minute: 0,
+    month_start_day: 1,
+    year_start_month: 1,
     default_value: 1,
     archived_at: null,
     sort_order: 0,

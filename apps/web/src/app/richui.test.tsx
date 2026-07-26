@@ -60,7 +60,7 @@ describe('stats panel', () => {
     // The expected x-axis labels are the core's chronological month buckets,
     // formatted the way the chart formats them. Computing them here (rather than
     // hardcoding month names) keeps the test correct whatever day it runs.
-    const range = lastNBuckets('month', 6, t.week_start);
+    const range = lastNBuckets('month', 6, t);
     const buckets = await test.core.stats.bucket(t.id, range, 'month');
     const expected = buckets.map((b) =>
       new Date(b.start).toLocaleDateString(undefined, { month: 'short' }),

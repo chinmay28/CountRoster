@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   createMemoryRouter,
@@ -12,6 +12,7 @@ import { TrackerDetailPage } from '../pages/TrackerDetailPage.tsx';
 import { TrackerFormPage } from '../pages/TrackerFormPage.tsx';
 import { NotFoundPage } from '../pages/NotFoundPage.tsx';
 import { makeTestCore, type TestCore } from '../test/makeTestCore.ts';
+import { toLocalISO } from '@countroster/core';
 
 function renderApp(test: TestCore, initialPath = '/') {
   const router = createMemoryRouter(
@@ -100,6 +101,74 @@ describe('create tracker flow', () => {
     expect(await screen.findByRole('heading', { name: 'Coffee' })).toBeInTheDocument();
     const trackers = await test.core.trackers.list();
     expect(trackers.map((t) => t.name)).toContain('Coffee');
+  });
+});
+
+describe('period windows', () => {
+  it('saves a custom day / month / year window from the tracker form', async () => {
+    const user = userEvent.setup();
+    renderApp(test, '/trackers/new');
+
+    await user.type(await screen.findByLabelText('Name'), 'Rent');
+    // Days run 7:00 AM -> 6:59 AM; months open on the 8th; years in April.
+    // (A time input takes a whole value at once, not keystrokes.)
+    fireEvent.change(screen.getByLabelText('Day starts at'), {
+      target: { value: '07:00' },
+    });
+    await user.selectOptions(screen.getByLabelText('Week starts on'), '0');
+    await user.selectOptions(screen.getByLabelText('Month starts on'), '8');
+    await user.selectOptions(screen.getByLabelText('Year starts in'), '4');
+    await user.click(screen.getByRole('button', { name: /create tracker/i }));
+
+    await screen.findByRole('heading', { name: 'Rent' });
+    const [created] = await test.core.trackers.list();
+    expect(created).toMatchObject({
+      day_start_minute: 420,
+      week_start: 0,
+      month_start_day: 8,
+      year_start_month: 4,
+    });
+  });
+
+  it('loads an existing window into the edit form and summarizes it', async () => {
+    const t = await test.createTracker({
+      name: 'Billing',
+      month_start_day: 8,
+      day_start_minute: 7 * 60,
+    });
+    renderApp(test, `/trackers/${t.id}/edit`);
+
+    expect(await screen.findByLabelText('Day starts at')).toHaveValue('07:00');
+    expect(screen.getByLabelText('Month starts on')).toHaveValue('8');
+    // The disclosure summary spells the window out without opening it.
+    expect(screen.getByText(/Months from the 8th/)).toBeInTheDocument();
+  });
+
+  it("scopes the home card total to the tracker's day window", async () => {
+    // Put the day boundary at the minute that just passed, so "today" for
+    // this tracker began moments ago while the calendar day began at
+    // midnight — the two windows disagree about anything logged earlier.
+    const now = new Date();
+    const t = await test.createTracker({
+      name: 'Water',
+      kind: 'number',
+      reset_period: 'daily',
+      day_start_minute: now.getHours() * 60 + now.getMinutes(),
+    });
+    await test.core.entries.log(t.id, {
+      value: 5,
+      occurred_at: toLocalISO(new Date(now.getTime() - 2 * 60_000)),
+    });
+    await test.core.entries.log(t.id, { value: 2, occurred_at: toLocalISO(now) });
+
+    renderApp(test);
+
+    const card = (await screen.findByText('Water')).closest('.tracker-card')!;
+    // Only the entry after the boundary counts; the earlier one closed out
+    // with the previous day.
+    await waitFor(() =>
+      expect(within(card as HTMLElement).getByText('2')).toBeInTheDocument(),
+    );
   });
 });
 

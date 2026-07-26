@@ -99,7 +99,7 @@ export function TrackerDetailPage() {
   // Total for the current reset window (today / this week / …). Compared by
   // absolute instant so it's correct regardless of the offset entries were
   // logged in. `null` range means the tracker never resets (cumulative).
-  const periodRange = resetPeriodRange(tracker.reset_period, tracker.week_start);
+  const periodRange = resetPeriodRange(tracker.reset_period, tracker);
   const periodTotal = periodRange ? sumInRange(entries, periodRange) : total;
 
   // The headline: a snapshot tracker shows its most recent reading (levels
@@ -120,7 +120,7 @@ export function TrackerDetailPage() {
   // high and low readings for a snapshot stat.
   const breakdown = isSnapshot
     ? snapshotStats(entries)
-    : windowStats(entries, tracker.week_start);
+    : windowStats(entries, tracker);
 
   // Notes that describe a specific entry are shown inline with that entry;
   // the rest are general journal notes for the Notes section.

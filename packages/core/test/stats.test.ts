@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { makeTestApp } from './setup.js';
+import { toLocalISO } from '../src/time.js';
 
 const OFF = '-07:00';
 const day = (d: string, h = 12) =>
@@ -127,5 +128,70 @@ describe('StatsService.targetProgress', () => {
     expect(p.target).toBeNull();
     expect(p.ratio).toBeNull();
     expect(p.current).toBe(1);
+  });
+});
+
+describe('custom period windows', () => {
+  // These tests turn on wall-clock hours, so they build timestamps in the
+  // *host's* zone (like the app does) rather than the fixed -07:00 the rest
+  // of this file uses — otherwise the hour a window opens on would shift.
+  const at = (month: number, d: number, h: number, min = 0) =>
+    toLocalISO(new Date(2026, month - 1, d, h, min, 0, 0));
+
+  it("buckets months on the tracker's month_start_day", async () => {
+    const { app } = await makeTestApp();
+    const t = await app.trackers.create({
+      name: 'Rent',
+      kind: 'number',
+      month_start_day: 8,
+    });
+    expect(t.month_start_day).toBe(8);
+    // May 3rd belongs to the window that opened April 8th; May 20th to May's.
+    await app.entries.log(t.id, { value: 10, occurred_at: at(5, 3, 12) });
+    await app.entries.log(t.id, { value: 4, occurred_at: at(5, 20, 12) });
+
+    const buckets = await app.stats.bucket(
+      t.id,
+      { start: at(4, 8, 0), end: at(6, 8, 0) },
+      'month',
+    );
+    expect(buckets.map((b) => [b.label, b.value])).toEqual([
+      ['2026-04', 10],
+      ['2026-05', 4],
+    ]);
+  });
+
+  it("scopes target progress to the tracker's day window", async () => {
+    const { app } = await makeTestApp();
+    const t = await app.trackers.create({
+      name: 'Water',
+      kind: 'number',
+      reset_period: 'daily',
+      target: 8,
+      day_start_minute: 7 * 60, // a day runs 7:00 AM -> 6:59 AM
+    });
+    // Logged at 3:00 AM on the 25th — still the 24th's day…
+    await app.entries.log(t.id, { value: 5, occurred_at: at(5, 25, 3) });
+
+    // …so at 9:00 AM on the 25th, today's total is 0.
+    expect((await app.stats.targetProgress(t.id, at(5, 25, 9))).current).toBe(0);
+    // At 4:00 AM the same night it still counts.
+    expect((await app.stats.targetProgress(t.id, at(5, 25, 4))).current).toBe(5);
+  });
+
+  it("counts streak days by the tracker's day window", async () => {
+    const { app, setTime } = await makeTestApp();
+    const t = await app.trackers.create({
+      name: 'Journal',
+      day_start_minute: 7 * 60,
+    });
+    // The last entry lands after midnight, which the window folds back into
+    // the 24th — two logged days, not three.
+    await app.entries.log(t.id, { value: 1, occurred_at: at(5, 23, 20) });
+    await app.entries.log(t.id, { value: 1, occurred_at: at(5, 24, 20) });
+    await app.entries.log(t.id, { value: 1, occurred_at: at(5, 25, 2) });
+
+    setTime(at(5, 25, 3)); // still the 24th's day
+    expect(await app.stats.streak(t.id)).toEqual({ current: 2, longest: 2 });
   });
 });

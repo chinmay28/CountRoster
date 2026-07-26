@@ -7,6 +7,10 @@ import {
   formatRelativeTime,
   toDatetimeLocalValue,
   fromDatetimeLocalValue,
+  ordinal,
+  minuteToTimeInput,
+  timeInputFromValue,
+  describePeriodWindow,
 } from './format.ts';
 
 function makeTracker(patch: Partial<Tracker>): Tracker {
@@ -22,6 +26,8 @@ function makeTracker(patch: Partial<Tracker>): Tracker {
     reset_period: 'never',
     week_start: 1,
     day_start_minute: 0,
+    month_start_day: 1,
+    year_start_month: 1,
     default_value: 1,
     archived_at: null,
     sort_order: 0,
@@ -110,5 +116,45 @@ describe('datetime-local round trip', () => {
     // Local-offset ISO, never UTC "Z".
     expect(iso).not.toMatch(/Z$/);
     expect(toDatetimeLocalValue(iso)).toBe(local);
+  });
+});
+
+describe('period window formatting', () => {
+  it('renders ordinals for days of the month', () => {
+    expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 28].map(ordinal)).toEqual([
+      '1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '28th',
+    ]);
+  });
+
+  it('round-trips a day-start minute through a time input value', () => {
+    expect(minuteToTimeInput(0)).toBe('00:00');
+    expect(minuteToTimeInput(7 * 60)).toBe('07:00');
+    expect(minuteToTimeInput(1439)).toBe('23:59');
+    expect(timeInputFromValue('07:00')).toBe(420);
+    expect(timeInputFromValue('')).toBe(0);
+  });
+
+  it('summarizes only the windows that leave the calendar', () => {
+    const calendar = {
+      day_start_minute: 0,
+      week_start: 1 as const,
+      month_start_day: 1,
+      year_start_month: 1,
+    };
+    expect(describePeriodWindow(calendar)).toBe(
+      'Calendar days, weeks, months and years',
+    );
+    const summary = describePeriodWindow({
+      ...calendar,
+      day_start_minute: 7 * 60,
+      week_start: 0,
+      month_start_day: 8,
+      year_start_month: 4,
+    });
+    // The day window closes one minute before it reopens.
+    expect(summary).toContain('6:59');
+    expect(summary).toContain('Weeks from Sunday');
+    expect(summary).toContain('Months from the 8th');
+    expect(summary).toContain('Years from April');
   });
 });

@@ -95,7 +95,7 @@ export type {
 } from './aggregations/stats.js';
 
 // Aggregation primitives
-export type { Bucket, BucketPeriod } from './aggregations/periods.js';
+export type { Bucket, BucketPeriod, PeriodWindow } from './aggregations/periods.js';
 export {
   bucketStart,
   bucketEnd,

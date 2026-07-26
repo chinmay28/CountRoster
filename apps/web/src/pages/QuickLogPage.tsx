@@ -204,7 +204,7 @@ export function QuickLogPage() {
   const painted = mode === 'tap';
 
   const total = sumValues(entries);
-  const periodRange = resetPeriodRange(tracker.reset_period, tracker.week_start);
+  const periodRange = resetPeriodRange(tracker.reset_period, tracker);
   const headline =
     tracker.is_snapshot === 1
       ? latestValue(entries)

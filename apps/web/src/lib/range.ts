@@ -4,31 +4,27 @@ import {
   bucketEnd,
   type TimeRange,
   type BucketPeriod,
+  type PeriodWindow,
   type ResetPeriod,
-  type WeekStart,
 } from '@countroster/core';
 
 /**
- * The [start, end) ISO range covering the local calendar day that contains
- * `now`. Used for "today's total" on the home screen.
+ * The [start, end) ISO range covering the day that contains `now` — the
+ * tracker's own day, so a `window` with `day_start_minute: 420` runs 7:00 AM
+ * to 6:59 AM. Used for "today's total" on the home screen.
  *
- * Bounds are formatted with `toLocalISO` (local offset, never UTC "Z"). The
- * core compares them against stored `occurred_at` by absolute instant (via
- * SQLite `julianday`, which parses the offset), so a range expressed in this
- * device's timezone is correct even when the server logged entries in a
- * different one — see `EntryService.forTracker`.
- *
- * NOTE: This is calendar-local midnight, matching the baseline bucketing in
- * core's periods.ts. It does not yet honor per-tracker `day_start_minute` —
- * that logic belongs in core when it lands (see DESIGN Appendix B), and this
- * helper should defer to it rather than reimplementing it.
+ * Boundaries come from core's bucketing rather than being recomputed here, and
+ * are formatted with `toLocalISO` (local offset, never UTC "Z"). The core
+ * compares them against stored `occurred_at` by absolute instant (via SQLite
+ * `julianday`, which parses the offset), so a range expressed in this device's
+ * timezone is correct even when the server logged entries in a different one —
+ * see `EntryService.forTracker`.
  */
-export function todayRange(now: Date = new Date()): Required<TimeRange> {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start: toLocalISO(start), end: toLocalISO(end) };
+export function todayRange(
+  now: Date = new Date(),
+  window: PeriodWindow = {},
+): Required<TimeRange> {
+  return currentPeriodRange('day', window, now);
 }
 
 /** Sum the `value` field across rows. */
@@ -76,31 +72,32 @@ export const RESET_PERIOD_LABEL: Record<ResetPeriod, string> = {
  * the window whose total the home card should show (à la Tally's "resets
  * every…"). Returns `null` for `'never'`, meaning "no window: all-time total".
  *
- * Boundaries are aligned with core's bucketing (honoring `weekStart`) and
- * formatted with the local offset; the core compares them by instant.
+ * Boundaries are aligned with core's bucketing (honoring the tracker's period
+ * `window`) and formatted with the local offset; the core compares them by
+ * instant. A `Tracker` can be passed as the window — the field names match.
  */
 export function resetPeriodRange(
   resetPeriod: ResetPeriod,
-  weekStart: WeekStart = 1,
+  window: PeriodWindow = {},
   now: Date = new Date(),
 ): Required<TimeRange> | null {
   if (resetPeriod === 'never') return null;
-  return currentPeriodRange(RESET_TO_BUCKET[resetPeriod], weekStart, now);
+  return currentPeriodRange(RESET_TO_BUCKET[resetPeriod], window, now);
 }
 
 /**
  * The [start, end) range covering the *current* bucket of the given period
- * (this week / month / year …), aligned to the same `weekStart` the core uses
- * and formatted with the local offset.
+ * (this week / month / year …), aligned to the same period `window` the core
+ * uses and formatted with the local offset.
  */
 export function currentPeriodRange(
   period: BucketPeriod,
-  weekStart: WeekStart = 1,
+  window: PeriodWindow = {},
   now: Date = new Date(),
 ): Required<TimeRange> {
   return {
-    start: toLocalISO(bucketStart(now, period, weekStart)),
-    end: toLocalISO(bucketEnd(now, period, weekStart)),
+    start: toLocalISO(bucketStart(now, period, window)),
+    end: toLocalISO(bucketEnd(now, period, window)),
   };
 }
 
@@ -131,14 +128,14 @@ const STAT_WINDOWS: { key: BucketPeriod; label: string }[] = [
  */
 export function windowStats(
   entries: readonly ValuedEntry[],
-  weekStart: WeekStart = 1,
+  window: PeriodWindow = {},
   now: Date = new Date(),
 ): WindowStat[] {
   const ordered: WindowStat[] = [
     ...STAT_WINDOWS.map(({ key, label }) => ({
       key,
       label,
-      value: sumInRange(entries, currentPeriodRange(key, weekStart, now)),
+      value: sumInRange(entries, currentPeriodRange(key, window, now)),
     })),
     { key: 'all-time' as const, label: 'all-time', value: sumValues(entries) },
   ];
@@ -202,7 +199,7 @@ const RELATIVE_LABELS: Record<BucketPeriod, readonly [string, string]> = {
  */
 export function resetPeriodOptions(
   resetPeriod: ResetPeriod,
-  weekStart: WeekStart = 1,
+  window: PeriodWindow = {},
   earliest?: string,
   now: Date = new Date(),
   max = 120,
@@ -214,9 +211,9 @@ export function resetPeriodOptions(
   const period = RESET_TO_BUCKET[resetPeriod];
   const [current, previous] = RELATIVE_LABELS[period];
   const options: PeriodOption[] = [];
-  let start = bucketStart(now, period, weekStart);
+  let start = bucketStart(now, period, window);
   while (options.length < max) {
-    const end = bucketEnd(start, period, weekStart);
+    const end = bucketEnd(start, period, window);
     options.push({
       value: toLocalISO(start),
       label:
@@ -229,7 +226,7 @@ export function resetPeriodOptions(
     });
     if (start.getTime() <= earliestMs) break;
     // Step into the previous bucket, then normalize to its start.
-    start = bucketStart(new Date(start.getTime() - 1), period, weekStart);
+    start = bucketStart(new Date(start.getTime() - 1), period, window);
   }
   return options;
 }
@@ -261,20 +258,20 @@ function bucketDateLabel(start: Date, period: BucketPeriod, now: Date): string {
 /**
  * The [start, end) ISO range covering the most recent `count` buckets of the
  * given `period`, up to and including the in-progress one. Boundaries are
- * aligned to the same `weekStart` the core uses so the server's buckets line
- * up exactly with what we requested.
+ * aligned to the same period `window` the core uses so the server's buckets
+ * line up exactly with what we requested.
  */
 export function lastNBuckets(
   period: BucketPeriod,
   count: number,
-  weekStart: 0 | 1 = 1,
+  window: PeriodWindow = {},
   now: Date = new Date(),
 ): Required<TimeRange> {
-  const end = bucketEnd(now, period, weekStart);
-  let start = bucketStart(now, period, weekStart);
+  const end = bucketEnd(now, period, window);
+  let start = bucketStart(now, period, window);
   for (let i = 1; i < count; i++) {
     // Step into the previous bucket, then normalize to its start.
-    start = bucketStart(new Date(start.getTime() - 1), period, weekStart);
+    start = bucketStart(new Date(start.getTime() - 1), period, window);
   }
   return { start: toLocalISO(start), end: toLocalISO(end) };
 }

@@ -72,7 +72,7 @@ export function CompositionSection({ tracker, entries }: CompositionSectionProps
   const options = useMemo(() => {
     const all = resetPeriodOptions(
       isSnapshot ? 'monthly' : tracker.reset_period,
-      tracker.week_start,
+      tracker,
       entries[0]?.occurred_at,
     );
     // A snapshot's current-month window always equals "Current" (no reading
@@ -86,7 +86,17 @@ export function CompositionSection({ tracker, entries }: CompositionSectionProps
       const end = new Date(o.range.end).getTime();
       return instants.some((t) => t >= start && t < end);
     });
-  }, [isSnapshot, tracker.reset_period, tracker.week_start, entries]);
+    // Depend on the window fields rather than the tracker object, so a
+    // refetch that returns identical values doesn't rebuild the list.
+  }, [
+    isSnapshot,
+    tracker.reset_period,
+    tracker.week_start,
+    tracker.day_start_minute,
+    tracker.month_start_day,
+    tracker.year_start_month,
+    entries,
+  ]);
   const active = options.find((o) => o.value === selected);
 
   const { data: slices } = useAsync(

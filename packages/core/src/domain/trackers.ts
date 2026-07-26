@@ -80,10 +80,11 @@ class TrackerServiceImpl implements TrackerService {
       await tx.exec(
         `INSERT INTO trackers (
           id, name, description, color, icon, kind, unit, target,
-          reset_period, week_start, day_start_minute, default_value,
+          reset_period, week_start, day_start_minute, month_start_day,
+          year_start_month, default_value,
           archived_at, sort_order, is_derived, is_hidden, is_snapshot,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           input.name,
@@ -97,6 +98,8 @@ class TrackerServiceImpl implements TrackerService {
           input.is_snapshot === 1 ? 'never' : input.reset_period,
           input.week_start,
           input.day_start_minute,
+          input.month_start_day,
+          input.year_start_month,
           input.default_value,
           input.sort_order,
           isDerived,
@@ -145,6 +148,8 @@ class TrackerServiceImpl implements TrackerService {
     if (nextSnapshot !== 1) assign('reset_period', 'reset_period');
     assign('week_start', 'week_start');
     assign('day_start_minute', 'day_start_minute');
+    assign('month_start_day', 'month_start_day');
+    assign('year_start_month', 'year_start_month');
     assign('default_value', 'default_value');
     assign('sort_order', 'sort_order');
     assign('is_hidden', 'is_hidden');

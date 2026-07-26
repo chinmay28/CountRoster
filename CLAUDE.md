@@ -96,7 +96,7 @@ Errors map to HTTP in `api.handleErr`: `ValidationError`→400, `NotFoundError`�
 
 ### Aggregations
 
-`internal/core/periods.go` (`bucketStart`/`bucketEnd`/`bucketLabel`) implements day/week/month/year bucketing in host-local time, mirroring the JS `Date` math of the original. It does **not yet** honor per-tracker `day_start_minute` or custom timezones — that work belongs in this file when added (see DESIGN.md Appendix B).
+`internal/core/periods.go` (`bucketStart`/`bucketEnd`/`bucketLabel`) implements day/week/month/year bucketing in host-local time, mirroring the JS `Date` math of the original. Boundaries come from the tracker's `PeriodWindow` — `day_start_minute`, `week_start`, `month_start_day`, `year_start_month` — so a day can run 7:00 AM → 6:59 AM, a month the 8th → the 7th, a year April → March (see DESIGN.md Appendix B). It does **not yet** honor custom timezones; that work belongs in this file when added, alongside the TS mirror in `packages/core/src/aggregations/periods.ts` and the web client's `apps/web/src/lib/range.ts` (which passes a tracker straight in as its window).
 
 ## Testing conventions
 

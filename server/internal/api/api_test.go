@@ -290,6 +290,54 @@ func TestValidation400(t *testing.T) {
 	}
 }
 
+// TestPeriodWindowFields pins the custom-period-window columns on the wire:
+// they default to plain calendar bucketing, survive create and PATCH, and
+// reject out-of-range values.
+func TestPeriodWindowFields(t *testing.T) {
+	c := &client{t: t, base: newServer(t).URL}
+
+	var plain m
+	c.postJSON("/api/trackers", m{"name": "Plain"}, &plain)
+	if plain["day_start_minute"] != 0.0 || plain["week_start"] != 1.0 ||
+		plain["month_start_day"] != 1.0 || plain["year_start_month"] != 1.0 {
+		t.Errorf("defaults wrong: %v", plain)
+	}
+
+	var custom m
+	status := c.postJSON("/api/trackers", m{
+		"name":             "Billing",
+		"day_start_minute": 420,
+		"week_start":       0,
+		"month_start_day":  8,
+		"year_start_month": 4,
+	}, &custom)
+	if status != 201 {
+		t.Fatalf("create status %d", status)
+	}
+	if custom["day_start_minute"] != 420.0 || custom["week_start"] != 0.0 ||
+		custom["month_start_day"] != 8.0 || custom["year_start_month"] != 4.0 {
+		t.Errorf("window not persisted: %v", custom)
+	}
+
+	var patched m
+	_, data := c.do("PATCH", "/api/trackers/"+custom["id"].(string),
+		m{"month_start_day": 15, "day_start_minute": 0})
+	if err := json.Unmarshal(data, &patched); err != nil {
+		t.Fatalf("bad JSON %q: %v", data, err)
+	}
+	if patched["month_start_day"] != 15.0 || patched["day_start_minute"] != 0.0 {
+		t.Errorf("patch wrong: %v", patched)
+	}
+
+	var body m
+	if status := c.postJSON("/api/trackers", m{"name": "Bad", "month_start_day": 29}, &body); status != 400 {
+		t.Errorf("month_start_day 29 should be rejected, got %d", status)
+	}
+	if status := c.postJSON("/api/trackers", m{"name": "Bad", "year_start_month": 0}, &body); status != 400 {
+		t.Errorf("year_start_month 0 should be rejected, got %d", status)
+	}
+}
+
 func TestGroupsEndpoints(t *testing.T) {
 	c := &client{t: t, base: newServer(t).URL}
 	var tracker, group m
