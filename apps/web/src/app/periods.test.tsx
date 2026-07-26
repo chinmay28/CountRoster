@@ -69,19 +69,124 @@ function tableRows(): string[][] {
     );
 }
 
-describe('period table', () => {
-  it('is the default view for a tracker that resets, and totals each period', async () => {
+describe('current-period tab', () => {
+  it('opens on the reset window and lists only its entries', async () => {
     const tracker = await seedDaily(test);
     renderApp(test, `/trackers/${tracker.id}`);
 
-    expect(await screen.findByRole('tab', { name: 'By period' })).toHaveAttribute(
+    // A daily tracker's current window is today, and that is the default tab.
+    expect(await screen.findByRole('tab', { name: 'Today' })).toHaveAttribute(
       'aria-selected',
       'true',
     );
-    expect(screen.getByRole('tab', { name: 'All entries' })).toHaveAttribute(
-      'aria-selected',
-      'false',
+    for (const other of ['By period', 'All entries']) {
+      expect(screen.getByRole('tab', { name: other })).toHaveAttribute(
+        'aria-selected',
+        'false',
+      );
+    }
+
+    // Three entries all told, but only today's two are listed.
+    const panel = screen.getByRole('tabpanel', { name: 'Today' });
+    expect(within(panel).getAllByRole('listitem')).toHaveLength(2);
+    expect(panel).toHaveTextContent('3 glasses today · 2 entries');
+  });
+
+  it('names the window after the tracker’s reset period', async () => {
+    for (const [reset, label] of [
+      ['weekly', 'This week'],
+      ['monthly', 'This month'],
+      ['yearly', 'This year'],
+    ] as const) {
+      const t = await makeTestCore();
+      const tracker = await t.createTracker({ name: reset, kind: 'count', reset_period: reset });
+      const view = renderApp(t, `/trackers/${tracker.id}`);
+      expect(await screen.findByRole('tab', { name: label })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      view.unmount();
+    }
+  });
+
+  it('quotes progress toward the target for the window', async () => {
+    const tracker = await test.createTracker({
+      name: 'Water',
+      kind: 'count',
+      reset_period: 'daily',
+      target: 8,
+      unit: 'glasses',
+    });
+    await test.core.entries.log(tracker.id, { value: 6, occurred_at: daysAgo(0, 9) });
+    renderApp(test, `/trackers/${tracker.id}`);
+
+    await screen.findByRole('tab', { name: 'Today' });
+    expect(screen.getByRole('tabpanel', { name: 'Today' })).toHaveTextContent(
+      '6 glasses today · 1 entry · 75% of 8 glasses',
     );
+  });
+
+  it('says the window is empty rather than the tracker is', async () => {
+    const tracker = await test.createTracker({
+      name: 'Water',
+      kind: 'count',
+      reset_period: 'daily',
+    });
+    // Logged, but not today — "no entries yet" would be a false claim.
+    await test.core.entries.log(tracker.id, { value: 4, occurred_at: daysAgo(3, 10) });
+    renderApp(test, `/trackers/${tracker.id}`);
+
+    await screen.findByRole('tab', { name: 'Today' });
+    const panel = screen.getByRole('tabpanel', { name: 'Today' });
+    expect(panel).toHaveTextContent('Nothing logged today yet.');
+    expect(panel).not.toHaveTextContent('No entries yet.');
+  });
+
+  it('edits an entry in place, and the window total follows', async () => {
+    const tracker = await seedDaily(test);
+    const user = userEvent.setup();
+    renderApp(test, `/trackers/${tracker.id}`);
+
+    await screen.findByRole('tab', { name: 'Today' });
+    const panel = screen.getByRole('tabpanel', { name: 'Today' });
+    expect(panel).toHaveTextContent('3 glasses today');
+
+    await user.click(within(panel).getAllByRole('button', { name: 'Edit' })[0]!);
+    // The editing row's own number input — not the Log section's Value field,
+    // which is a separate form further up the page.
+    const value = within(panel).getByRole('spinbutton');
+    await user.clear(value);
+    await user.type(value, '5');
+    await user.click(within(panel).getByRole('button', { name: 'Save' }));
+
+    await screen.findByText(/6 glasses today/);
+  });
+
+  it('reads a snapshot tracker’s window as its latest reading', async () => {
+    const tracker = await test.createTracker({
+      name: 'Weight',
+      kind: 'number',
+      is_snapshot: 1,
+      unit: 'lb',
+    });
+    await test.core.entries.log(tracker.id, { value: 181, occurred_at: daysAgo(0, 8) });
+    await test.core.entries.log(tracker.id, { value: 179, occurred_at: daysAgo(0, 20) });
+    renderApp(test, `/trackers/${tracker.id}`);
+
+    // Levels don't add up: 181 + 179 would be nonsense.
+    await screen.findByRole('tab', { name: 'This month' });
+    expect(screen.getByRole('tabpanel', { name: 'This month' })).toHaveTextContent(
+      '179 lb latest · 2 readings this month',
+    );
+  });
+});
+
+describe('period table', () => {
+  it('totals each period, and compares it with the one before', async () => {
+    const tracker = await seedDaily(test);
+    const user = userEvent.setup();
+    renderApp(test, `/trackers/${tracker.id}`);
+    await user.click(await screen.findByRole('tab', { name: 'By period' }));
 
     const table = await screen.findByRole('table');
     const today = within(table).getByRole('rowheader', { name: 'Today' }).closest('tr')!;
@@ -100,7 +205,7 @@ describe('period table', () => {
     const tracker = await seedDaily(test);
     const user = userEvent.setup();
     renderApp(test, `/trackers/${tracker.id}`);
-
+    await user.click(await screen.findByRole('tab', { name: 'By period' }));
     await screen.findByRole('table');
     const before = tableRows().length;
     // 12 days shown, only 2 of which have entries.
@@ -116,7 +221,7 @@ describe('period table', () => {
     const tracker = await seedDaily(test);
     const user = userEvent.setup();
     renderApp(test, `/trackers/${tracker.id}`);
-
+    await user.click(await screen.findByRole('tab', { name: 'By period' }));
     await screen.findByRole('table');
     // The Trends panel has its own Day/Week/Month/Year toggle; use the table's.
     const periods = screen.getByRole('group', { name: 'Table period' });
@@ -141,12 +246,14 @@ describe('period table', () => {
     expect(screen.getAllByRole('button', { name: 'Edit' }).length).toBeGreaterThan(0);
   });
 
-  it('opens on the timeline for a tracker that never resets', async () => {
+  it('falls back to months for a tracker with no reset window', async () => {
     const tracker = await test.createTracker({ name: 'Books', kind: 'count' });
     await test.core.entries.log(tracker.id, { value: 1 });
     renderApp(test, `/trackers/${tracker.id}`);
 
-    expect(await screen.findByRole('tab', { name: 'All entries' })).toHaveAttribute(
+    // No reset period means no "today"/"this week" to speak of; the current
+    // window is the month, and it is still what the page opens on.
+    expect(await screen.findByRole('tab', { name: 'This month' })).toHaveAttribute(
       'aria-selected',
       'true',
     );
@@ -165,8 +272,8 @@ describe('period table', () => {
     const user = userEvent.setup();
     renderApp(test, `/trackers/${tracker.id}`);
 
-    // A snapshot tracker resets 'never', so the table isn't the default tab —
-    // and it opens on months, the fallback for a tracker with no reset window.
+    // A snapshot tracker resets 'never', so its table opens on months — the
+    // fallback for a tracker with no reset window.
     await user.click(await screen.findByRole('tab', { name: 'By period' }));
     await user.click(
       within(screen.getByRole('group', { name: 'Table period' })).getByRole('button', {
@@ -202,7 +309,9 @@ describe('period table', () => {
       target: 8,
     });
     await test.core.entries.log(tracker.id, { value: 6, occurred_at: daysAgo(0, 9) });
+    const user = userEvent.setup();
     renderApp(test, `/trackers/${tracker.id}`);
+    await user.click(await screen.findByRole('tab', { name: 'By period' }));
 
     const table = await screen.findByRole('table');
     const today = within(table).getByRole('rowheader', { name: 'Today' }).closest('tr')!;
@@ -219,6 +328,7 @@ describe('period table', () => {
     await test.core.entries.log(tracker.id, { value: 6, occurred_at: daysAgo(0, 9) });
     const user = userEvent.setup();
     renderApp(test, `/trackers/${tracker.id}`);
+    await user.click(await screen.findByRole('tab', { name: 'By period' }));
 
     expect(
       within(await screen.findByRole('table')).getByRole('columnheader', { name: 'of 8' }),
@@ -238,6 +348,7 @@ describe('period table', () => {
     const user = userEvent.setup();
     renderApp(test, `/trackers/${tracker.id}`);
 
+    await user.click(await screen.findByRole('tab', { name: 'By period' }));
     const footer = () =>
       within(screen.getByRole('table')).getAllByRole('row').at(-1)!;
     await screen.findByRole('table');
@@ -256,7 +367,7 @@ describe('section arranging', () => {
     const user = userEvent.setup();
     const view = renderApp(test, `/trackers/${tracker.id}`);
 
-    await screen.findByRole('table');
+    await screen.findByRole('tab', { name: 'By period' });
     await user.click(screen.getByRole('button', { name: 'Arrange' }));
 
     const list = screen.getByRole('list', { name: 'Page sections' });

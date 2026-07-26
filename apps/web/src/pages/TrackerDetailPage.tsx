@@ -21,7 +21,11 @@ import { formatValue, formatNumber, KIND_LABELS } from '../lib/format.ts';
 import {
   sumValues,
   sumInRange,
+  filterInRange,
   resetPeriodRange,
+  currentPeriodRange,
+  currentPeriodLabel,
+  periodForReset,
   windowStats,
   snapshotStats,
   latestValue,
@@ -92,10 +96,13 @@ export function TrackerDetailPage() {
   const [logError, setLogError] = useState<string | null>(null);
   // Which logging mode the user is in: one detailed entry, or a batch sheet.
   const [logTab, setLogTab] = useState<'single' | 'multi'>('single');
-  // Which reading of the entries the user is on: totals per period, or the
-  // raw timeline. Null until they pick — the default depends on the tracker,
-  // which isn't loaded yet on the first render.
-  const [entryTab, setEntryTab] = useState<'periods' | 'entries' | null>(null);
+  // Which reading of the entries the user is on: this period's entries,
+  // totals per period, or the raw timeline. Null until they pick — the
+  // default's label depends on the tracker, which isn't loaded on first
+  // render.
+  const [entryTab, setEntryTab] = useState<'current' | 'periods' | 'entries' | null>(
+    null,
+  );
   // Whether the section-order editor is open.
   const [arranging, setArranging] = useState(false);
   // Surfaces failures from header actions like archive (e.g. a tracker still in
@@ -167,10 +174,14 @@ export function TrackerDetailPage() {
     }
   }
 
-  // A tracker that resets is *about* its periods, so it opens on the table;
-  // one that just accumulates opens on the timeline it always had.
-  const activeEntryTab =
-    entryTab ?? (tracker.reset_period === 'never' ? 'entries' : 'periods');
+  // The page opens on the window the user is actually living in — what they
+  // have logged so far today / this week / this month. A tracker that never
+  // resets has no window of its own; months are the readable default.
+  const activeEntryTab = entryTab ?? 'current';
+  const currentPeriod = periodForReset(tracker.reset_period);
+  const currentRange = currentPeriodRange(currentPeriod, tracker.week_start);
+  const currentLabel = currentPeriodLabel(currentPeriod);
+  const currentEntries = filterInRange(entries, currentRange);
 
   // Which sections this particular tracker has: a derivation only exists for
   // a derived tracker, and only a directly-logged one can be logged to.
@@ -404,8 +415,9 @@ export function TrackerDetailPage() {
 
     entries: (
       <section key="entries" className="detail__entries">
-        {/* Two readings of the same data: totalled per reset period, or the
-            raw timeline (the only place entries can be edited). */}
+        {/* Three readings of the same data, narrowest first: the window the
+            user is in right now, every window totalled, and the whole raw
+            timeline. */}
         <h2>
           {isDerived
             ? isSnapshot
@@ -414,6 +426,19 @@ export function TrackerDetailPage() {
             : 'Entries'}
         </h2>
         <div className="logtabs" role="tablist" aria-label="Entry view">
+          <button
+            type="button"
+            role="tab"
+            id="entrytab-current"
+            aria-selected={activeEntryTab === 'current'}
+            aria-controls="entrypanel-current"
+            className={`logtabs__tab${
+              activeEntryTab === 'current' ? ' logtabs__tab--active' : ''
+            }`}
+            onClick={() => setEntryTab('current')}
+          >
+            {currentLabel}
+          </button>
           <button
             type="button"
             role="tab"
@@ -442,7 +467,41 @@ export function TrackerDetailPage() {
           </button>
         </div>
 
-        {activeEntryTab === 'periods' ? (
+        {activeEntryTab === 'current' && (
+          <div role="tabpanel" id="entrypanel-current" aria-labelledby="entrytab-current">
+            {/* Only worth a line when there is something to summarize —
+                otherwise the list's own empty state says it once, clearly. */}
+            {currentEntries.length > 0 && (
+              <p className="muted detail__period-summary">
+                {/* A snapshot tracker's readings are levels; there is no
+                    "so far" total to quote, so name the latest reading. */}
+                {isSnapshot
+                  ? `${formatValue(tracker, latestValue(currentEntries))} latest · ${
+                      currentEntries.length
+                    } reading${
+                      currentEntries.length === 1 ? '' : 's'
+                    } ${currentLabel.toLowerCase()}`
+                  : `${formatValue(tracker, sumValues(currentEntries))} ${currentLabel.toLowerCase()} · ${
+                      currentEntries.length
+                    } ${currentEntries.length === 1 ? 'entry' : 'entries'}`}
+                {!isSnapshot && tracker.target != null && tracker.reset_period !== 'never'
+                  ? ` · ${Math.round(
+                      (sumValues(currentEntries) / tracker.target) * 100,
+                    )}% of ${formatNumber(tracker.target, tracker.unit)}`
+                  : ''}
+              </p>
+            )}
+            <EntryList
+              tracker={tracker}
+              entries={currentEntries}
+              notesByEntry={notesByEntry}
+              onChanged={refresh}
+              readOnly={isDerived}
+              emptyLabel={`Nothing logged ${currentLabel.toLowerCase()} yet.`}
+            />
+          </div>
+        )}
+        {activeEntryTab === 'periods' && (
           <div role="tabpanel" id="entrypanel-periods" aria-labelledby="entrytab-periods">
             <PeriodTable
               tracker={tracker}
@@ -450,7 +509,8 @@ export function TrackerDetailPage() {
               refreshKey={statsKey}
             />
           </div>
-        ) : (
+        )}
+        {activeEntryTab === 'entries' && (
           <div role="tabpanel" id="entrypanel-entries" aria-labelledby="entrytab-entries">
             <EntryList
               tracker={tracker}

@@ -2452,3 +2452,10 @@ input.txn__name:focus {
   border-radius: 8px;
   background: var(--bg);
 }
+
+/* The one-line "6 glasses today · 3 entries · 75% of 8" above the current
+   period's entries. */
+.detail__period-summary {
+  margin: 0.75rem 0 0.5rem;
+  font-size: 0.9rem;
+}

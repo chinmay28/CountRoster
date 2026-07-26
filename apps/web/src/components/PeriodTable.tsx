@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
-import type { BucketPeriod, ResetPeriod, StatBucket, Tracker } from '@countroster/core';
+import type { BucketPeriod, StatBucket, Tracker } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import { formatValue, formatNumber } from '../lib/format.ts';
-import { lastNBuckets, periodRowLabel } from '../lib/range.ts';
+import { lastNBuckets, periodForReset, periodRowLabel } from '../lib/range.ts';
 
 /** Period toggle, coarsest resolution last. */
 const PERIODS: { period: BucketPeriod; label: string }[] = [
@@ -12,15 +12,6 @@ const PERIODS: { period: BucketPeriod; label: string }[] = [
   { period: 'month', label: 'Month' },
   { period: 'year', label: 'Year' },
 ];
-
-/** The period a tracker resets on — the breakdown it's really about. */
-const RESET_TO_PERIOD: Record<ResetPeriod, BucketPeriod> = {
-  never: 'month',
-  daily: 'day',
-  weekly: 'week',
-  monthly: 'month',
-  yearly: 'year',
-};
 
 /** How many periods a page shows, and how many more "Show more" adds. */
 const PAGE_SIZE = 12;
@@ -47,7 +38,7 @@ export function PeriodTable({ tracker, earliest, refreshKey }: PeriodTableProps)
   const core = useCore();
   const isSnapshot = tracker.is_snapshot === 1;
   const [period, setPeriod] = useState<BucketPeriod>(
-    RESET_TO_PERIOD[tracker.reset_period],
+    periodForReset(tracker.reset_period),
   );
   const [shown, setShown] = useState(PAGE_SIZE);
   const [hideEmpty, setHideEmpty] = useState(false);
@@ -92,7 +83,7 @@ export function PeriodTable({ tracker, earliest, refreshKey }: PeriodTableProps)
     !isSnapshot &&
     tracker.target != null &&
     tracker.reset_period !== 'never' &&
-    period === RESET_TO_PERIOD[tracker.reset_period];
+    period === periodForReset(tracker.reset_period);
 
   // Paging stops once the fetched range reaches back past the first entry —
   // there is no more history to walk into. With nothing logged (or no known
