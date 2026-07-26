@@ -2461,15 +2461,6 @@ input.txn__name:focus {
   min-width: 8rem;
   max-width: 20rem;
 }
-.periods__actions {
-  display: flex;
-  gap: 0.35rem;
-  justify-content: flex-end;
-}
-/* The edit form doesn't fit the columns, so it takes the whole row. */
-.entry-row--editing > td {
-  white-space: normal;
-}
 
 /* Field answers inside a table cell sit on one line rather than under a row. */
 .periods__chips {

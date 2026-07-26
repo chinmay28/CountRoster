@@ -475,8 +475,7 @@ export function TrackerDetailPage() {
               entries={currentEntries}
               fields={fields}
               notesByEntry={notesByEntry}
-              onChanged={refresh}
-              readOnly={isDerived}
+              readOnlyTracker={isDerived}
               windowLabel={currentLabel.toLowerCase()}
               windowPeriod={currentPeriod}
             />

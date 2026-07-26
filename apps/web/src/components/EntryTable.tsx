@@ -5,8 +5,6 @@ import type {
   Tracker,
   TrackerField,
 } from '@countroster/core';
-import { NoteHistory } from './NoteItem.tsx';
-import { useEntryEditor } from './useEntryEditor.ts';
 import { formatValue, formatNumber, formatWithin } from '../lib/format.ts';
 import { sumValues, latestValue } from '../lib/range.ts';
 import { entryChips } from '../lib/fields.ts';
@@ -19,9 +17,11 @@ interface EntryTableProps {
   fields?: readonly TrackerField[];
   /** Notes linked to an entry, keyed by `entry_id`. */
   notesByEntry?: Map<string, Note[]>;
-  onChanged: () => void;
-  /** A derived tracker's entries are computed, so they can't be edited. */
-  readOnly?: boolean;
+  /**
+   * A derived tracker's entries are computed from its sources, so they can't
+   * be edited anywhere — don't point at a tab that won't offer it either.
+   */
+  readOnlyTracker?: boolean;
   /** The window's name, lowercased for prose: "today", "this week". */
   windowLabel: string;
   /** The window's period, which scales how each row's time is written. */
@@ -37,14 +37,18 @@ interface EntryTableProps {
  *
  * A snapshot tracker's readings are levels, so they neither accumulate nor
  * total: the column becomes the change from the reading before.
+ *
+ * Read-only, like the per-period table beside it. Changing an entry is a
+ * different kind of act from reading one, and it lives in one place — the
+ * All entries tab — rather than being reachable from whichever view the user
+ * happens to be on.
  */
 export function EntryTable({
   tracker,
   entries,
   fields = [],
   notesByEntry,
-  onChanged,
-  readOnly = false,
+  readOnlyTracker = false,
   windowLabel,
   windowPeriod,
 }: EntryTableProps) {
@@ -72,8 +76,8 @@ export function EntryTable({
     .reverse();
 
   // A column of nothing but em dashes is noise, and on a phone it is noise
-  // that pushes Edit/Delete off the edge — so the Note column only exists
-  // when something in this window actually carries one.
+  // that costs a quarter of the width — so the Note column only exists when
+  // something in this window actually carries one.
   const showNotes = rows.some((r) => r.note !== null);
   // A tracker that captures custom answers shows them here too — this is the
   // tab the page opens on, so an answer logged a moment ago has to be visible
@@ -101,7 +105,6 @@ export function EntryTable({
               <th scope="col" className="periods__num">
                 {isSnapshot ? 'Change' : 'Running'}
               </th>
-              {!readOnly && <th scope="col" className="periods__num" />}
             </tr>
           </thead>
           <tbody>
@@ -116,9 +119,7 @@ export function EntryTable({
                 trail={trail}
                 isSnapshot={isSnapshot}
                 showNotes={showNotes}
-                readOnly={readOnly}
                 windowPeriod={windowPeriod}
-                onChanged={onChanged}
               />
             ))}
           </tbody>
@@ -133,7 +134,6 @@ export function EntryTable({
               <td className="periods__num">
                 {ratio === null ? '' : `${ratio}%`}
               </td>
-              {!readOnly && <td />}
             </tr>
           </tfoot>
         </table>
@@ -148,12 +148,15 @@ export function EntryTable({
                 tracker.target!,
                 tracker.unit,
               )} target ${windowLabel}.`}
+        {/* This view reads; it doesn't change anything. Say where changing
+            lives, or the buttons look like they went missing. */}
+        {!readOnlyTracker && ' Edit or delete on the All entries tab.'}
       </p>
     </div>
   );
 }
 
-/** One entry row, which swaps for an edit form in place. */
+/** One entry's row. */
 function EntryTableRow({
   tracker,
   entry,
@@ -163,9 +166,7 @@ function EntryTableRow({
   trail,
   isSnapshot,
   showNotes,
-  readOnly,
   windowPeriod,
-  onChanged,
 }: {
   tracker: Tracker;
   entry: Entry;
@@ -179,71 +180,8 @@ function EntryTableRow({
   isSnapshot: boolean;
   /** Whether the table is rendering a Note column at all. */
   showNotes: boolean;
-  readOnly: boolean;
   windowPeriod: BucketPeriod;
-  onChanged: () => void;
 }) {
-  const ed = useEntryEditor(tracker, entry, note, onChanged);
-  const columns =
-    2 + (showChips ? 1 : 0) + (showNotes ? 1 : 0) + 1 + (readOnly ? 0 : 1);
-
-  if (ed.editing) {
-    // The fields don't fit the columns, so the editor takes the whole row —
-    // the same three inputs the timeline offers.
-    return (
-      <tr className="entry-row--editing">
-        <td colSpan={columns}>
-          <div className="entry__edit-fields">
-            <input
-              type="number"
-              step="any"
-              inputMode="decimal"
-              aria-label="Value"
-              value={ed.value}
-              onChange={(e) => ed.setValue(e.target.value)}
-            />
-            <input
-              type="datetime-local"
-              aria-label="When"
-              value={ed.when}
-              onChange={(e) => ed.setWhen(e.target.value)}
-            />
-          </div>
-          <textarea
-            className="entry__note-input"
-            rows={2}
-            placeholder="Note (optional)…"
-            aria-label="Note"
-            value={ed.noteBody}
-            onChange={(e) => ed.setNoteBody(e.target.value)}
-          />
-          <div className="entry__actions">
-            {note && (
-              <button
-                className="btn btn--small"
-                onClick={() => ed.setShowHistory((v) => !v)}
-                aria-expanded={ed.showHistory}
-              >
-                History
-              </button>
-            )}
-            <button className="btn btn--small" onClick={ed.cancel} disabled={ed.busy}>
-              Cancel
-            </button>
-            <button
-              className="btn btn--small btn--primary"
-              onClick={ed.save}
-              disabled={ed.busy}
-            >
-              Save
-            </button>
-          </div>
-          {note && ed.showHistory && <NoteHistory noteId={note.id} />}
-        </td>
-      </tr>
-    );
-  }
-
   return (
     <tr>
       <th scope="row">{formatWithin(entry.occurred_at, windowPeriod)}</th>
@@ -290,20 +228,6 @@ function EntryTableRow({
           formatValue(tracker, trail)
         )}
       </td>
-      {!readOnly && (
-        <td className="periods__num periods__actions">
-          <button className="btn btn--small" onClick={ed.start}>
-            Edit
-          </button>
-          <button
-            className="btn btn--small btn--danger"
-            onClick={ed.remove}
-            disabled={ed.busy}
-          >
-            Delete
-          </button>
-        </td>
-      )}
     </tr>
   );
 }

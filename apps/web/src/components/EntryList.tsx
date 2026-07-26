@@ -24,13 +24,6 @@ interface EntryListProps {
    * whose entries are virtual (computed from their sources) and not editable.
    */
   readOnly?: boolean;
-  /**
-   * What to say when there is nothing to list. The default speaks for the
-   * whole history; a caller showing a *scoped* slice (one reset window, say)
-   * should say so, since "no entries yet" would be a different — and wrong —
-   * claim about a tracker with plenty of older entries.
-   */
-  emptyLabel?: string;
 }
 
 /** How many entries are shown per page. */
@@ -47,7 +40,6 @@ export function EntryList({
   notesByEntry,
   onChanged,
   readOnly = false,
-  emptyLabel = 'No entries yet.',
 }: EntryListProps) {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
@@ -75,7 +67,7 @@ export function EntryList({
   const visible = filtered.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
 
   if (entries.length === 0) {
-    return <p className="muted">{emptyLabel}</p>;
+    return <p className="muted">No entries yet.</p>;
   }
 
   return (

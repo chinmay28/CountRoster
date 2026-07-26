@@ -105,7 +105,7 @@ describe('current-period tab', () => {
       within(table)
         .getAllByRole('columnheader')
         .map((h) => h.textContent),
-    ).toEqual(['Time', 'Value', 'Running', '']);
+    ).toEqual(['Time', 'Value', 'Running']);
 
     // Three entries all told, but only today's two are tabulated — newest
     // first, and the Running column accumulates from the window's start, so
@@ -148,7 +148,7 @@ describe('current-period tab', () => {
     renderApp(test, `/trackers/${tracker.id}`);
 
     await screen.findByRole('tab', { name: 'Today' });
-    expect(windowRows('Today').at(-1)).toEqual(['1 entry', '6 glasses', '75%', '']);
+    expect(windowRows('Today').at(-1)).toEqual(['1 entry', '6 glasses', '75%']);
     expect(screen.getByRole('tabpanel', { name: 'Today' })).toHaveTextContent(
       '6 glasses of the 8 glasses target today.',
     );
@@ -191,30 +191,31 @@ describe('current-period tab', () => {
 
     await screen.findByRole('tab', { name: 'This month' });
     expect(windowRows('This month')[0]![2]).toBe('Coffee beans');
+    // The Note column only exists because this entry carries one.
+    expect(
+      within(within(screen.getByRole('tabpanel', { name: 'This month' })).getByRole('table'))
+        .getAllByRole('columnheader')
+        .map((h) => h.textContent),
+    ).toEqual(['Time', 'Value', 'Note', 'Running']);
   });
 
-  it('edits an entry in place, and the window total follows', async () => {
+  it('reads but never writes — editing belongs to the All entries tab', async () => {
     const tracker = await seedDaily(test);
     const user = userEvent.setup();
     renderApp(test, `/trackers/${tracker.id}`);
 
     await screen.findByRole('tab', { name: 'Today' });
-    const panel = () => screen.getByRole('tabpanel', { name: 'Today' });
-    expect(windowRows('Today').at(-1)!.slice(0, 2)).toEqual(['2 entries', '3 glasses']);
+    const panel = screen.getByRole('tabpanel', { name: 'Today' });
+    for (const action of ['Edit', 'Delete']) {
+      expect(within(panel).queryByRole('button', { name: action })).not.toBeInTheDocument();
+    }
+    // …and says where they went, so they don't look mislaid.
+    expect(panel).toHaveTextContent('Edit or delete on the All entries tab.');
 
-    await user.click(within(panel()).getAllByRole('button', { name: 'Edit' })[0]!);
-    // The editing row's own number input — not the Log section's Value field,
-    // which is a separate form further up the page.
-    const value = within(panel()).getByRole('spinbutton');
-    await user.clear(value);
-    await user.type(value, '5');
-    await user.click(within(panel()).getByRole('button', { name: 'Save' }));
-
-    // 1 + 5, reflected in the footer (the summary card says "6 glasses" too,
-    // so wait on the table's own total rather than the first match on screen).
-    await waitFor(() =>
-      expect(windowRows('Today').at(-1)!.slice(0, 2)).toEqual(['2 entries', '6 glasses']),
-    );
+    await user.click(screen.getByRole('tab', { name: 'All entries' }));
+    const timeline = screen.getByRole('tabpanel', { name: 'All entries' });
+    expect(within(timeline).getAllByRole('button', { name: 'Edit' })).not.toHaveLength(0);
+    expect(within(timeline).getAllByRole('button', { name: 'Delete' })).not.toHaveLength(0);
   });
 
   it('reads a snapshot tracker’s window as levels, not a sum', async () => {
@@ -236,7 +237,7 @@ describe('current-period tab', () => {
       within(table)
         .getAllByRole('columnheader')
         .map((h) => h.textContent),
-    ).toEqual(['Time', 'Reading', 'Change', '']);
+    ).toEqual(['Time', 'Reading', 'Change']);
 
     const rows = windowRows('This month');
     // Newest first: 179 is a 2 lb drop from the 181 before it…
