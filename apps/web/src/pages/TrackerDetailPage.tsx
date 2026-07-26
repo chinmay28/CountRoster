@@ -7,6 +7,7 @@ import { CompositionSection } from '../components/CompositionSection.tsx';
 import { EntryFieldsInput } from '../components/EntryFieldsInput.tsx';
 import { FieldBreakdownSection } from '../components/FieldBreakdownSection.tsx';
 import { EntryList } from '../components/EntryList.tsx';
+import { EntryTable } from '../components/EntryTable.tsx';
 import { MultiLogPanel } from '../components/MultiLogPanel.tsx';
 import { NotesSection } from '../components/NotesSection.tsx';
 import { PeriodTable } from '../components/PeriodTable.tsx';
@@ -179,7 +180,7 @@ export function TrackerDetailPage() {
   // resets has no window of its own; months are the readable default.
   const activeEntryTab = entryTab ?? 'current';
   const currentPeriod = periodForReset(tracker.reset_period);
-  const currentRange = currentPeriodRange(currentPeriod, tracker.week_start);
+  const currentRange = currentPeriodRange(currentPeriod, tracker);
   const currentLabel = currentPeriodLabel(currentPeriod);
   const currentEntries = filterInRange(entries, currentRange);
 
@@ -469,35 +470,15 @@ export function TrackerDetailPage() {
 
         {activeEntryTab === 'current' && (
           <div role="tabpanel" id="entrypanel-current" aria-labelledby="entrytab-current">
-            {/* Only worth a line when there is something to summarize —
-                otherwise the list's own empty state says it once, clearly. */}
-            {currentEntries.length > 0 && (
-              <p className="muted detail__period-summary">
-                {/* A snapshot tracker's readings are levels; there is no
-                    "so far" total to quote, so name the latest reading. */}
-                {isSnapshot
-                  ? `${formatValue(tracker, latestValue(currentEntries))} latest · ${
-                      currentEntries.length
-                    } reading${
-                      currentEntries.length === 1 ? '' : 's'
-                    } ${currentLabel.toLowerCase()}`
-                  : `${formatValue(tracker, sumValues(currentEntries))} ${currentLabel.toLowerCase()} · ${
-                      currentEntries.length
-                    } ${currentEntries.length === 1 ? 'entry' : 'entries'}`}
-                {!isSnapshot && tracker.target != null && tracker.reset_period !== 'never'
-                  ? ` · ${Math.round(
-                      (sumValues(currentEntries) / tracker.target) * 100,
-                    )}% of ${formatNumber(tracker.target, tracker.unit)}`
-                  : ''}
-              </p>
-            )}
-            <EntryList
+            <EntryTable
               tracker={tracker}
               entries={currentEntries}
+              fields={fields}
               notesByEntry={notesByEntry}
               onChanged={refresh}
               readOnly={isDerived}
-              emptyLabel={`Nothing logged ${currentLabel.toLowerCase()} yet.`}
+              windowLabel={currentLabel.toLowerCase()}
+              windowPeriod={currentPeriod}
             />
           </div>
         )}

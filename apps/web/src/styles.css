@@ -2453,9 +2453,25 @@ input.txn__name:focus {
   background: var(--bg);
 }
 
-/* The one-line "6 glasses today · 3 entries · 75% of 8" above the current
-   period's entries. */
-.detail__period-summary {
-  margin: 0.75rem 0 0.5rem;
-  font-size: 0.9rem;
+/* The current window's entries share the per-period table's chrome. Their
+   note column is the one place free text lands in a table, so it wraps
+   instead of forcing the row wide. */
+.periods__note-cell {
+  white-space: normal;
+  min-width: 8rem;
+  max-width: 20rem;
+}
+.periods__actions {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+/* The edit form doesn't fit the columns, so it takes the whole row. */
+.entry-row--editing > td {
+  white-space: normal;
+}
+
+/* Field answers inside a table cell sit on one line rather than under a row. */
+.periods__chips {
+  margin: 0;
 }

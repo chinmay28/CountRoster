@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { CoreValueProvider } from './CoreContext.tsx';
@@ -70,7 +70,21 @@ function tableRows(): string[][] {
 }
 
 describe('current-period tab', () => {
-  it('opens on the reset window and lists only its entries', async () => {
+  /** The entry table's body rows, as arrays of cell text. */
+  function windowRows(label: string): string[][] {
+    const table = within(screen.getByRole('tabpanel', { name: label })).getByRole('table');
+    return within(table)
+      .getAllByRole('row')
+      .slice(1) // drop the header
+      .map((row) =>
+        [
+          ...within(row).queryAllByRole('rowheader'),
+          ...within(row).queryAllByRole('cell'),
+        ].map((cell) => cell.textContent?.trim() ?? ''),
+      );
+  }
+
+  it('opens on the reset window and tabulates only its entries', async () => {
     const tracker = await seedDaily(test);
     renderApp(test, `/trackers/${tracker.id}`);
 
@@ -86,10 +100,23 @@ describe('current-period tab', () => {
       );
     }
 
-    // Three entries all told, but only today's two are listed.
-    const panel = screen.getByRole('tabpanel', { name: 'Today' });
-    expect(within(panel).getAllByRole('listitem')).toHaveLength(2);
-    expect(panel).toHaveTextContent('3 glasses today · 2 entries');
+    const table = within(screen.getByRole('tabpanel', { name: 'Today' })).getByRole('table');
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((h) => h.textContent),
+    ).toEqual(['Time', 'Value', 'Running', '']);
+
+    // Three entries all told, but only today's two are tabulated — newest
+    // first, and the Running column accumulates from the window's start, so
+    // the top row carries the window total.
+    const rows = windowRows('Today');
+    expect(rows).toHaveLength(3); // 2 entries + the footer
+    expect(rows[0]![1]).toBe('2 glasses'); // 14:00, the later of the two
+    expect(rows[0]![2]).toBe('3 glasses'); // running: 1 + 2
+    expect(rows[1]![1]).toBe('1 glasses'); // 09:00
+    expect(rows[1]![2]).toBe('1 glasses');
+    expect(rows[2]!.slice(0, 2)).toEqual(['2 entries', '3 glasses']);
   });
 
   it('names the window after the tracker’s reset period', async () => {
@@ -121,8 +148,9 @@ describe('current-period tab', () => {
     renderApp(test, `/trackers/${tracker.id}`);
 
     await screen.findByRole('tab', { name: 'Today' });
+    expect(windowRows('Today').at(-1)).toEqual(['1 entry', '6 glasses', '75%', '']);
     expect(screen.getByRole('tabpanel', { name: 'Today' })).toHaveTextContent(
-      '6 glasses today · 1 entry · 75% of 8 glasses',
+      '6 glasses of the 8 glasses target today.',
     );
   });
 
@@ -140,6 +168,29 @@ describe('current-period tab', () => {
     const panel = screen.getByRole('tabpanel', { name: 'Today' });
     expect(panel).toHaveTextContent('Nothing logged today yet.');
     expect(panel).not.toHaveTextContent('No entries yet.');
+    expect(within(panel).queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('shows the note attached to an entry in its own column', async () => {
+    const tracker = await test.createTracker({
+      name: 'Spend',
+      kind: 'number',
+      reset_period: 'monthly',
+      unit: '$',
+    });
+    const entry = await test.core.entries.log(tracker.id, {
+      value: 12,
+      occurred_at: daysAgo(0, 9),
+    });
+    await test.core.notes.create({
+      tracker_id: tracker.id,
+      entry_id: entry.id,
+      body: 'Coffee beans',
+    });
+    renderApp(test, `/trackers/${tracker.id}`);
+
+    await screen.findByRole('tab', { name: 'This month' });
+    expect(windowRows('This month')[0]![2]).toBe('Coffee beans');
   });
 
   it('edits an entry in place, and the window total follows', async () => {
@@ -148,21 +199,25 @@ describe('current-period tab', () => {
     renderApp(test, `/trackers/${tracker.id}`);
 
     await screen.findByRole('tab', { name: 'Today' });
-    const panel = screen.getByRole('tabpanel', { name: 'Today' });
-    expect(panel).toHaveTextContent('3 glasses today');
+    const panel = () => screen.getByRole('tabpanel', { name: 'Today' });
+    expect(windowRows('Today').at(-1)!.slice(0, 2)).toEqual(['2 entries', '3 glasses']);
 
-    await user.click(within(panel).getAllByRole('button', { name: 'Edit' })[0]!);
+    await user.click(within(panel()).getAllByRole('button', { name: 'Edit' })[0]!);
     // The editing row's own number input — not the Log section's Value field,
     // which is a separate form further up the page.
-    const value = within(panel).getByRole('spinbutton');
+    const value = within(panel()).getByRole('spinbutton');
     await user.clear(value);
     await user.type(value, '5');
-    await user.click(within(panel).getByRole('button', { name: 'Save' }));
+    await user.click(within(panel()).getByRole('button', { name: 'Save' }));
 
-    await screen.findByText(/6 glasses today/);
+    // 1 + 5, reflected in the footer (the summary card says "6 glasses" too,
+    // so wait on the table's own total rather than the first match on screen).
+    await waitFor(() =>
+      expect(windowRows('Today').at(-1)!.slice(0, 2)).toEqual(['2 entries', '6 glasses']),
+    );
   });
 
-  it('reads a snapshot tracker’s window as its latest reading', async () => {
+  it('reads a snapshot tracker’s window as levels, not a sum', async () => {
     const tracker = await test.createTracker({
       name: 'Weight',
       kind: 'number',
@@ -173,11 +228,24 @@ describe('current-period tab', () => {
     await test.core.entries.log(tracker.id, { value: 179, occurred_at: daysAgo(0, 20) });
     renderApp(test, `/trackers/${tracker.id}`);
 
-    // Levels don't add up: 181 + 179 would be nonsense.
     await screen.findByRole('tab', { name: 'This month' });
-    expect(screen.getByRole('tabpanel', { name: 'This month' })).toHaveTextContent(
-      '179 lb latest · 2 readings this month',
+    const table = within(screen.getByRole('tabpanel', { name: 'This month' })).getByRole(
+      'table',
     );
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((h) => h.textContent),
+    ).toEqual(['Time', 'Reading', 'Change', '']);
+
+    const rows = windowRows('This month');
+    // Newest first: 179 is a 2 lb drop from the 181 before it…
+    expect(rows[0]![1]).toBe('179 lb');
+    expect(rows[0]![2]).toContain('▼ 2 lb');
+    // …and the first reading of the window has nothing to step from.
+    expect(rows[1]![2]).toBe('—');
+    // The "total" is the latest level — 181 + 179 would be nonsense.
+    expect(rows[2]!.slice(0, 2)).toEqual(['2 entries', '179 lb']);
   });
 });
 
@@ -257,7 +325,10 @@ describe('period table', () => {
       'aria-selected',
       'true',
     );
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    // That tab's table lists entries, not periods.
+    expect(
+      within(screen.getByRole('table')).getByRole('columnheader', { name: 'Time' }),
+    ).toBeInTheDocument();
   });
 
   it('reads a snapshot tracker as levels, not sums', async () => {
