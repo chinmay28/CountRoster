@@ -174,20 +174,6 @@ describe('quick log — keypad (number)', () => {
     });
   });
 
-  it('offers the amounts this tracker is actually logged with, and logs one on tap', async () => {
-    const user = userEvent.setup();
-    const t = await test.createTracker({ name: 'Spending', kind: 'number', default_value: 1 });
-    for (const value of [7, 7, 7, 20]) await test.core.entries.log(t.id, { value });
-    renderQuick(test, `/trackers/${t.id}/quick`);
-
-    await user.click(await screen.findByRole('button', { name: 'Log 7' }));
-    await waitFor(async () => {
-      const entries = await test.core.entries.forTracker(t.id);
-      expect(entries).toHaveLength(5);
-      expect(entries[4]!.value).toBe(7);
-    });
-  });
-
   it('cannot log an empty amount', async () => {
     const t = await test.createTracker({ name: 'Spending', kind: 'number' });
     renderQuick(test, `/trackers/${t.id}/quick`);
@@ -363,11 +349,13 @@ describe('quick log — backdating', () => {
   it('keeps the chosen time across entries, instead of resetting on each log', async () => {
     const user = userEvent.setup();
     const when = hoursAgo(3);
-    const t = await test.createTracker({ name: 'Feeds', kind: 'number', default_value: 30 });
+    const t = await test.createTracker({ name: 'Feeds', kind: 'number' });
     renderQuick(test, `/trackers/${t.id}/quick`);
 
     await pickWhen(user, when);
-    await user.click(screen.getByRole('button', { name: 'Log 30' }));
+    await user.click(screen.getByRole('button', { name: '3' }));
+    await user.click(screen.getByRole('button', { name: '0' }));
+    await user.click(screen.getByRole('button', { name: 'Log entry' }));
     await waitFor(async () => {
       expect(await test.core.entries.forTracker(t.id)).toHaveLength(1);
     });
@@ -376,7 +364,9 @@ describe('quick log — backdating', () => {
     // the chosen time (and a half-typed note) on the floor.
     expect(screen.getByRole('button', { name: /^Logging at Today,/ })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Log 30' }));
+    await user.click(screen.getByRole('button', { name: '3' }));
+    await user.click(screen.getByRole('button', { name: '0' }));
+    await user.click(screen.getByRole('button', { name: 'Log entry' }));
     await waitFor(async () => {
       const entries = await test.core.entries.forTracker(t.id);
       expect(entries).toHaveLength(2);

@@ -108,8 +108,8 @@ Visualizations & organization:
   the quick screen. The
   control follows the tracker's kind: counts and yes/no habits get a single big
   tap target that logs the default value, amounts that vary (money, durations)
-  get an on-screen keypad with preset chips mined from that tracker's own
-  history, and snapshot stats get a stepper that starts from the last reading.
+  get an on-screen keypad, and snapshot stats get a stepper that starts from the
+  last reading.
   Nothing asks for confirmation — a five-second undo bar takes the entry (and any
   note logged with it) back. A "Now" chip opens a picker for backdating the feed
   you're logging an hour late; a chosen time sticks until it's cleared, and the

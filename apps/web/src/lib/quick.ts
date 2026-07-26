@@ -41,39 +41,6 @@ export interface QuickPanelProps {
   onLog: (value: number, note?: string, occurredAt?: string) => void;
 }
 
-/** How many of the most recent entries the preset amounts are mined from. */
-const PRESET_SAMPLE = 60;
-
-/**
- * The amounts this tracker is actually logged with, most-used first — the
- * quick screen's preset chips. Mined from the tail of the entry history
- * (which arrives oldest-first) so the presets follow how the tracker is used
- * now, not how it was used a year ago.
- *
- * Ties break toward the more recently used value. `exclude` drops amounts
- * already offered elsewhere on the screen (the tracker's default value has
- * its own chip).
- */
-export function topValues(
-  entries: readonly Entry[],
-  { limit = 3, exclude = [] }: { limit?: number; exclude?: readonly number[] } = {},
-): number[] {
-  const recent = entries.slice(-PRESET_SAMPLE);
-  const excluded = new Set(exclude);
-  // value → how often it occurs, and how far along the sample it last
-  // appeared (higher = more recent).
-  const seen = new Map<number, { count: number; lastAt: number }>();
-  recent.forEach((entry, index) => {
-    if (excluded.has(entry.value)) return;
-    const prev = seen.get(entry.value);
-    seen.set(entry.value, { count: (prev?.count ?? 0) + 1, lastAt: index });
-  });
-  return [...seen.entries()]
-    .sort((a, b) => b[1].count - a[1].count || b[1].lastAt - a[1].lastAt)
-    .slice(0, limit)
-    .map(([value]) => value);
-}
-
 /**
  * The step the snapshot stepper moves by. The tracker's default value is the
  * user's own statement of "one unit of this" (0.2 lb, 1 point), so honor it;
