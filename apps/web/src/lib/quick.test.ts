@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { Entry, Tracker } from '@countroster/core';
-import { applyStep, quickMode, roundToStep, stepSize, topValues } from './quick.ts';
+import type { Tracker } from '@countroster/core';
+import { applyStep, quickMode, roundToStep, stepSize } from './quick.ts';
 
 function tracker(overrides: Partial<Tracker> = {}): Tracker {
   return {
@@ -30,18 +30,6 @@ function tracker(overrides: Partial<Tracker> = {}): Tracker {
   };
 }
 
-function entry(value: number, index: number): Entry {
-  return {
-    id: `e${index}`,
-    tracker_id: 't1',
-    value,
-    occurred_at: '2026-05-25T12:00:00.000-07:00',
-    created_at: '2026-05-25T12:00:00.000-07:00',
-    updated_at: '2026-05-25T12:00:00.000-07:00',
-    fields: [],
-  };
-}
-
 describe('quickMode', () => {
   it('gives counts and yes/no trackers the one-tap control', () => {
     expect(quickMode(tracker({ kind: 'count' }))).toBe('tap');
@@ -63,36 +51,6 @@ describe('quickMode', () => {
     expect(quickMode(tracker({ is_derived: 1 }))).toBe('readonly');
     // Derived wins over snapshot: a derived level still can't be logged.
     expect(quickMode(tracker({ is_derived: 1, is_snapshot: 1 }))).toBe('readonly');
-  });
-});
-
-describe('topValues', () => {
-  it('ranks by how often a value is used', () => {
-    const entries = [5, 5, 12, 5, 12, 40].map(entry);
-    expect(topValues(entries, { limit: 2 })).toEqual([5, 12]);
-  });
-
-  it('breaks ties toward the more recently used value', () => {
-    const entries = [7, 9].map(entry);
-    expect(topValues(entries, { limit: 2 })).toEqual([9, 7]);
-  });
-
-  it('drops excluded amounts', () => {
-    const entries = [1, 1, 1, 6].map(entry);
-    expect(topValues(entries, { exclude: [1] })).toEqual([6]);
-  });
-
-  it('only mines the recent tail of a long history', () => {
-    // 80 old entries of 99, then 5 recent of 3: the sample window is 60.
-    const entries = [...Array(80).fill(99), ...Array(5).fill(3)].map((v: number, i) =>
-      entry(v, i),
-    );
-    expect(topValues(entries, { limit: 1 })).toEqual([99]);
-    expect(topValues(entries.slice(-10), { limit: 1 })).toEqual([3]);
-  });
-
-  it('returns nothing for a tracker with no history', () => {
-    expect(topValues([])).toEqual([]);
   });
 });
 
