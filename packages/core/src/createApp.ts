@@ -2,6 +2,7 @@ import type { Storage } from './storage/adapter.js';
 import { systemClock, type Clock } from './time.js';
 import { createMigrationRunner, type MigrationRunner } from './migrations/runner.js';
 import { createTrackerService, type TrackerService } from './domain/trackers.js';
+import { createFieldService, type FieldService } from './domain/fields.js';
 import { createEntryService, type EntryService } from './domain/entries.js';
 import { createNoteService, type NoteService } from './domain/notes.js';
 import { createGroupService, type GroupService } from './domain/groups.js';
@@ -18,6 +19,7 @@ import { createBackupService, type BackupService } from './backup/bundle.js';
  */
 export interface CountRosterCore {
   trackers: TrackerService;
+  fields: FieldService;
   entries: EntryService;
   notes: NoteService;
   groups: GroupService;
@@ -40,6 +42,7 @@ export function createApp(
 
   return {
     trackers: createTrackerService(storage, clock),
+    fields: createFieldService(storage, clock),
     entries: createEntryService(storage, clock),
     notes: createNoteService(storage, clock),
     groups: createGroupService(storage, clock),

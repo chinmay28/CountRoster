@@ -3,6 +3,7 @@ import type { Clock } from '../time.js';
 import type { Tracker } from '../schema/tables.js';
 import type { TimeRange } from '../domain/entries.js';
 import { effectiveEntrySource } from '../domain/derived.js';
+import { FieldNotFoundError, FieldValueError } from '../domain/fields.js';
 import {
   bucketStart,
   bucketEnd,
@@ -49,6 +50,25 @@ export interface CompositionSlice {
   count: number;
 }
 
+/**
+ * One bucket of a custom-field breakdown: how much of a tracker's total was
+ * logged against a given answer.
+ */
+export interface FieldBreakdownSlice {
+  field_id: string;
+  /**
+   * Identifies the bucket — an option id for a `choice` field, "1"/"0" for a
+   * `flag`, the text itself for a `text` field, and "" for entries that left
+   * the field blank.
+   */
+  key: string;
+  label: string;
+  color: string | null;
+  /** Sum of the primary entry values recorded against this answer. */
+  total: number;
+  count: number;
+}
+
 export interface StatsService {
   /** Sum entry values into period buckets spanning [range.start, range.end). */
   bucket(
@@ -75,6 +95,23 @@ export interface StatsService {
    * CompositionSlice.total). Empty for an ordinary tracker.
    */
   composition(trackerId: string, range?: TimeRange): Promise<CompositionSlice[]>;
+
+  /**
+   * How a tracker's total splits across the answers recorded for one of its
+   * custom fields — the milk tracker's millilitres by "bottle / formula /
+   * breast", or by whether the diaper was wet.
+   *
+   * Every option is reported even when nothing was logged against it, so a
+   * legend doesn't reshuffle as the range moves. Entries that left the field
+   * blank land in their own "Not set" bucket rather than being folded into an
+   * answer they never gave. A `number` field has no distinct answers and is
+   * rejected.
+   */
+  fieldBreakdown(
+    trackerId: string,
+    fieldId: string,
+    range?: TimeRange,
+  ): Promise<FieldBreakdownSlice[]>;
 }
 
 export function createStatsService(
@@ -361,6 +398,108 @@ class StatsServiceImpl implements StatsService {
         ORDER BY l.sort_order ASC, l.created_at ASC`,
       [...params, trackerId],
     );
+  }
+
+  async fieldBreakdown(
+    trackerId: string,
+    fieldId: string,
+    range: TimeRange = {},
+  ): Promise<FieldBreakdownSlice[]> {
+    const fields = await this.storage.query<{ kind: string }>(
+      `SELECT id, kind FROM tracker_fields WHERE id = ? AND tracker_id = ?`,
+      [fieldId, trackerId],
+    );
+    if (fields.length === 0) throw new FieldNotFoundError(fieldId);
+    const kind = fields[0]!.kind;
+    if (kind === 'number') {
+      throw new FieldValueError(
+        'A number field has no distinct answers to break down; chart it instead.',
+      );
+    }
+
+    // LEFT JOIN so entries with no answer survive into the "Not set" group;
+    // julianday compares instants, since occurred_at carries a local offset.
+    const where: string[] = ['e.tracker_id = ?'];
+    const params: SqlParam[] = [fieldId, trackerId];
+    if (range.start !== undefined) {
+      where.push('julianday(e.occurred_at) >= julianday(?)');
+      params.push(range.start);
+    }
+    if (range.end !== undefined) {
+      where.push('julianday(e.occurred_at) < julianday(?)');
+      params.push(range.end);
+    }
+    const rows = await this.storage.query<{
+      option_id: string | null;
+      number_value: number | null;
+      text_value: string | null;
+      total: number;
+      count: number;
+    }>(
+      `SELECT v.option_id AS option_id,
+              v.number_value AS number_value,
+              v.text_value AS text_value,
+              COALESCE(SUM(e.value), 0) AS total,
+              COUNT(e.id) AS count
+         FROM entries e
+         LEFT JOIN entry_field_values v
+           ON v.entry_id = e.id AND v.field_id = ?
+        WHERE ${where.join(' AND ')}
+        GROUP BY v.option_id, v.number_value, v.text_value`,
+      params,
+    );
+
+    const byKey = new Map<string, { total: number; count: number }>();
+    const unset = { total: 0, count: 0 };
+    for (const row of rows) {
+      let key: string;
+      if (row.option_id != null) key = row.option_id;
+      else if (row.number_value != null) key = row.number_value !== 0 ? '1' : '0';
+      else if (row.text_value != null) key = row.text_value;
+      else {
+        unset.total += row.total;
+        unset.count += row.count;
+        continue;
+      }
+      const prev = byKey.get(key) ?? { total: 0, count: 0 };
+      byKey.set(key, { total: prev.total + row.total, count: prev.count + row.count });
+    }
+
+    const out: FieldBreakdownSlice[] = [];
+    const take = (key: string, label: string, color: string | null) => {
+      const bucket = byKey.get(key) ?? { total: 0, count: 0 };
+      out.push({ field_id: fieldId, key, label, color, ...bucket });
+      byKey.delete(key);
+    };
+
+    if (kind === 'choice') {
+      const options = await this.storage.query<{
+        id: string;
+        label: string;
+        color: string | null;
+      }>(
+        `SELECT id, label, color FROM tracker_field_options WHERE field_id = ?
+          ORDER BY sort_order ASC, id ASC`,
+        [fieldId],
+      );
+      for (const option of options) take(option.id, option.label, option.color);
+    } else if (kind === 'flag') {
+      take('1', 'Yes', null);
+      take('0', 'No', null);
+    } else {
+      // Free text has no declared set of answers, so the data is the legend:
+      // biggest contributor first, ties broken alphabetically for stability.
+      const keys = [...byKey.keys()].sort((a, b) => {
+        const diff = byKey.get(b)!.total - byKey.get(a)!.total;
+        return diff !== 0 ? diff : a.localeCompare(b);
+      });
+      for (const key of keys) take(key, key, null);
+    }
+
+    if (unset.count > 0) {
+      out.push({ field_id: fieldId, key: '', label: 'Not set', color: null, ...unset });
+    }
+    return out;
   }
 }
 

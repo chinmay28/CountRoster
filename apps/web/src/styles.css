@@ -2098,6 +2098,221 @@ input.txn__name:focus {
   padding: 0.25rem 0.5rem;
 }
 
+/* ---------------------------------------------------------------------------
+   Custom fields: the extra details an entry records alongside its value.
+   --------------------------------------------------------------------------- */
+
+/* The field-set editor on the tracker form. */
+.tracker-fields {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.75rem;
+}
+.tracker-fields legend {
+  font-size: 0.85rem;
+  color: var(--muted);
+  padding: 0 0.35rem;
+}
+.tracker-fields__row {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
+}
+.tracker-fields__head {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+.tracker-fields__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.tracker-fields__options {
+  display: grid;
+  gap: 0.4rem;
+  /* Indented so options read as belonging to the field above them. */
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--border);
+}
+.tracker-fields__option {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+.tracker-fields__row input[type='text'],
+.tracker-fields__row input[type='number'],
+.tracker-fields__row select {
+  font: inherit;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  min-width: 0;
+}
+/* The head's kind select can shrink; the name input keeps the room. */
+.tracker-fields__head select {
+  max-width: 11rem;
+}
+
+/* The answer controls, shared by every place an entry is written. */
+.entry-fields {
+  display: grid;
+  gap: 0.6rem;
+}
+.entry-fields__group {
+  display: grid;
+  gap: 0.35rem;
+}
+.entry-fields__label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.entry-fields__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.entry-fields__field input {
+  font: inherit;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* A tap target big enough for a thumb, since this is the quick-log path. */
+.pill {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.45rem 0.85rem;
+  min-height: 2.4rem;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.pill--on {
+  font-weight: 650;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-ink);
+}
+.pill:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The quick screen's answers sit between the headline and the control. */
+.quick__fields {
+  width: min(28rem, 100%);
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+/* On a painted screen the controls ride on the tracker's color. */
+.quick--painted .quick__fields .entry-fields__label {
+  color: color-mix(in srgb, var(--quick-ink) 75%, transparent);
+}
+.quick--painted .quick__fields .pill {
+  background: color-mix(in srgb, var(--quick-ink) 12%, transparent);
+  border-color: color-mix(in srgb, var(--quick-ink) 40%, transparent);
+  color: var(--quick-ink);
+}
+
+/* Answers as they read back on an entry row. */
+.entry__chips {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.chip {
+  font-size: 0.78rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+}
+
+/* The breakdown card: a stacked bar plus its legend. */
+.breakdown__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.breakdown__selects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.breakdown__selects select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+.breakdown__subtitle {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.85rem;
+}
+.breakdown__bar {
+  display: flex;
+  height: 1.25rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--border);
+}
+.breakdown__segment {
+  height: 100%;
+  /* Hairline gaps between segments so adjacent colors stay distinguishable. */
+  box-shadow: inset -1px 0 0 var(--surface);
+}
+.breakdown__legend {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.breakdown__item {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.breakdown__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  align-self: center;
+}
+.breakdown__name {
+  font-weight: 600;
+}
+.breakdown__share {
+  font-size: 0.85rem;
+  margin-left: auto;
+}
+
 /* Honour users who prefer reduced motion. */
 @media (prefers-reduced-motion: reduce) {
   * {

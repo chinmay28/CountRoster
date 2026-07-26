@@ -10,6 +10,7 @@ import (
 // migrations (migrate.Run) before serving.
 type App struct {
 	Trackers     *TrackerService
+	Fields       *FieldService
 	Entries      *EntryService
 	Notes        *NoteService
 	Groups       *GroupService
@@ -24,6 +25,7 @@ func New(st storage.Storage, clock timeutil.Clock) *App {
 	}
 	return &App{
 		Trackers:     &TrackerService{st: st, clock: clock},
+		Fields:       &FieldService{st: st, clock: clock},
 		Entries:      &EntryService{st: st, clock: clock},
 		Notes:        &NoteService{st: st, clock: clock},
 		Groups:       &GroupService{st: st, clock: clock},

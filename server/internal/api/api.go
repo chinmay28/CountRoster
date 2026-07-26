@@ -57,6 +57,8 @@ func New(app *core.App, bk *backup.Service, file FileSource) http.Handler {
 	mux.HandleFunc("POST /api/trackers/{id}/unarchive", s.unarchiveTracker)
 	mux.HandleFunc("GET /api/trackers/{id}/links", s.trackerLinks)
 	mux.HandleFunc("PUT /api/trackers/{id}/links", s.setTrackerLinks)
+	mux.HandleFunc("GET /api/trackers/{id}/fields", s.trackerFields)
+	mux.HandleFunc("PUT /api/trackers/{id}/fields", s.setTrackerFields)
 	mux.HandleFunc("DELETE /api/trackers/{id}", s.deleteTracker)
 
 	// Entries.
@@ -101,6 +103,7 @@ func New(app *core.App, bk *backup.Service, file FileSource) http.Handler {
 	mux.HandleFunc("GET /api/trackers/{id}/stats/streak", s.statsStreak)
 	mux.HandleFunc("GET /api/trackers/{id}/stats/target-progress", s.statsTargetProgress)
 	mux.HandleFunc("GET /api/trackers/{id}/stats/composition", s.statsComposition)
+	mux.HandleFunc("GET /api/trackers/{id}/stats/field-breakdown", s.statsFieldBreakdown)
 
 	// Backup.
 	mux.HandleFunc("GET /api/backup/manifest", s.backupManifest)
@@ -402,6 +405,43 @@ func (s *server) setTrackerLinks(w http.ResponseWriter, r *http.Request) {
 	}
 	if out == nil {
 		out = []core.TrackerLink{}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *server) trackerFields(w http.ResponseWriter, r *http.Request) {
+	fields, err := s.app.Fields.List(r.PathValue("id"))
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	if fields == nil {
+		fields = []*core.TrackerField{}
+	}
+	writeJSON(w, http.StatusOK, fields)
+}
+
+func (s *server) setTrackerFields(w http.ResponseWriter, r *http.Request) {
+	body, ok := decodeBody(w, r)
+	if !ok {
+		return
+	}
+	fieldsField := bodyField(body, "fields")
+	if fieldsField == nil {
+		fieldsField = []any{}
+	}
+	inputs, err := core.ParseTrackerFieldsInput(fieldsField)
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	out, err := s.app.Fields.Replace(r.PathValue("id"), inputs)
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	if out == nil {
+		out = []*core.TrackerField{}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -818,6 +858,25 @@ func (s *server) statsComposition(w http.ResponseWriter, r *http.Request) {
 	}
 	if slices == nil {
 		slices = []core.CompositionSlice{}
+	}
+	writeJSON(w, http.StatusOK, slices)
+}
+
+func (s *server) statsFieldBreakdown(w http.ResponseWriter, r *http.Request) {
+	fieldID := r.URL.Query().Get("field_id")
+	if fieldID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "field_id is required",
+		})
+		return
+	}
+	slices, err := s.app.Stats.FieldBreakdown(r.PathValue("id"), fieldID, timeRange(r))
+	if err != nil {
+		handleErr(w, err)
+		return
+	}
+	if slices == nil {
+		slices = []core.FieldBreakdownSlice{}
 	}
 	writeJSON(w, http.StatusOK, slices)
 }

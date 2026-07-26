@@ -1,17 +1,21 @@
 import { useMemo, useState } from 'react';
-import type { Entry, Note, Tracker } from '@countroster/core';
+import type { Entry, Note, Tracker, TrackerField } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
 import { NoteHistory } from './NoteItem.tsx';
+import { EntryFieldsInput } from './EntryFieldsInput.tsx';
 import {
   formatValue,
   formatDateTime,
   toDatetimeLocalValue,
   fromDatetimeLocalValue,
 } from '../lib/format.ts';
+import { answersFromEntry, entryChips, type FieldAnswers } from '../lib/fields.ts';
 
 interface EntryListProps {
   tracker: Tracker;
   entries: Entry[];
+  /** The tracker's custom fields, so each entry can show and edit its answers. */
+  fields?: readonly TrackerField[];
   /** Notes linked to an entry, keyed by `entry_id`. */
   notesByEntry?: Map<string, Note[]>;
   onChanged: () => void;
@@ -32,6 +36,7 @@ const PAGE_SIZE = 10;
 export function EntryList({
   tracker,
   entries,
+  fields = [],
   notesByEntry,
   onChanged,
   readOnly = false,
@@ -39,18 +44,21 @@ export function EntryList({
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
 
-  // Newest first, then narrowed to entries whose linked note matches the
-  // search. An empty query keeps everything (including note-less entries).
+  // Newest first, then narrowed to entries whose linked note — or whose
+  // custom-field answers — match the search, so "bottle" finds the feeds
+  // logged that way even when nothing was written about them.
   const filtered = useMemo(() => {
     const newestFirst = entries.slice().reverse();
     const q = query.trim().toLowerCase();
     if (!q) return newestFirst;
-    return newestFirst.filter((entry) =>
-      (notesByEntry?.get(entry.id) ?? []).some((n) =>
-        n.body.toLowerCase().includes(q),
-      ),
+    return newestFirst.filter(
+      (entry) =>
+        (notesByEntry?.get(entry.id) ?? []).some((n) =>
+          n.body.toLowerCase().includes(q),
+        ) ||
+        entryChips(entry, fields).some((chip) => chip.label.toLowerCase().includes(q)),
     );
-  }, [entries, notesByEntry, query]);
+  }, [entries, fields, notesByEntry, query]);
 
   // Deleting the last entry of a trailing page (or narrowing the search) can
   // leave `page` past the end — clamp rather than showing an empty page.
@@ -67,7 +75,9 @@ export function EntryList({
       <input
         type="search"
         className="entry-browser__search"
-        placeholder="Search entries by note…"
+        placeholder={
+          fields.length > 0 ? 'Search entries by note or detail…' : 'Search entries by note…'
+        }
         aria-label="Search entries by note"
         value={query}
         onChange={(e) => {
@@ -85,6 +95,7 @@ export function EntryList({
               key={readOnly ? `${entry.id}-${current * PAGE_SIZE + i}` : entry.id}
               tracker={tracker}
               entry={entry}
+              fields={fields}
               note={notesByEntry?.get(entry.id)?.[0] ?? null}
               onChanged={onChanged}
               readOnly={readOnly}
@@ -123,12 +134,14 @@ export function EntryList({
 function EntryRow({
   tracker,
   entry,
+  fields,
   note,
   onChanged,
   readOnly,
 }: {
   tracker: Tracker;
   entry: Entry;
+  fields: readonly TrackerField[];
   /** The single note describing this entry, if any. */
   note: Note | null;
   onChanged: () => void;
@@ -139,24 +152,32 @@ function EntryRow({
   const [value, setValue] = useState(String(entry.value));
   const [when, setWhen] = useState(toDatetimeLocalValue(entry.occurred_at));
   const [noteBody, setNoteBody] = useState(note?.body ?? '');
+  const [answers, setAnswers] = useState<FieldAnswers>({});
   const [showHistory, setShowHistory] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const chips = entryChips(entry, fields);
 
   function startEditing() {
     setValue(String(entry.value));
     setWhen(toDatetimeLocalValue(entry.occurred_at));
     setNoteBody(note?.body ?? '');
+    setAnswers(answersFromEntry(entry, fields));
+    setError(null);
     setShowHistory(false);
     setEditing(true);
   }
 
   async function save() {
     setBusy(true);
+    setError(null);
     try {
       const occurredAt = fromDatetimeLocalValue(when);
       await core.entries.update(entry.id, {
         value: Number(value),
         occurred_at: occurredAt,
+        // Every field the form showed is sent, so clearing one sticks.
+        ...(fields.length > 0 ? { fields: answers } : {}),
       });
       // A single note per entry, edited right here in the entry's edit flow.
       const body = noteBody.trim();
@@ -176,6 +197,8 @@ function EntryRow({
       }
       setEditing(false);
       onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
@@ -209,6 +232,15 @@ function EntryRow({
             onChange={(e) => setWhen(e.target.value)}
           />
         </div>
+        {fields.length > 0 && (
+          <EntryFieldsInput
+            fields={fields}
+            answers={answers}
+            onChange={setAnswers}
+            disabled={busy}
+            accent={tracker.color}
+          />
+        )}
         <textarea
           className="entry__note-input"
           rows={2}
@@ -216,6 +248,7 @@ function EntryRow({
           value={noteBody}
           onChange={(e) => setNoteBody(e.target.value)}
         />
+        {error && <p className="error">{error}</p>}
         <div className="entry__actions">
           {note && (
             <button
@@ -254,6 +287,27 @@ function EntryRow({
           </div>
         )}
       </div>
+
+      {chips.length > 0 && (
+        <ul className="entry__chips">
+          {chips.map((chip) => (
+            <li
+              key={chip.key}
+              className="chip"
+              style={
+                chip.color
+                  ? {
+                      borderColor: chip.color,
+                      background: `color-mix(in srgb, ${chip.color} 18%, transparent)`,
+                    }
+                  : undefined
+              }
+            >
+              {chip.label}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {note && <p className="entry__note">{note.body}</p>}
     </li>

@@ -69,6 +69,7 @@ func TestCreatesEveryExpectedTable(t *testing.T) {
 		"app_meta", "entries", "note_edits", "notes", "reminders",
 		"tracker_group_memberships", "tracker_groups", "tracker_links",
 		"tracker_options", "trackers",
+		"tracker_fields", "tracker_field_options", "entry_field_values",
 	} {
 		if !names[expected] {
 			t.Errorf("missing table %s", expected)

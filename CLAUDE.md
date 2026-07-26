@@ -67,7 +67,7 @@ The PWA is compiled against the REST API's exact shapes: snake_case JSON field n
 
 ### Composition root
 
-`cmd/countroster/main.go` does: open storage → `migrate.Run` → `core.New(storage, clock)` → `api.New(...)` → serve. `core.App` bundles the services (`Trackers`, `Entries`, `Notes`, `Groups`, `Stats`, `Transactions`); backup is `backup.Service`.
+`cmd/countroster/main.go` does: open storage → `migrate.Run` → `core.New(storage, clock)` → `api.New(...)` → serve. `core.App` bundles the services (`Trackers`, `Fields`, `Entries`, `Notes`, `Groups`, `Stats`, `Transactions`); backup is `backup.Service`.
 
 ### Service layer (`server/internal/core`)
 
@@ -79,6 +79,14 @@ Pattern across all services (ported from the TS core):
 - **Never call `time.Now()` for persisted timestamps.** Go through the injected `Clock` (`internal/timeutil`) so tests are deterministic. Timestamps are stored as **ISO 8601 with a local offset** (`ToLocalISO`), not UTC `Z` — the offset is needed for correct local-day bucketing. SQL range comparisons use `julianday()` so mixed offsets compare as instants.
 
 Errors map to HTTP in `api.handleErr`: `ValidationError`→400, `NotFoundError`→404, `DerivedTrackerError`→400, `TrackerInUseError`→409, anything else→500.
+
+### Trackers carry custom fields; entries carry the answers
+
+A tracker's `value` is *how much*; a `tracker_fields` row is anything else worth recording per entry (`choice`, `flag`, `number`, `text`), and `entry_field_values` holds one entry's answer to one field. The column an answer lands in follows the field's kind — `choice → option_id`, `flag`/`number → number_value`, `text → text_value` — so a choice answer is a real foreign key into `tracker_field_options`, not a string.
+
+Over the wire an `Entry` grows a `fields` array (always present, `[]` when there are none); writes take the inverse `"fields": {"<field_id>": answer}` map, and a patch rewrites only the fields it names. Answers are resolved and validated *before* the entry row is inserted, so a rejected one never leaves a half-described entry. `FieldService.Replace` is a wholesale replace that honors supplied ids — that's what lets a rename keep the answers already filed against a field.
+
+**No field is ever mandatory** — leaving one blank is always valid, and there is no `required` flag by design. That's what stops a new field from invalidating entries logged before it, or from breaking a client that doesn't know about it. Don't add one. See `DESIGN.md` §6.6.
 
 ### Notes carry an append-only edit log
 

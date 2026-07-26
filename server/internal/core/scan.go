@@ -85,6 +85,42 @@ func entryFromRow(r storage.Row) *Entry {
 		OccurredAt: asString(r.Get("occurred_at")),
 		CreatedAt:  asString(r.Get("created_at")),
 		UpdatedAt:  asString(r.Get("updated_at")),
+		Fields:     []EntryFieldValue{},
+	}
+}
+
+func trackerFieldFromRow(r storage.Row) *TrackerField {
+	return &TrackerField{
+		ID:        asString(r.Get("id")),
+		TrackerID: asString(r.Get("tracker_id")),
+		Name:      asString(r.Get("name")),
+		Kind:      asString(r.Get("kind")),
+		Unit:      asNullString(r.Get("unit")),
+		SortOrder: asInt(r.Get("sort_order")),
+		CreatedAt: asString(r.Get("created_at")),
+		UpdatedAt: asString(r.Get("updated_at")),
+		Options:   []TrackerFieldOption{},
+	}
+}
+
+func trackerFieldOptionFromRow(r storage.Row) TrackerFieldOption {
+	return TrackerFieldOption{
+		ID:        asString(r.Get("id")),
+		FieldID:   asString(r.Get("field_id")),
+		Label:     asString(r.Get("label")),
+		Color:     asNullString(r.Get("color")),
+		SortOrder: asInt(r.Get("sort_order")),
+	}
+}
+
+func entryFieldValueFromRow(r storage.Row) EntryFieldValue {
+	return EntryFieldValue{
+		ID:          asString(r.Get("id")),
+		EntryID:     asString(r.Get("entry_id")),
+		FieldID:     asString(r.Get("field_id")),
+		OptionID:    asNullString(r.Get("option_id")),
+		NumberValue: asNullFloat(r.Get("number_value")),
+		TextValue:   asNullString(r.Get("text_value")),
 	}
 }
 

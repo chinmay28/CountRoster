@@ -347,6 +347,57 @@ CREATE TABLE tracker_links (
 
 **Rules.** Direct logging on a derived tracker is rejected (`DerivedTrackerError → HTTP 400`). A source must exist, be ordinary (no derived-of-derived nesting), and not be the tracker itself; sources can't repeat. A source tracker **cannot be archived or deleted while a derivation still references it** — both are blocked with a `TrackerInUseError` (`HTTP 409`) that names the derived trackers in use, so the user removes or unlinks them first (`source_id` is `ON DELETE RESTRICT` as a DB-level backstop). Deleting a *derived* tracker is always fine: its own links cascade away (`tracker_id` is `ON DELETE CASCADE`). Links are part of the backup bundle, so derivations survive export/restore.
 
+### 6.6 Custom fields (migration 007)
+
+A tracker's `entries.value` answers *how much*. A **custom field** answers everything else about the same entry, so one tracker can hold a whole activity instead of splintering into several. A milk-feeding tracker counts millilitres and carries a `choice` field ("bottle / formula / breast") plus a `flag` field ("wet diaper") — the volume is still one number, but it can now be broken down by either.
+
+```sql
+CREATE TABLE tracker_fields (
+  id          TEXT PRIMARY KEY,
+  tracker_id  TEXT NOT NULL REFERENCES trackers (id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  kind        TEXT NOT NULL CHECK (kind IN ('choice','flag','number','text')),
+  unit        TEXT,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE tracker_field_options (          -- the alternatives of a `choice`
+  id          TEXT PRIMARY KEY,
+  field_id    TEXT NOT NULL REFERENCES tracker_fields (id) ON DELETE CASCADE,
+  label       TEXT NOT NULL,
+  color       TEXT,
+  sort_order  INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE entry_field_values (             -- one entry's answer to one field
+  id            TEXT PRIMARY KEY,
+  entry_id      TEXT NOT NULL REFERENCES entries (id) ON DELETE CASCADE,
+  field_id      TEXT NOT NULL REFERENCES tracker_fields (id) ON DELETE CASCADE,
+  option_id     TEXT REFERENCES tracker_field_options (id) ON DELETE CASCADE,
+  number_value  REAL,
+  text_value    TEXT,
+  UNIQUE (entry_id, field_id)
+);
+```
+
+Which column carries an answer follows the field's kind: `choice → option_id`, `flag`/`number` → `number_value` (0|1 for a flag), `text → text_value`. The other two are `NULL`. This is deliberately not a single `value TEXT` column — a choice answer is a *foreign key*, so renaming an option updates every entry that chose it and deleting one can't leave dangling text behind.
+
+**Wire shape.** An `Entry` gains a `fields` array of its answers, ordered by the owning field's `sort_order` and always present (`[]` when the tracker defines none). Writes take the inverse shape — `"fields": { "<field_id>": <answer> }` on a log or patch, where the answer is an option id, a `0|1`/boolean flag, a number, a string, or `null` to clear it. A patch rewrites **only** the fields it names, so touching one answer never disturbs the rest.
+
+**Rules.** An answer that is *given* is validated against the field's declared kind and, for a choice, against that field's own options — a mismatch is a `ValidationError → HTTP 400`, raised *before* the entry row is written so a rejected answer never leaves a half-described entry behind.
+
+**No field is ever mandatory.** "Unanswered" is a legitimate state for every field, and there is deliberately no `required` flag to make it otherwise. This is what keeps fields backward compatible in both directions: adding a field to a tracker cannot retroactively invalidate the entries logged before it existed, and any write path that predates the field — an older client, a batch log, a confirmed card transaction — keeps working untouched. The cost of the alternative is paid at exactly the wrong moment: a required field would turn a one-tap quick log into a form that can fail. Unanswered entries are carried through to the breakdown as their own bucket rather than being guessed at, so nothing is lost by not forcing an answer.
+
+A derived tracker has no entries of its own, so defining fields on one is rejected (`DerivedTrackerError → HTTP 400`).
+
+**Editing the field set** is a wholesale replace (`PUT /trackers/:id/fields`), like derivation links. An item carrying an existing `id` updates that row in place — so renaming "Feed type" keeps every feed already logged under it — while anything the payload omits is deleted, taking its recorded answers with it. Changing a field's `kind` clears its answers: they live in the column the *old* kind dictated and mean nothing under the new one.
+
+**Aggregation.** `StatsService.fieldBreakdown` splits a tracker's total across one field's answers (`GET /trackers/:id/stats/field-breakdown?field_id=…`). Every option is reported even at zero, so a legend doesn't reshuffle as the range moves, and entries that left the field blank land in their own `"Not set"` bucket rather than being folded into an answer they never gave. A `number` field has no distinct answers to group by and is rejected; a `text` field groups by distinct value, largest first.
+
+> The pre-existing `tracker_options` table (migration 001) is unrelated and unused — it was an early sketch of the `choice` *tracker kind*, kept only because migrations are append-only and old backups must round-trip.
+
 ## 7. Core Domain: `@countroster/core`
 
 ### 7.1 Module layout
@@ -499,6 +550,9 @@ countroster-2026-05-25T14-32-00Z.countroster.zip
     ├── tracker_groups.csv
     ├── tracker_group_memberships.csv
     ├── reminders.csv
+    ├── tracker_fields.csv
+    ├── tracker_field_options.csv
+    ├── entry_field_values.csv
     └── all.json           # full dump as a single JSON document
 ```
 

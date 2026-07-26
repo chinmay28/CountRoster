@@ -12,6 +12,11 @@ import {
 } from '../schema/validators.js';
 import { TrackerNotFoundError } from './trackers.js';
 import { DerivedTrackerError, effectiveEntrySource } from './derived.js';
+import {
+  attachEntryFields,
+  resolveEntryFields,
+  writeEntryFields,
+} from './fields.js';
 
 export interface TimeRange {
   /** Inclusive ISO 8601 lower bound. */
@@ -82,11 +87,18 @@ class EntryServiceImpl implements EntryService {
     const value = input.value ?? trackerRows[0]!.default_value;
     const occurredAt = input.occurred_at ?? now;
 
-    await this.storage.exec(
-      `INSERT INTO entries (id, tracker_id, value, occurred_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, trackerId, value, occurredAt, now, now],
-    );
+    // Resolved before the insert so a bad answer fails without leaving a
+    // half-described entry behind.
+    const fields = await resolveEntryFields(this.storage, trackerId, input.fields);
+
+    await this.storage.transaction(async (tx) => {
+      await tx.exec(
+        `INSERT INTO entries (id, tracker_id, value, occurred_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, trackerId, value, occurredAt, now, now],
+      );
+      await writeEntryFields(tx, id, fields);
+    });
 
     const created = await this.get(id);
     if (!created) throw new Error(`Entry insert succeeded but row not found: ${id}`);
@@ -121,6 +133,9 @@ class EntryServiceImpl implements EntryService {
       const inserted: string[] = [];
       for (const input of inputs) {
         const id = newId();
+        // Same rule as a single log: a rejected answer aborts the batch, which
+        // the surrounding transaction already rolls back.
+        const fields = await resolveEntryFields(tx, input.tracker_id, input.fields);
         await tx.exec(
           `INSERT INTO entries (id, tracker_id, value, occurred_at, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
@@ -133,6 +148,7 @@ class EntryServiceImpl implements EntryService {
             now,
           ],
         );
+        await writeEntryFields(tx, id, fields);
         inserted.push(id);
       }
       return inserted;
@@ -142,6 +158,7 @@ class EntryServiceImpl implements EntryService {
       `SELECT * FROM entries WHERE id IN (${ids.map(() => '?').join(', ')})`,
       ids,
     );
+    await attachEntryFields(this.storage, rows);
     const byId = new Map(rows.map((r) => [r.id, r]));
     return ids.map((id) => {
       const entry = byId.get(id);
@@ -155,6 +172,12 @@ class EntryServiceImpl implements EntryService {
     const existing = await this.get(id);
     if (!existing) throw new EntryNotFoundError(id);
 
+    // Only the fields the patch names are rewritten, so the entry's other
+    // answers survive untouched.
+    const fields = patch.fields
+      ? await resolveEntryFields(this.storage, existing.tracker_id, patch.fields)
+      : [];
+
     const sets: string[] = [];
     const params: (string | number)[] = [];
     if (patch.value !== undefined) {
@@ -166,16 +189,17 @@ class EntryServiceImpl implements EntryService {
       params.push(patch.occurred_at);
     }
 
-    if (sets.length === 0) return existing;
+    if (sets.length === 0 && fields.length === 0) return existing;
 
-    sets.push('updated_at = ?');
-    params.push(this.clock.nowISO());
-    params.push(id);
-
-    await this.storage.exec(
-      `UPDATE entries SET ${sets.join(', ')} WHERE id = ?`,
-      params,
-    );
+    await this.storage.transaction(async (tx) => {
+      if (sets.length > 0) {
+        sets.push('updated_at = ?');
+        params.push(this.clock.nowISO());
+        params.push(id);
+        await tx.exec(`UPDATE entries SET ${sets.join(', ')} WHERE id = ?`, params);
+      }
+      await writeEntryFields(tx, id, fields);
+    });
 
     const updated = await this.get(id);
     if (!updated) throw new EntryNotFoundError(id);
@@ -191,6 +215,7 @@ class EntryServiceImpl implements EntryService {
       `SELECT * FROM entries WHERE id = ?`,
       [id],
     );
+    await attachEntryFields(this.storage, rows);
     return rows[0] ?? null;
   }
 
@@ -218,10 +243,13 @@ class EntryServiceImpl implements EntryService {
       params.push(range.end);
     }
     const whereSql = where.length > 0 ? ` WHERE ${where.join(' AND ')}` : '';
-    return this.storage.query<Entry>(
+    const rows = await this.storage.query<Entry>(
       `SELECT * FROM ${source.sql}${whereSql}
        ORDER BY occurred_at ASC, id ASC`,
       params,
     );
+    // A derived tracker's rows are its *sources'* entries, so this attaches
+    // the answers those entries were logged with — which is what they describe.
+    return attachEntryFields(this.storage, rows);
   }
 }

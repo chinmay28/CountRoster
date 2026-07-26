@@ -1,6 +1,7 @@
 package core
 
 import (
+	"sort"
 	"strings"
 	"time"
 
@@ -350,6 +351,145 @@ func (s *StatsService) snapshotComposition(trackerID string, r TimeRange) ([]Com
 		return nil, err
 	}
 	return slicesFromRows(rows), nil
+}
+
+// FieldBreakdown splits a tracker's total across the answers recorded for one
+// of its custom fields — the milk tracker's millilitres by "bottle / formula /
+// breast", or by whether the diaper was wet.
+//
+// Every option is reported even when nothing was logged against it, so a
+// legend doesn't reshuffle as the range moves. Entries that left the field
+// blank land in their own "Not set" bucket rather than being folded into an
+// answer they never gave. A `number` field has no buckets to speak of and is
+// rejected.
+func (s *StatsService) FieldBreakdown(trackerID, fieldID string, r TimeRange) ([]FieldBreakdownSlice, error) {
+	rows, err := s.st.Query(
+		`SELECT id, kind FROM tracker_fields WHERE id = ? AND tracker_id = ?`,
+		fieldID, trackerID)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, &NotFoundError{Kind: "Tracker field", ID: fieldID}
+	}
+	kind := asString(rows[0].Get("kind"))
+	if kind == "number" {
+		return nil, &ValidationError{Issues: []Issue{{
+			Code:    "invalid_enum_value",
+			Path:    []any{"field_id"},
+			Message: "A number field has no distinct answers to break down; chart it instead.",
+		}}}
+	}
+
+	// LEFT JOIN so entries with no answer survive into the "Not set" group;
+	// julianday compares instants, since occurred_at carries a local offset.
+	where := []string{"e.tracker_id = ?"}
+	params := []any{fieldID, trackerID}
+	if r.Start != "" {
+		where = append(where, "julianday(e.occurred_at) >= julianday(?)")
+		params = append(params, r.Start)
+	}
+	if r.End != "" {
+		where = append(where, "julianday(e.occurred_at) < julianday(?)")
+		params = append(params, r.End)
+	}
+	agg, err := s.st.Query(
+		`SELECT v.option_id AS option_id,
+            v.number_value AS number_value,
+            v.text_value AS text_value,
+            COALESCE(SUM(e.value), 0) AS total,
+            COUNT(e.id) AS count
+       FROM entries e
+       LEFT JOIN entry_field_values v
+         ON v.entry_id = e.id AND v.field_id = ?
+      WHERE `+strings.Join(where, " AND ")+`
+      GROUP BY v.option_id, v.number_value, v.text_value`, params...)
+	if err != nil {
+		return nil, err
+	}
+
+	type bucket struct {
+		total float64
+		count int
+	}
+	byKey := map[string]bucket{}
+	unset := bucket{}
+	for _, row := range agg {
+		b := bucket{total: asFloat(row.Get("total")), count: asInt(row.Get("count"))}
+		var key string
+		switch {
+		case row.Get("option_id") != nil:
+			key = asString(row.Get("option_id"))
+		case row.Get("number_value") != nil:
+			key = jsFlagKey(asFloat(row.Get("number_value")))
+		case row.Get("text_value") != nil:
+			key = asString(row.Get("text_value"))
+		default:
+			unset.total += b.total
+			unset.count += b.count
+			continue
+		}
+		prev := byKey[key]
+		byKey[key] = bucket{total: prev.total + b.total, count: prev.count + b.count}
+	}
+
+	out := []FieldBreakdownSlice{}
+	appendSlice := func(key, label string, color *string) {
+		b := byKey[key]
+		out = append(out, FieldBreakdownSlice{
+			FieldID: fieldID, Key: key, Label: label, Color: color,
+			Total: b.total, Count: b.count,
+		})
+		delete(byKey, key)
+	}
+
+	switch kind {
+	case "choice":
+		optionRows, err := s.st.Query(
+			`SELECT id, label, color FROM tracker_field_options WHERE field_id = ?
+        ORDER BY sort_order ASC, id ASC`, fieldID)
+		if err != nil {
+			return nil, err
+		}
+		for _, o := range optionRows {
+			appendSlice(asString(o.Get("id")), asString(o.Get("label")), asNullString(o.Get("color")))
+		}
+	case "flag":
+		appendSlice("1", "Yes", nil)
+		appendSlice("0", "No", nil)
+	case "text":
+		// Free text has no declared set of answers, so the data is the legend:
+		// biggest contributor first, ties broken alphabetically for stability.
+		keys := make([]string, 0, len(byKey))
+		for k := range byKey {
+			keys = append(keys, k)
+		}
+		sort.Slice(keys, func(i, j int) bool {
+			if byKey[keys[i]].total != byKey[keys[j]].total {
+				return byKey[keys[i]].total > byKey[keys[j]].total
+			}
+			return keys[i] < keys[j]
+		})
+		for _, k := range keys {
+			appendSlice(k, k, nil)
+		}
+	}
+
+	if unset.count > 0 {
+		out = append(out, FieldBreakdownSlice{
+			FieldID: fieldID, Key: "", Label: "Not set", Color: nil,
+			Total: unset.total, Count: unset.count,
+		})
+	}
+	return out, nil
+}
+
+// jsFlagKey renders a flag's stored 0/1 as the string key the wire uses.
+func jsFlagKey(n float64) string {
+	if n != 0 {
+		return "1"
+	}
+	return "0"
 }
 
 func slicesFromRows(rows []storage.Row) []CompositionSlice {

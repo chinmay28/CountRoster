@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -34,6 +35,10 @@ var trackerKinds = map[string]bool{
 
 var resetPeriods = map[string]bool{
 	"never": true, "daily": true, "weekly": true, "monthly": true, "yearly": true,
+}
+
+var fieldKinds = map[string]bool{
+	"choice": true, "flag": true, "number": true, "text": true,
 }
 
 type vctx struct{ issues []Issue }
@@ -366,12 +371,179 @@ func ParseLinksInput(v any) ([]TrackerLinkInput, error) {
 	return p.Links, nil
 }
 
+// --- Tracker field DTOs -------------------------------------------------------
+
+// Limits on a tracker's field set. A tracker whose entry form runs past these
+// has outgrown "a few extra details" and wants a second tracker.
+const (
+	maxFieldsPerTracker  = 20
+	maxOptionsPerField   = 50
+	maxFieldTextValueLen = 500
+)
+
+// TrackerFieldOptionInput is one alternative of a `choice` field. A supplied
+// `id` names an existing row so a rewrite of the field set keeps it (and the
+// entry values pointing at it) rather than replacing it with a fresh one.
+type TrackerFieldOptionInput struct {
+	ID    Opt[string]
+	Label string
+	Color Opt[string]
+}
+
+// TrackerFieldInput is one field in a replace-the-whole-set write. As with
+// options, a supplied `id` preserves the existing row.
+type TrackerFieldInput struct {
+	ID      Opt[string]
+	Name    string
+	Kind    string
+	Unit    Opt[string]
+	Options []TrackerFieldOptionInput
+}
+
+// ParseTrackerFieldsInput validates the `fields` list of
+// PUT /trackers/:id/fields.
+func ParseTrackerFieldsInput(v any) ([]TrackerFieldInput, error) {
+	if v == nil {
+		v = []any{}
+	}
+	arr, ok := v.([]any)
+	if !ok {
+		return nil, &ValidationError{Issues: []Issue{{Code: "invalid_type", Path: []any{}, Message: "Expected array"}}}
+	}
+	c := &vctx{}
+	if len(arr) > maxFieldsPerTracker {
+		c.add("too_big", "Array must contain at most "+itoa(maxFieldsPerTracker)+" element(s)")
+	}
+	out := make([]TrackerFieldInput, 0, len(arr))
+	for i, raw := range arr {
+		m, ok := asObject(raw)
+		if !ok {
+			c.add("invalid_type", "Expected object", i)
+			continue
+		}
+		fc := &vctx{}
+		field := TrackerFieldInput{
+			ID:   fc.str(m, "id", false, false, 1, -1, false),
+			Name: fc.str(m, "name", true, false, 1, 60, true).Value,
+			Kind: fc.enum(m, "kind", fieldKinds).Value,
+			Unit: fc.str(m, "unit", false, true, 0, 30, false),
+		}
+		if _, present := m["kind"]; !present {
+			fc.add("invalid_type", "Required", "kind")
+		}
+
+		if v, present := m["options"]; present && v != nil {
+			opts, ok := v.([]any)
+			if !ok {
+				fc.add("invalid_type", "Expected array", "options")
+			} else if len(opts) > maxOptionsPerField {
+				fc.add("too_big", "Array must contain at most "+itoa(maxOptionsPerField)+" element(s)", "options")
+			} else {
+				for j, rawOpt := range opts {
+					om, ok := asObject(rawOpt)
+					if !ok {
+						fc.add("invalid_type", "Expected object", "options", j)
+						continue
+					}
+					oc := &vctx{}
+					option := TrackerFieldOptionInput{
+						ID:    oc.str(om, "id", false, false, 1, -1, false),
+						Label: oc.str(om, "label", true, false, 1, 60, true).Value,
+					}
+					if cv, present := om["color"]; present {
+						if cv == nil {
+							option.Color = Opt[string]{Present: true, Null: true}
+						} else if s, ok := cv.(string); ok && hexColorRe.MatchString(s) {
+							option.Color = Opt[string]{Present: true, Value: s}
+						} else {
+							oc.add("invalid_string", "expected a 6-digit hex color like #4ECDC4", "color")
+						}
+					}
+					for _, iss := range oc.issues {
+						fc.add(iss.Code, iss.Message, append([]any{"options", j}, iss.Path...)...)
+					}
+					field.Options = append(field.Options, option)
+				}
+			}
+		}
+
+		// Options only mean something for a choice field, and a choice field
+		// with nothing to choose from can never be answered.
+		if field.Kind == "choice" && len(field.Options) == 0 {
+			fc.add("too_small", "A choice field needs at least one option", "options")
+		}
+		if field.Kind != "" && field.Kind != "choice" && len(field.Options) > 0 {
+			fc.add("invalid_type", "Only a choice field can carry options", "options")
+		}
+
+		for _, iss := range fc.issues {
+			c.add(iss.Code, iss.Message, append([]any{i}, iss.Path...)...)
+		}
+		out = append(out, field)
+	}
+	if err := c.err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // --- Entry DTOs --------------------------------------------------------------
+
+// EntryFieldInput is one raw custom-field answer from a log or patch body.
+// Raw is the value exactly as written — an option id, a 0|1 flag, a number,
+// a string, or nil to clear it. It stays untyped here because interpreting it
+// needs the field's declared kind, which only the DB knows.
+type EntryFieldInput struct {
+	FieldID string
+	Raw     any
+}
 
 // EntryLogInput is the body of a single entry log.
 type EntryLogInput struct {
 	Value      Opt[float64]
 	OccurredAt Opt[string]
+	// Fields is the `fields` object: field id → answer. HasFields separates
+	// "no fields key" (leave answers alone) from "{}" (clear them all).
+	Fields    []EntryFieldInput
+	HasFields bool
+}
+
+// parseEntryFields reads the optional `fields` object of a log/patch body. It
+// only checks the shape — that keys are field ids and values are primitives
+// the domain can interpret; matching them to a field's kind happens at write
+// time, where the field definitions are in reach.
+func (c *vctx) parseEntryFields(m map[string]any) ([]EntryFieldInput, bool) {
+	v, present := m["fields"]
+	if !present || v == nil {
+		return nil, false
+	}
+	fm, ok := asObject(v)
+	if !ok {
+		c.add("invalid_type", "Expected object", "fields")
+		return nil, false
+	}
+	// Sorted so a body with several fields validates (and reports issues) in a
+	// stable order regardless of Go's map iteration.
+	keys := make([]string, 0, len(fm))
+	for k := range fm {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	out := make([]EntryFieldInput, 0, len(keys))
+	for _, k := range keys {
+		raw := fm[k]
+		switch value := raw.(type) {
+		case nil, string, bool:
+		default:
+			if _, ok := numVal(value); !ok {
+				c.add("invalid_type", "Expected an option id, number, boolean, string, or null", "fields", k)
+				continue
+			}
+		}
+		out = append(out, EntryFieldInput{FieldID: k, Raw: raw})
+	}
+	return out, true
 }
 
 // EntryLogItem is one item of a batch log.
@@ -394,6 +566,7 @@ func ParseEntryLogInput(v any) (*EntryLogInput, error) {
 		Value:      c.num(m, "value", false, false, false, 0, 0),
 		OccurredAt: c.datetime(m, "occurred_at"),
 	}
+	in.Fields, in.HasFields = c.parseEntryFields(m)
 	if err := c.err(); err != nil {
 		return nil, err
 	}
@@ -425,12 +598,18 @@ func ParseEntryLogMany(v any) ([]EntryLogItem, error) {
 		trackerID := ic.str(m, "tracker_id", true, false, 1, -1, false)
 		value := ic.num(m, "value", false, false, false, 0, 0)
 		occurredAt := ic.datetime(m, "occurred_at")
+		fields, hasFields := ic.parseEntryFields(m)
 		for _, iss := range ic.issues {
 			c.add(iss.Code, iss.Message, append([]any{i}, iss.Path...)...)
 		}
 		items = append(items, EntryLogItem{
-			TrackerID:     trackerID.Value,
-			EntryLogInput: EntryLogInput{Value: value, OccurredAt: occurredAt},
+			TrackerID: trackerID.Value,
+			EntryLogInput: EntryLogInput{
+				Value:      value,
+				OccurredAt: occurredAt,
+				Fields:     fields,
+				HasFields:  hasFields,
+			},
 		})
 	}
 	if err := c.err(); err != nil {
