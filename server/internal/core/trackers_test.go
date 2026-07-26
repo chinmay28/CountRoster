@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestCreateTrackerDefaults(t *testing.T) {
 	a := newTestApp(t)
@@ -156,5 +159,67 @@ func TestPatchNullClearsNullableField(t *testing.T) {
 	}
 	if updated.Description != nil || updated.Target != nil {
 		t.Errorf("explicit null should clear nullable fields: %+v", updated)
+	}
+}
+
+func TestSectionOrderRoundTripsAndClears(t *testing.T) {
+	a := newTestApp(t)
+	tr := mustCreate(t, a, obj("name", "Water", "section_order", "summary,entries,trends"))
+	if tr.SectionOrder == nil || *tr.SectionOrder != "summary,entries,trends" {
+		t.Fatalf("create should persist section_order, got %v", tr.SectionOrder)
+	}
+
+	updated, err := a.Trackers.Update(tr.ID, obj("section_order", "trends,summary,entries"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.SectionOrder == nil || *updated.SectionOrder != "trends,summary,entries" {
+		t.Fatalf("update should replace section_order, got %v", updated.SectionOrder)
+	}
+
+	// An unrelated patch leaves the stored order alone…
+	kept, err := a.Trackers.Update(tr.ID, obj("name", "Hydration"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kept.SectionOrder == nil || *kept.SectionOrder != "trends,summary,entries" {
+		t.Fatalf("unrelated patch should keep section_order, got %v", kept.SectionOrder)
+	}
+
+	// …and an explicit null resets it to the default order.
+	cleared, err := a.Trackers.Update(tr.ID, obj("section_order", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.SectionOrder != nil {
+		t.Fatalf("null should clear section_order, got %v", *cleared.SectionOrder)
+	}
+}
+
+func TestSectionOrderDefaultsToNull(t *testing.T) {
+	a := newTestApp(t)
+	tr := mustCreate(t, a, obj("name", "Water"))
+	if tr.SectionOrder != nil {
+		t.Errorf("section_order should default to null, got %v", *tr.SectionOrder)
+	}
+}
+
+func TestSectionOrderRejectsMalformedLists(t *testing.T) {
+	a := newTestApp(t)
+	for _, bad := range []string{
+		"summary,,entries",        // blank key
+		"summary,entries,summary", // duplicate
+		"Summary,entries",         // not a lowercase slug
+		"summary, entries",        // stray whitespace
+		"summary;entries",         // wrong separator
+	} {
+		if _, err := a.Trackers.Create(obj("name", "Water", "section_order", bad)); err == nil {
+			t.Errorf("section_order %q should be rejected", bad)
+		} else {
+			var ve *ValidationError
+			if !errors.As(err, &ve) {
+				t.Errorf("section_order %q: expected ValidationError, got %T", bad, err)
+			}
+		}
 	}
 }

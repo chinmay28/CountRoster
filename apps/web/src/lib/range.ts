@@ -231,6 +231,33 @@ export function resetPeriodOptions(
   return options;
 }
 
+/**
+ * Human label for one row of the per-period table: "Today" / "Yesterday" /
+ * "This week" for the two most recent buckets, a date otherwise ("Apr 2026",
+ * "Week of May 11"). `start` is a bucket's start instant as the stats service
+ * reports it (UTC ISO); it's matched against the local bucket boundaries the
+ * same period `window` produces, so the two agree on where a period begins.
+ */
+export function periodRowLabel(
+  start: string,
+  period: BucketPeriod,
+  window: PeriodWindow = {},
+  now: Date = new Date(),
+): string {
+  const startDate = new Date(start);
+  if (Number.isNaN(startDate.getTime())) return '';
+  const [current, previous] = RELATIVE_LABELS[period];
+  const currentStart = bucketStart(now, period, window);
+  if (startDate.getTime() === currentStart.getTime()) return current;
+  const previousStart = bucketStart(
+    new Date(currentStart.getTime() - 1),
+    period,
+    window,
+  );
+  if (startDate.getTime() === previousStart.getTime()) return previous;
+  return bucketDateLabel(startDate, period, now);
+}
+
 /** Date-based label for a bucket beyond "this"/"last", e.g. "Apr 2026". */
 function bucketDateLabel(start: Date, period: BucketPeriod, now: Date): string {
   const yearOpt =

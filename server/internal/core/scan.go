@@ -61,6 +61,7 @@ func trackerFromRow(r storage.Row) *Tracker {
 		IsDerived:      asInt(r.Get("is_derived")),
 		IsHidden:       asInt(r.Get("is_hidden")),
 		IsSnapshot:     asInt(r.Get("is_snapshot")),
+		SectionOrder:   asNullString(r.Get("section_order")),
 		CreatedAt:      asString(r.Get("created_at")),
 		UpdatedAt:      asString(r.Get("updated_at")),
 	}

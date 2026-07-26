@@ -1342,9 +1342,15 @@ input.txn__name:focus {
   }
   .detail__header-actions {
     align-self: stretch;
+    /* Four actions (Quick log / Arrange / Edit / Archive) can't sit on one
+       phone-width row: let them wrap, and let each shrink past its label
+       width (flex items default to min-width:auto, which would otherwise
+       push the row wider than the page). */
+    flex-wrap: wrap;
   }
   .detail__header-actions .btn {
-    flex: 1;
+    flex: 1 1 8rem;
+    min-width: 0;
     justify-content: center;
   }
 
@@ -2319,4 +2325,130 @@ input.txn__name:focus {
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* --- Per-period table -------------------------------------------------- */
+
+.periods {
+  margin-top: 0.75rem;
+}
+.periods__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.periods__periods {
+  display: flex;
+  gap: 0.3rem;
+}
+.periods__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+/* A narrow phone can't fit five columns; let the table scroll on its own
+   rather than pushing the page sideways. The `min-width: 0` chain matters as
+   much as the `overflow-x`: the detail page is a grid, and a grid item
+   defaults to `min-width: auto` — without this the track would size to the
+   table's min-content and drag the whole page wider than the viewport. */
+.detail__entries,
+.periods {
+  min-width: 0;
+}
+.periods__scroll {
+  min-width: 0;
+  overflow-x: auto;
+}
+.periods__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+.periods__table th,
+.periods__table td {
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  white-space: nowrap;
+}
+.periods__table thead th {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid var(--border);
+}
+.periods__table tbody tr + tr th,
+.periods__table tbody tr + tr td {
+  border-top: 1px solid var(--border);
+}
+.periods__table tbody th {
+  font-weight: 500;
+}
+.periods__table tfoot th,
+.periods__table tfoot td {
+  border-top: 2px solid var(--border);
+  color: var(--muted);
+  font-weight: 600;
+}
+.periods__num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+/* A period with nothing logged still gets a row — it recedes rather than
+   disappearing, so a gap in a habit stays visible. */
+.periods__row--empty th,
+.periods__row--empty td {
+  color: var(--muted);
+  opacity: 0.7;
+}
+.periods__up {
+  color: #16a34a;
+}
+.periods__down {
+  color: var(--danger);
+}
+@media (prefers-color-scheme: dark) {
+  .periods__up {
+    color: #4ade80;
+  }
+}
+.periods__note {
+  font-size: 0.8rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+/* --- Section arranger -------------------------------------------------- */
+
+.arrange__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.arrange__head h2 {
+  margin: 0;
+}
+.arrange__list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.arrange__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
 }

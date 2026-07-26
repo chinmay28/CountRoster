@@ -22,6 +22,7 @@ var Migrations = []Migration{
 	{Version: 5, Name: "005_card_transactions", Up: m005CardTransactions},
 	{Version: 6, Name: "006_period_windows", Up: m006PeriodWindows},
 	{Version: 7, Name: "007_tracker_fields", Up: m007TrackerFields},
+	{Version: 8, Name: "008_section_order", Up: m008SectionOrder},
 }
 
 // LatestVersion is the highest schema version known to this build.
@@ -242,4 +243,14 @@ const m007TrackerFields = `
       ON entry_field_values (entry_id);
     CREATE INDEX IF NOT EXISTS entry_field_values_field_idx
       ON entry_field_values (field_id, option_id);
+  `
+
+// m008SectionOrder stores the user's preferred order for the sections of a
+// tracker's detail page as a comma-separated list of section keys
+// ("summary,trends,log,entries,notes"). NULL means "the default order".
+// The domain treats the keys as opaque slugs — which sections exist is the
+// client's business, and an order naming keys the client doesn't know is
+// ignored rather than rejected, so an older client stays usable.
+const m008SectionOrder = `
+    ALTER TABLE trackers ADD COLUMN section_order TEXT;
   `

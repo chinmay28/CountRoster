@@ -387,3 +387,47 @@ func TestStreakUsesDayWindow(t *testing.T) {
 		t.Errorf("streak should fold the 2 AM entry into the 24th: %+v", s)
 	}
 }
+
+// The min/max a bucket reports are the spread of the individual entries in
+// it, not of the bucket totals — that's what makes a snapshot tracker's
+// per-period row ("179.1–181.4, latest 180.2") readable.
+func TestBucketReportsPerBucketMinAndMax(t *testing.T) {
+	a := newTestApp(t)
+	tr := mustCreate(t, a, obj("name", "Steps", "kind", "number"))
+	mustLog(t, a, tr.ID, obj("value", 3, "occurred_at", mayDay("20", 9)))
+	mustLog(t, a, tr.ID, obj("value", 8, "occurred_at", mayDay("20", 12)))
+	mustLog(t, a, tr.ID, obj("value", 5, "occurred_at", mayDay("20", 15)))
+
+	buckets, err := a.Stats.Bucket(tr.ID, mayDay("20", 0), mayDay("22", 0), PeriodDay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if buckets[0].Value != 16 || buckets[0].Min != 3 || buckets[0].Max != 8 {
+		t.Errorf("logged bucket: value=%v min=%v max=%v", buckets[0].Value, buckets[0].Min, buckets[0].Max)
+	}
+	// An empty bucket has no spread of its own: it reports its own value.
+	if buckets[1].Count != 0 || buckets[1].Min != 0 || buckets[1].Max != 0 {
+		t.Errorf("empty bucket: count=%d min=%v max=%v", buckets[1].Count, buckets[1].Min, buckets[1].Max)
+	}
+}
+
+func TestBucketMinMaxFollowsCarriedSnapshotLevel(t *testing.T) {
+	a := newTestApp(t)
+	tr := mustCreate(t, a, obj("name", "Weight", "kind", "number", "is_snapshot", 1))
+	mustLog(t, a, tr.ID, obj("value", 181, "occurred_at", mayDay("20", 9)))
+	mustLog(t, a, tr.ID, obj("value", 179, "occurred_at", mayDay("20", 15)))
+
+	buckets, err := a.Stats.Bucket(tr.ID, mayDay("20", 0), mayDay("22", 0), PeriodDay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The level is the last reading; the spread is over both readings.
+	if buckets[0].Value != 179 || buckets[0].Min != 179 || buckets[0].Max != 181 {
+		t.Errorf("read bucket: value=%v min=%v max=%v", buckets[0].Value, buckets[0].Min, buckets[0].Max)
+	}
+	// The next day carries 179 forward, and reports it as the whole spread —
+	// not a 0-to-179 range it never saw.
+	if buckets[1].Value != 179 || buckets[1].Min != 179 || buckets[1].Max != 179 {
+		t.Errorf("carried bucket: value=%v min=%v max=%v", buckets[1].Value, buckets[1].Min, buckets[1].Max)
+	}
+}

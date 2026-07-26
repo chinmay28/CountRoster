@@ -25,8 +25,12 @@ type Tracker struct {
 	IsDerived      int      `json:"is_derived"`
 	IsHidden       int      `json:"is_hidden"`
 	IsSnapshot     int      `json:"is_snapshot"`
-	CreatedAt      string   `json:"created_at"`
-	UpdatedAt      string   `json:"updated_at"`
+	// SectionOrder is the user's preferred order for the detail page's
+	// sections: a comma-separated list of opaque section keys, or nil for the
+	// default order. See migration 006.
+	SectionOrder *string `json:"section_order"`
+	CreatedAt    string  `json:"created_at"`
+	UpdatedAt    string  `json:"updated_at"`
 }
 
 // TrackerLink is one operand of a derived tracker.
@@ -130,6 +134,12 @@ type StatBucket struct {
 	Label string  `json:"label"`
 	Value float64 `json:"value"`
 	Count int     `json:"count"`
+	// Min and Max are the smallest and largest single entry value in the
+	// bucket — the readable spread a snapshot tracker reports per period. A
+	// bucket with no entries reports Min = Max = Value (0, or the level a
+	// snapshot carried forward), so a row never shows a range it didn't see.
+	Min float64 `json:"min"`
+	Max float64 `json:"max"`
 }
 
 // TargetProgress reports progress toward a tracker's target.

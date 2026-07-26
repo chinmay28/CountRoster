@@ -6,6 +6,7 @@ import {
   resetPeriodRange,
   resetPeriodOptions,
   windowStats,
+  periodRowLabel,
   lastNBuckets,
   RESET_PERIOD_LABEL,
 } from './range.ts';
@@ -233,5 +234,45 @@ describe('period windows', () => {
     const calendar = windowStats(entries, {}, now);
     expect(calendar.find((s) => s.key === 'month')).toBeUndefined();
     expect(calendar.find((s) => s.key === 'all-time')!.value).toBe(7);
+  });
+});
+
+describe('periodRowLabel', () => {
+  const now = new Date('2026-05-20T14:00:00'); // a Wednesday
+  // The stats service reports bucket starts in UTC ISO; build them the same
+  // way the table receives them.
+  const bucketOf = (period: 'day' | 'week' | 'month' | 'year', back: number) =>
+    lastNBuckets(period, back + 1, MONDAY, now).start;
+
+  it('names the two most recent buckets relatively', () => {
+    expect(periodRowLabel(bucketOf('day', 0), 'day', MONDAY, now)).toBe('Today');
+    expect(periodRowLabel(bucketOf('day', 1), 'day', MONDAY, now)).toBe('Yesterday');
+    expect(periodRowLabel(bucketOf('week', 0), 'week', MONDAY, now)).toBe('This week');
+    expect(periodRowLabel(bucketOf('week', 1), 'week', MONDAY, now)).toBe('Last week');
+    expect(periodRowLabel(bucketOf('month', 0), 'month', MONDAY, now)).toBe('This month');
+    expect(periodRowLabel(bucketOf('year', 1), 'year', MONDAY, now)).toBe('Last year');
+  });
+
+  it('dates anything older', () => {
+    expect(periodRowLabel(bucketOf('month', 2), 'month', MONDAY, now)).toBe('Mar 2026');
+    expect(periodRowLabel(bucketOf('year', 2), 'year', MONDAY, now)).toBe('2024');
+    expect(periodRowLabel(bucketOf('week', 3), 'week', MONDAY, now)).toMatch(/^Week of /);
+  });
+
+  it('follows the tracker\'s week start', () => {
+    // 2026-05-20 is a Wednesday: the Sunday-start week began a day earlier
+    // than the Monday-start one, so "this week" names a different bucket.
+    const SUNDAY = { week_start: 0 } as const;
+    const mondayWeek = periodRowLabel(bucketOf('week', 0), 'week', MONDAY, now);
+    const sundayStart = lastNBuckets('week', 1, SUNDAY, now).start;
+    expect(mondayWeek).toBe('This week');
+    expect(periodRowLabel(sundayStart, 'week', SUNDAY, now)).toBe('This week');
+    // …and reading a Sunday-start bucket with Monday-start rules no longer
+    // lines up with "this week".
+    expect(periodRowLabel(sundayStart, 'week', MONDAY, now)).toMatch(/^Week of /);
+  });
+
+  it('returns an empty label for an unparseable instant', () => {
+    expect(periodRowLabel('not-a-date', 'day', MONDAY, now)).toBe('');
   });
 });
