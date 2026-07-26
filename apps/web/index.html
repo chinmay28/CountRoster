@@ -21,38 +21,16 @@
     <meta name="apple-mobile-web-app-title" content="CountRoster" />
     <title>CountRoster</title>
     <!--
-      A quick-log deep link installs as *that tracker's* app.
-
-      Browsers install what the manifest declares, not the page you added:
-      the app manifest says start_url "/", so an icon added from
-      /trackers/:id/quick would open the home screen. Point the link at the
-      tracker's own manifest (served by the Go server from its name and
-      color) instead. This runs during head parsing rather than from React so
-      the manifest is already right when Safari resolves it — long before the
-      tracker data has loaded and the app could swap it.
+      No install-personalization script here, deliberately. The *server*
+      serves /trackers/:id/quick a shell already carrying that tracker's
+      identity (no manifest link on iOS, a per-tracker manifest elsewhere) —
+      see quickShell in server/cmd/countroster/main.go — and the service
+      worker is configured to never answer those navigations with this
+      generic shell (vite.config.ts navigateFallbackDenylist). An earlier
+      inline script that rewrote the manifest link raced Safari's parse and
+      lost; anything that matters for Add to Home Screen must be in the
+      served markup.
     -->
-    <script>
-      (function () {
-        var match = location.pathname.match(/^\/trackers\/([^/]+)\/quick\/?$/);
-        if (!match) return;
-        function pointAtTracker() {
-          var link = document.querySelector('link[rel="manifest"]');
-          if (!link) return false;
-          // Remember the app's own manifest so the client can restore it when
-          // navigating off the quick screen.
-          if (!link.dataset.appManifest) {
-            link.dataset.appManifest = link.getAttribute('href') || '';
-          }
-          link.setAttribute('href', '/trackers/' + match[1] + '/app.webmanifest');
-          return true;
-        }
-        // The manifest link is injected by vite-plugin-pwa and may be parsed
-        // after this script, so retry once the document is complete.
-        if (!pointAtTracker()) {
-          document.addEventListener('DOMContentLoaded', pointAtTracker);
-        }
-      })();
-    </script>
   </head>
   <body>
     <div id="root"></div>

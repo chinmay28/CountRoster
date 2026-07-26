@@ -60,15 +60,13 @@ export function QuickLogPage() {
 
   const tracker = data?.tracker ?? null;
 
-  // Make this page installable *as itself*.
+  // Make this page installable *as itself* across client-side navigations.
   //
-  // On a fresh load index.html has already repointed the manifest link at this
-  // tracker during head parsing — browsers install what the manifest declares,
-  // and the app's own says `start_url: "/"`, which is why an icon added here
-  // used to open the home screen. This covers the client-side navigation case
-  // (no document parse happens), restores the app's manifest on the way out,
-  // and sets the tint plus the icon label older iOS reads from
-  // `apple-mobile-web-app-title`.
+  // On a fresh load the *server* already served this document with the
+  // tracker's identity (manifest choice, name, tint) — that's what Add to
+  // Home Screen reads, and it must not depend on script. This effect only
+  // keeps the head honest when the user navigates here without a document
+  // load, and restores the app's own identity on the way out.
   useEffect(() => {
     if (!tracker) return;
     const restore: (() => void)[] = [];
@@ -86,16 +84,19 @@ export function QuickLogPage() {
     setMeta('theme-color', tracker.color);
     setMeta('apple-mobile-web-app-title', tracker.name);
 
+    // On iOS the server serves this page without a manifest link at all (see
+    // quickShell) — leave it that way; the legacy bookmark path is the point.
     const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     if (link) {
-      // `data-app-manifest` is where index.html parked the app's own manifest
-      // before swapping; without it we'd "restore" this tracker's manifest
-      // onto every page the user browses to next.
-      const previous = link.dataset.appManifest || link.getAttribute('href');
+      const current = link.getAttribute('href');
+      // Restore the *app's* manifest on unmount — never a tracker manifest,
+      // which the server may have already put here on a fresh load. Parking
+      // that would pin this tracker's identity onto every page the user
+      // browses to next.
+      const appManifest =
+        current && !current.endsWith('/app.webmanifest') ? current : '/manifest.webmanifest';
       link.setAttribute('href', `/trackers/${tracker.id}/app.webmanifest`);
-      restore.push(() => {
-        if (previous) link.setAttribute('href', previous);
-      });
+      restore.push(() => link.setAttribute('href', appManifest));
     }
 
     return () => restore.forEach((undoChange) => undoChange());

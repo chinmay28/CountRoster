@@ -40,7 +40,28 @@ export default defineConfig({
         // never be answered with the app shell: the browser installs whatever
         // the manifest says, so a stale or wrong one sends the Home Screen
         // icon to the wrong screen.
-        navigateFallbackDenylist: [/^\/api/, /\/app\.webmanifest$/],
+        //
+        // Quick-log pages are excluded from the navigation fallback for the
+        // same reason, and this one is load-bearing: the server personalizes
+        // that *document* (drops the manifest on iOS, names and tints the
+        // shell for the tracker), and "Add to Home Screen" installs whatever
+        // document the browser is actually holding. With the fallback in
+        // play, the SW answered these navigations with the precached generic
+        // shell — generic manifest, start_url "/" — and none of the server's
+        // work ever reached the browser.
+        navigateFallbackDenylist: [/^\/api/, /\/app\.webmanifest$/, /^\/trackers\/[^/]+\/quick\/?$/],
+        // Offline grace for the quick screens the fallback no longer covers:
+        // fresh from the server when reachable, last personalized copy when
+        // not. (The screen needs the API to log anyway, so this only has to
+        // keep the launch from white-screening.)
+        runtimeCaching: [
+          {
+            urlPattern: ({ request, url }: { request: Request; url: URL }) =>
+              request.mode === 'navigate' && /^\/trackers\/[^/]+\/quick\/?$/.test(url.pathname),
+            handler: 'NetworkFirst',
+            options: { cacheName: 'quick-shell' },
+          },
+        ],
       },
     }),
   ],
