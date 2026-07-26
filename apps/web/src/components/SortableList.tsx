@@ -26,12 +26,15 @@ export function SortableList<T extends { id: string }>({
   onReorder,
   className,
   itemClassName,
+  ariaLabel,
   renderItem,
 }: {
   items: T[];
   onReorder: (orderedIds: string[]) => void;
   className?: string;
   itemClassName?: string;
+  /** Names the list for assistive tech — what these draggable rows are. */
+  ariaLabel?: string;
   renderItem: (
     item: T,
     handleProps: SortableHandleProps,
@@ -93,6 +96,7 @@ export function SortableList<T extends { id: string }>({
   return (
     <ul
       className={className}
+      aria-label={ariaLabel}
       onPointerMove={onMove}
       onPointerUp={onUp}
       onPointerCancel={onUp}

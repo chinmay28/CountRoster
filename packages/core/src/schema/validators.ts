@@ -38,6 +38,22 @@ const hexColor = z
   .regex(/^#[0-9a-fA-F]{6}$/, 'expected a 6-digit hex color like #4ECDC4');
 
 /**
+ * A tracker's detail-page section order: a comma-separated list of unique
+ * lowercase section keys. The empty string is allowed and reads the same as
+ * null — no explicit order.
+ */
+const sectionOrder = z
+  .string()
+  .max(400)
+  .refine(
+    (s) =>
+      s === '' ||
+      (s.split(',').length <= 20 &&
+        s.split(',').every((k, i, all) => /^[a-z][a-z0-9_-]{0,39}$/.test(k) && all.indexOf(k) === i)),
+    'expected a comma-separated list of unique section keys like "summary,trends,entries"',
+  );
+
+/**
  * One operand of a derived tracker. A coefficient of -1 subtracts the source,
  * +1 adds it, 0.5 takes half of it, etc.
  */
@@ -71,6 +87,13 @@ export const trackerInputSchema = z.object({
    * tracker has no reset window, so `reset_period` must stay 'never'.
    */
   is_snapshot: z.union([z.literal(0), z.literal(1)]).default(0),
+  /**
+   * The detail page's section order, as a comma-separated list of section
+   * keys. Null (or absent) means the default order. The keys stay opaque to
+   * the domain, but the shape is pinned: lowercase slugs, no blanks, no
+   * duplicates, at most 20.
+   */
+  section_order: sectionOrder.optional().nullable(),
   /**
    * When present, the tracker is *derived*: its value is computed from these
    * source trackers rather than logged directly. On update, the supplied list

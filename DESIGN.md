@@ -14,7 +14,7 @@
 >
 > - `server/internal/core` ports the domain services (SQL-is-the-contract,
 >   validate-then-insert-then-reread, injected clock, UUIDv7 ids).
-> - `server/internal/migrate` carries the same append-only migrations 001–004;
+> - `server/internal/migrate` carries the same append-only migrations 001–008;
 >   the Go server opens a database written by the TS server as-is.
 > - `server/internal/backup` + `server/internal/jsjson` reproduce the bundle
 >   format byte-for-byte (including JavaScript's `JSON.stringify` number
@@ -397,6 +397,16 @@ A derived tracker has no entries of its own, so defining fields on one is reject
 **Aggregation.** `StatsService.fieldBreakdown` splits a tracker's total across one field's answers (`GET /trackers/:id/stats/field-breakdown?field_id=…`). Every option is reported even at zero, so a legend doesn't reshuffle as the range moves, and entries that left the field blank land in their own `"Not set"` bucket rather than being folded into an answer they never gave. A `number` field has no distinct answers to group by and is rejected; a `text` field groups by distinct value, largest first.
 
 > The pre-existing `tracker_options` table (migration 001) is unrelated and unused — it was an early sketch of the `choice` *tracker kind*, kept only because migrations are append-only and old backups must round-trip.
+
+### 6.7 Per-tracker page layout (migration 008)
+
+The detail page is a stack of sections — summary, derivation, breakdown, field breakdown, trends, log, entries, notes — and which order reads best depends on the tracker: a habit is about the streak, a spending tracker about its period table. `trackers.section_order` stores the user's preference as a comma-separated list of section keys, `NULL` meaning "the default order":
+
+```sql
+ALTER TABLE trackers ADD COLUMN section_order TEXT;
+```
+
+**Semantics.** The domain treats the keys as opaque slugs — which sections exist is the *client's* vocabulary (`apps/web/src/lib/sections.ts`), not the domain's. Validation only pins the shape: at most 20 unique lowercase slugs, comma-separated. That keeps the two ends loosely coupled in both directions: a client drops keys it doesn't recognize (or that this tracker has no section for — a derived tracker can't be logged to), and appends any section the stored list never mentioned at its default position, so neither a new section nor a retired one can make a page render wrong. Saving the default order stores `NULL` rather than spelling it out, so a tracker the user never rearranged keeps following the default as it evolves.
 
 ## 7. Core Domain: `@countroster/core`
 

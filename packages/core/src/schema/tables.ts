@@ -59,6 +59,14 @@ export interface Tracker {
    * `reset_period = 'never'` — there is nothing to reset.
    */
   is_snapshot: 0 | 1;
+  /**
+   * The user's preferred order for the detail page's sections: a
+   * comma-separated list of section keys ("summary,trends,log,entries,notes"),
+   * or null for the default order. The keys are opaque to the domain — which
+   * sections exist is the client's business, so a client ignores keys it
+   * doesn't know and appends the sections the list omits.
+   */
+  section_order: string | null;
   created_at: string;
   updated_at: string;
 }

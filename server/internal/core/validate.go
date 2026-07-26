@@ -29,6 +29,30 @@ var (
 	datetimeRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`)
 )
 
+// sectionKeyRe matches one section key inside a section_order list.
+var sectionKeyRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,39}$`)
+
+// validSectionOrder reports whether s is a comma-separated list of unique,
+// well-formed section keys. The empty string is allowed and means the same
+// as NULL: no explicit order.
+func validSectionOrder(s string) bool {
+	if s == "" {
+		return true
+	}
+	keys := strings.Split(s, ",")
+	if len(keys) > 20 {
+		return false
+	}
+	seen := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		if !sectionKeyRe.MatchString(k) || seen[k] {
+			return false
+		}
+		seen[k] = true
+	}
+	return true
+}
+
 var trackerKinds = map[string]bool{
 	"count": true, "number": true, "duration": true, "boolean": true, "choice": true,
 }
@@ -239,6 +263,7 @@ type TrackerPatch struct {
 	SortOrder      Opt[int]
 	IsHidden       Opt[int]
 	IsSnapshot     Opt[int]
+	SectionOrder   Opt[string]
 	Links          []TrackerLinkInput
 	HasLinks       bool
 }
@@ -267,6 +292,19 @@ func parseTrackerFields(c *vctx, m map[string]any, nameRequired bool) TrackerPat
 			c.add("invalid_string", "expected a 6-digit hex color like #4ECDC4", "color")
 		} else {
 			p.Color = Opt[string]{Present: true, Value: s}
+		}
+	}
+
+	// section_order is a comma-separated list of section keys. The domain
+	// keeps the keys opaque (the client owns which sections exist) but pins
+	// the shape: lowercase slugs, no blanks, no duplicates.
+	if s := c.str(m, "section_order", false, true, 0, 400, false); s.Present {
+		p.SectionOrder = s
+		if !s.Null && !validSectionOrder(s.Value) {
+			c.add("invalid_string",
+				"expected a comma-separated list of unique section keys like \"summary,trends,entries\"",
+				"section_order")
+			p.SectionOrder = Opt[string]{}
 		}
 	}
 

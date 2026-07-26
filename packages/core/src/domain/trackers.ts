@@ -83,8 +83,8 @@ class TrackerServiceImpl implements TrackerService {
           reset_period, week_start, day_start_minute, month_start_day,
           year_start_month, default_value,
           archived_at, sort_order, is_derived, is_hidden, is_snapshot,
-          created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
+          section_order, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           input.name,
@@ -105,6 +105,7 @@ class TrackerServiceImpl implements TrackerService {
           isDerived,
           input.is_hidden,
           input.is_snapshot,
+          input.section_order ?? null,
           now,
           now,
         ],
@@ -154,6 +155,7 @@ class TrackerServiceImpl implements TrackerService {
     assign('sort_order', 'sort_order');
     assign('is_hidden', 'is_hidden');
     assign('is_snapshot', 'is_snapshot');
+    assign('section_order', 'section_order');
 
     if (nextSnapshot === 1 && existing.reset_period !== 'never') {
       sets.push(`reset_period = 'never'`);

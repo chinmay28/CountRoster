@@ -138,8 +138,10 @@ describe('logging with custom fields', () => {
       expect(entries[0]!.fields[1]!.number_value).toBe(1);
     });
 
-    // The entry row reads back the answers as chips. Scoped to the row —
-    // "Bottle" is also the label of the pill that logged it.
+    // The entry row reads back the answers as chips. The page opens on the
+    // current window's table, so switch to the timeline this test is about.
+    // Scoped to the row — "Bottle" is also the label of the pill that logged it.
+    await user.click(screen.getByRole('tab', { name: 'All entries' }));
     const row = (await screen.findByText('✓ Wet diaper')).closest('.entry') as HTMLElement;
     expect(within(row).getByText('Bottle')).toBeInTheDocument();
     expect(wetDiaper.kind).toBe('flag');
@@ -215,6 +217,8 @@ describe('logging with custom fields', () => {
     });
     renderApp(test, `/trackers/${tracker.id}`);
 
+    // Editing an entry lives on the timeline tab.
+    await user.click(await screen.findByRole('tab', { name: 'All entries' }));
     await user.click(await screen.findByRole('button', { name: 'Edit' }));
     // Both the log form and the row's edit form show the field, so scope to
     // the row being edited.

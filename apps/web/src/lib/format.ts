@@ -1,4 +1,10 @@
-import type { ResetPeriod, Tracker, TrackerKind, WeekStart } from '@countroster/core';
+import type {
+  BucketPeriod,
+  ResetPeriod,
+  Tracker,
+  TrackerKind,
+  WeekStart,
+} from '@countroster/core';
 
 /** Human label for each tracker kind. */
 export const KIND_LABELS: Record<TrackerKind, string> = {
@@ -190,6 +196,28 @@ export function formatDateTime(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+/**
+ * When an entry happened, scaled to the window it is being listed inside.
+ * A table covering a single day only needs the clock time; a week needs the
+ * weekday to tell rows apart; anything wider needs the date. Keeps every row
+ * of one window's table from repeating the same date.
+ */
+export function formatWithin(iso: string, period: BucketPeriod): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const time = { hour: 'numeric', minute: '2-digit' } as const;
+  switch (period) {
+    case 'day':
+      return d.toLocaleTimeString(undefined, time);
+    case 'week':
+      return d.toLocaleString(undefined, { weekday: 'short', ...time });
+    case 'month':
+      return d.toLocaleString(undefined, { month: 'short', day: 'numeric', ...time });
+    case 'year':
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
 }
 
 /**

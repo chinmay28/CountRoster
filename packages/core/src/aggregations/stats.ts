@@ -23,6 +23,14 @@ export interface StatBucket extends Bucket {
   value: number;
   /** Number of entries in this bucket. */
   count: number;
+  /**
+   * The smallest and largest single entry value in this bucket — the spread
+   * a snapshot tracker reports per period. A bucket with no entries reports
+   * `min = max = value` (0, or the level a snapshot carried forward), so a
+   * row never shows a range it didn't see.
+   */
+  min: number;
+  max: number;
 }
 
 export interface TargetProgress {
@@ -170,6 +178,8 @@ class StatsServiceImpl implements StatsService {
         label: bucketLabel(cursor, period),
         value: 0,
         count: 0,
+        min: 0,
+        max: 0,
       };
       buckets.push(b);
       index.set(b.label, b);
@@ -186,6 +196,8 @@ class StatsServiceImpl implements StatsService {
         // Snapshots are levels, not amounts: the bucket takes the latest
         // reading (entries arrive in occurred_at order) instead of a sum.
         b.value = isSnapshot ? e.value : b.value + e.value;
+        if (b.count === 0 || e.value < b.min) b.min = e.value;
+        if (b.count === 0 || e.value > b.max) b.max = e.value;
         b.count += 1;
       }
     }
@@ -205,6 +217,16 @@ class StatsServiceImpl implements StatsService {
       for (const b of buckets) {
         if (b.count > 0) carry = b.value;
         else if (carry !== null) b.value = carry;
+      }
+    }
+
+    // An empty bucket has no spread of its own; pin it to whatever value the
+    // bucket ended up with (zero, or a carried snapshot level) so that
+    // `min <= value <= max` holds for every row.
+    for (const b of buckets) {
+      if (b.count === 0) {
+        b.min = b.value;
+        b.max = b.value;
       }
     }
 

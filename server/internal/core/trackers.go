@@ -46,8 +46,8 @@ func (s *TrackerService) Create(raw any) (*Tracker, error) {
           reset_period, week_start, day_start_minute, month_start_day,
           year_start_month, default_value,
           archived_at, sort_order, is_derived, is_hidden, is_snapshot,
-          created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
+          section_order, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
 			id,
 			input.Name.Value,
 			nullableString(input.Description),
@@ -66,6 +66,7 @@ func (s *TrackerService) Create(raw any) (*Tracker, error) {
 			isDerived,
 			input.IsHidden.Value,
 			input.IsSnapshot.Value,
+			nullableString(input.SectionOrder),
 			now,
 			now,
 		); err != nil {
@@ -150,6 +151,7 @@ func (s *TrackerService) Update(id string, raw any) (*Tracker, error) {
 	assignInt(patch.SortOrder, "sort_order")
 	assignInt(patch.IsHidden, "is_hidden")
 	assignInt(patch.IsSnapshot, "is_snapshot")
+	assignStr(patch.SectionOrder, "section_order")
 
 	if nextSnapshot == 1 && existing.ResetPeriod != "never" {
 		sets = append(sets, `reset_period = 'never'`)

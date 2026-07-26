@@ -724,3 +724,80 @@ func TestTrackerManifest(t *testing.T) {
 		t.Errorf("unknown tracker manifest status %d, want 404", res.StatusCode)
 	}
 }
+
+// TestSectionOrderOverAPI pins the wire contract for the detail page's
+// per-tracker section layout: a nullable string that survives create, PATCH
+// and an explicit null reset, and rejects a malformed list with a 400.
+func TestSectionOrderOverAPI(t *testing.T) {
+	c := &client{t: t, base: newServer(t).URL}
+
+	var created m
+	c.postJSON("/api/trackers", m{"name": "Water"}, &created)
+	if created["section_order"] != nil {
+		t.Errorf("section_order should default to null, got %v", created["section_order"])
+	}
+	id := created["id"].(string)
+
+	var patched m
+	res, body := c.do("PATCH", "/api/trackers/"+id, m{"section_order": "trends,summary,entries"})
+	if res.StatusCode != 200 {
+		t.Fatalf("patch should 200, got %d: %s", res.StatusCode, body)
+	}
+	if err := json.Unmarshal(body, &patched); err != nil {
+		t.Fatal(err)
+	}
+	if patched["section_order"] != "trends,summary,entries" {
+		t.Errorf("section_order = %v", patched["section_order"])
+	}
+
+	res, _ = c.do("PATCH", "/api/trackers/"+id, m{"section_order": "trends,,summary"})
+	if res.StatusCode != 400 {
+		t.Errorf("malformed section_order should 400, got %d", res.StatusCode)
+	}
+
+	var cleared m
+	res, body = c.do("PATCH", "/api/trackers/"+id, m{"section_order": nil})
+	if res.StatusCode != 200 {
+		t.Fatalf("null patch should 200, got %d: %s", res.StatusCode, body)
+	}
+	if err := json.Unmarshal(body, &cleared); err != nil {
+		t.Fatal(err)
+	}
+	if cleared["section_order"] != nil {
+		t.Errorf("null should clear section_order, got %v", cleared["section_order"])
+	}
+}
+
+// A stat bucket carries min/max alongside value/count — the per-period table
+// reads them for a snapshot tracker's spread.
+func TestBucketsCarryMinAndMax(t *testing.T) {
+	c := &client{t: t, base: newServer(t).URL}
+	var tracker m
+	c.postJSON("/api/trackers", m{"name": "Steps", "kind": "number"}, &tracker)
+	id := tracker["id"].(string)
+	c.postJSON("/api/trackers/"+id+"/entries",
+		m{"value": 3, "occurred_at": "2026-01-02T12:00:00.000Z"}, nil)
+	c.postJSON("/api/trackers/"+id+"/entries",
+		m{"value": 8, "occurred_at": "2026-01-02T18:00:00.000Z"}, nil)
+
+	var buckets []m
+	if status := c.getJSON("/api/trackers/"+id+
+		"/stats/buckets?start=2026-01-01T00:00:00.000Z&end=2026-01-04T00:00:00.000Z&period=day",
+		&buckets); status != 200 {
+		t.Fatalf("buckets should 200, got %d", status)
+	}
+	for _, b := range buckets {
+		for _, key := range []string{"start", "end", "label", "value", "count", "min", "max"} {
+			if _, ok := b[key]; !ok {
+				t.Fatalf("bucket is missing %q: %v", key, b)
+			}
+		}
+	}
+	logged := buckets[1]
+	if logged["value"] != 11.0 || logged["min"] != 3.0 || logged["max"] != 8.0 {
+		t.Errorf("logged bucket = %v", logged)
+	}
+	if empty := buckets[0]; empty["min"] != 0.0 || empty["max"] != 0.0 {
+		t.Errorf("empty bucket should report a zero spread, got %v", empty)
+	}
+}

@@ -35,19 +35,29 @@ export function sumValues(rows: readonly { value: number }[]): number {
 /** A row that carries a value and the instant it occurred. */
 type ValuedEntry = { value: number; occurred_at: string };
 
+/**
+ * The entries whose `occurred_at` falls in `[start, end)`, compared as
+ * absolute instants so an entry logged in another offset still lands in the
+ * right window (see `todayRange`).
+ */
+export function filterInRange<T extends ValuedEntry>(
+  entries: readonly T[],
+  range: { start: string; end: string },
+): T[] {
+  const start = new Date(range.start).getTime();
+  const end = new Date(range.end).getTime();
+  return entries.filter((e) => {
+    const t = new Date(e.occurred_at).getTime();
+    return t >= start && t < end;
+  });
+}
+
 /** Sum the values of entries whose `occurred_at` falls in `[start, end)`. */
 export function sumInRange(
   entries: readonly ValuedEntry[],
   range: { start: string; end: string },
 ): number {
-  const start = new Date(range.start).getTime();
-  const end = new Date(range.end).getTime();
-  return sumValues(
-    entries.filter((e) => {
-      const t = new Date(e.occurred_at).getTime();
-      return t >= start && t < end;
-    }),
-  );
+  return sumValues(filterInRange(entries, range));
 }
 
 /** Map a tracker's `reset_period` to the bucketing period it corresponds to. */
@@ -57,6 +67,16 @@ const RESET_TO_BUCKET: Record<Exclude<ResetPeriod, 'never'>, BucketPeriod> = {
   monthly: 'month',
   yearly: 'year',
 };
+
+/**
+ * The bucket period a tracker's reset window corresponds to — the breakdown
+ * the tracker is really about. A tracker that never resets has no window of
+ * its own; months are the readable default for both the per-period table and
+ * the current-period view.
+ */
+export function periodForReset(resetPeriod: ResetPeriod): BucketPeriod {
+  return resetPeriod === 'never' ? 'month' : RESET_TO_BUCKET[resetPeriod];
+}
 
 /** Short label for the window a tracker's total covers, e.g. "this week". */
 export const RESET_PERIOD_LABEL: Record<ResetPeriod, string> = {
@@ -229,6 +249,42 @@ export function resetPeriodOptions(
     start = bucketStart(new Date(start.getTime() - 1), period, window);
   }
   return options;
+}
+
+/**
+ * The name of the *in-progress* bucket of a period — "Today", "This week",
+ * "This month", "This year". Used for the tab that scopes the entry list to
+ * the tracker's current reset window.
+ */
+export function currentPeriodLabel(period: BucketPeriod): string {
+  return RELATIVE_LABELS[period][0];
+}
+
+/**
+ * Human label for one row of the per-period table: "Today" / "Yesterday" /
+ * "This week" for the two most recent buckets, a date otherwise ("Apr 2026",
+ * "Week of May 11"). `start` is a bucket's start instant as the stats service
+ * reports it (UTC ISO); it's matched against the local bucket boundaries the
+ * same period `window` produces, so the two agree on where a period begins.
+ */
+export function periodRowLabel(
+  start: string,
+  period: BucketPeriod,
+  window: PeriodWindow = {},
+  now: Date = new Date(),
+): string {
+  const startDate = new Date(start);
+  if (Number.isNaN(startDate.getTime())) return '';
+  const [current, previous] = RELATIVE_LABELS[period];
+  const currentStart = bucketStart(now, period, window);
+  if (startDate.getTime() === currentStart.getTime()) return current;
+  const previousStart = bucketStart(
+    new Date(currentStart.getTime() - 1),
+    period,
+    window,
+  );
+  if (startDate.getTime() === previousStart.getTime()) return previous;
+  return bucketDateLabel(startDate, period, now);
 }
 
 /** Date-based label for a bucket beyond "this"/"last", e.g. "Apr 2026". */

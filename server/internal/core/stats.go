@@ -81,12 +81,19 @@ func (s *StatsService) Bucket(trackerID, start, end string, period BucketPeriod)
 		}
 		label := bucketLabel(bucketStart(occurred, period, window), period)
 		if i, hit := index[label]; hit {
+			value := asFloat(e.Get("value"))
 			// Snapshots are levels, not amounts: the bucket takes the latest
 			// reading (entries arrive in occurred_at order) instead of a sum.
 			if isSnapshot {
-				buckets[i].Value = asFloat(e.Get("value"))
+				buckets[i].Value = value
 			} else {
-				buckets[i].Value += asFloat(e.Get("value"))
+				buckets[i].Value += value
+			}
+			if buckets[i].Count == 0 || value < buckets[i].Min {
+				buckets[i].Min = value
+			}
+			if buckets[i].Count == 0 || value > buckets[i].Max {
+				buckets[i].Max = value
 			}
 			buckets[i].Count++
 		}
@@ -118,6 +125,16 @@ func (s *StatsService) Bucket(trackerID, start, end string, period BucketPeriod)
 			} else if carry != nil {
 				buckets[i].Value = *carry
 			}
+		}
+	}
+
+	// An empty bucket has no spread of its own; pin it to whatever value the
+	// bucket ended up with (zero, or a carried snapshot level) so that
+	// `min ≤ value ≤ max` holds for every row.
+	for i := range buckets {
+		if buckets[i].Count == 0 {
+			buckets[i].Min = buckets[i].Value
+			buckets[i].Max = buckets[i].Value
 		}
 	}
 

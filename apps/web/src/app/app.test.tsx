@@ -185,6 +185,8 @@ describe('entry pagination and search', () => {
     }
 
     renderApp(test, `/trackers/${t.id}`);
+    // The page opens on the current window; the whole timeline is its own tab.
+    await user.click(await screen.findByRole('tab', { name: 'All entries' }));
 
     // Page 1 holds the 10 newest (values 12..3); the 2 oldest wait on page 2.
     expect(await screen.findByText('Page 1 of 2')).toBeInTheDocument();
@@ -222,6 +224,8 @@ describe('entry pagination and search', () => {
     }
 
     renderApp(test, `/trackers/${t.id}`);
+    // Searching spans the whole timeline, which is its own tab.
+    await user.click(await screen.findByRole('tab', { name: 'All entries' }));
     await screen.findByText('Page 1 of 2');
 
     // Searching by the note surfaces only its entry — even from page 2.
