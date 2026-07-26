@@ -1,4 +1,4 @@
-import type { ResetPeriod, Tracker, TrackerKind } from '@countroster/core';
+import type { ResetPeriod, Tracker, TrackerKind, WeekStart } from '@countroster/core';
 
 /** Human label for each tracker kind. */
 export const KIND_LABELS: Record<TrackerKind, string> = {
@@ -34,6 +34,93 @@ export const RESET_PERIOD_OPTIONS: readonly { value: ResetChoice; label: string 
   { value: 'yearly', label: 'Year' },
   { value: 'snapshot', label: 'Not applicable — snapshot stat' },
 ];
+
+/**
+ * The tracker form's period-window controls. A tracker's periods need not
+ * line up with the calendar: a day can run 7:00 AM → 6:59 AM, a month the 8th
+ * → the 7th, a year April → March.
+ */
+export const WEEK_START_OPTIONS: readonly { value: WeekStart; label: string }[] = [
+  { value: 1, label: 'Monday' },
+  { value: 0, label: 'Sunday' },
+];
+
+export const MONTH_NAMES: readonly string[] = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** Capped at 28 so every month has the day — see migration 006. */
+export const MONTH_START_DAYS: readonly number[] = Array.from(
+  { length: 28 },
+  (_, i) => i + 1,
+);
+
+/** English ordinal for a day of the month: 1 → "1st", 22 → "22nd". */
+export function ordinal(n: number): string {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
+/** Minutes since midnight as an <input type="time"> value: 420 → "07:00". */
+export function minuteToTimeInput(minute: number): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`;
+}
+
+/** An <input type="time"> value back to minutes since midnight; 0 if blank. */
+export function timeInputFromValue(value: string): number {
+  const [h, m] = value.split(':').map(Number);
+  if (h === undefined || Number.isNaN(h)) return 0;
+  return h * 60 + (Number.isNaN(m ?? NaN) ? 0 : (m ?? 0));
+}
+
+/** Clock label for a day-start minute, e.g. 420 → "7:00 AM". */
+export function formatClockMinute(minute: number): string {
+  const d = new Date(2000, 0, 1, Math.floor(minute / 60), minute % 60);
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+/**
+ * One-line summary of a tracker's period windows, e.g. "Days 7:00 AM–6:59 AM ·
+ * Weeks from Monday · Months from the 8th · Years from April". Only the parts
+ * that differ from the plain calendar are spelled out; an all-default window
+ * reads "Calendar days, weeks, months and years".
+ */
+export function describePeriodWindow(w: {
+  day_start_minute: number;
+  week_start: WeekStart;
+  month_start_day: number;
+  year_start_month: number;
+}): string {
+  const parts: string[] = [];
+  if (w.day_start_minute !== 0) {
+    const end = (w.day_start_minute + 1439) % 1440;
+    parts.push(
+      `Days ${formatClockMinute(w.day_start_minute)}–${formatClockMinute(end)}`,
+    );
+  }
+  if (w.week_start !== 1) parts.push('Weeks from Sunday');
+  if (w.month_start_day !== 1) {
+    parts.push(`Months from the ${ordinal(w.month_start_day)}`);
+  }
+  if (w.year_start_month !== 1) {
+    parts.push(`Years from ${MONTH_NAMES[w.year_start_month - 1]}`);
+  }
+  return parts.length === 0
+    ? 'Calendar days, weeks, months and years'
+    : parts.join(' · ');
+}
 
 /** Format a duration given in seconds as e.g. "1h 5m 3s". */
 export function formatDuration(totalSeconds: number): string {

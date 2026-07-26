@@ -17,6 +17,8 @@ type Tracker struct {
 	ResetPeriod    string   `json:"reset_period"`
 	WeekStart      int      `json:"week_start"`
 	DayStartMinute int      `json:"day_start_minute"`
+	MonthStartDay  int      `json:"month_start_day"`
+	YearStartMonth int      `json:"year_start_month"`
 	DefaultValue   float64  `json:"default_value"`
 	ArchivedAt     *string  `json:"archived_at"`
 	SortOrder      int      `json:"sort_order"`

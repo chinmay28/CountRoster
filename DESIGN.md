@@ -220,6 +220,8 @@ CREATE TABLE trackers (
                     CHECK (reset_period IN ('never','daily','weekly','monthly','yearly')),
   week_start        INTEGER NOT NULL DEFAULT 1 CHECK (week_start IN (0,1)),  -- 0=Sun, 1=Mon
   day_start_minute  INTEGER NOT NULL DEFAULT 0 CHECK (day_start_minute BETWEEN 0 AND 1439),
+  month_start_day   INTEGER NOT NULL DEFAULT 1 CHECK (month_start_day BETWEEN 1 AND 28),   -- migration 006
+  year_start_month  INTEGER NOT NULL DEFAULT 1 CHECK (year_start_month BETWEEN 1 AND 12),  -- migration 006
   default_value     REAL NOT NULL DEFAULT 1,                 -- value used by quick-tap
   archived_at       TEXT,                                    -- ISO timestamp or null
   sort_order        INTEGER NOT NULL DEFAULT 0,
@@ -464,7 +466,7 @@ export interface BackupService {
 
 - Every service has a Vitest suite that runs against `MemoryAdapter`.
 - The SQLite adapters are validated by a shared "contract test" — the same test suite runs against `MemoryAdapter`, `SQLiteExpoAdapter` (in a node-sqlite shim), and `SQLiteWasmAdapter` (in node).
-- Property-based tests (fast-check) for time-bucketing edge cases (DST, week boundaries, custom `day_start_minute`).
+- Property-based tests (fast-check) for time-bucketing edge cases (DST, week boundaries, custom period windows).
 - Snapshot tests for backup bundle shape.
 
 Goal: **the entire domain layer is testable without booting Expo or a browser**.
@@ -679,13 +681,37 @@ const result = await app.backup.importBundle(bytes, { confirmOverwrite: true });
 
 ## Appendix B — Period bucketing semantics
 
+A tracker's periods need not line up with the calendar. Four columns — all
+defaulting to plain calendar bucketing — say where each period begins, and are
+editable when creating or editing a tracker:
+
+| Column | Range | Meaning |
+|---|---|---|
+| `day_start_minute` | 0–1439 | Minutes after local midnight a day begins. `420` runs a day 7:00 AM → 6:59 AM. |
+| `week_start` | 0 \| 1 | Weekday a week begins on (0 = Sunday, 1 = Monday). |
+| `month_start_day` | 1–28 | Day-of-month a month begins on. `8` runs a month the 8th → the 7th of the next month. Capped at 28 so every month has the day. |
+| `year_start_month` | 1–12 | Month a year begins on. `4` runs a year April → March. It opens on `month_start_day`, so the two compose (April 6th = the UK tax year). |
+
 For a tracker with `reset_period = 'daily'` and `day_start_minute = 240` (4:00 AM):
 
 - "Today" begins at the most recent local-time 04:00 that has already passed.
 - An entry logged at 03:30 AM falls into *yesterday's* bucket.
 - This is computed in the tracker's local timezone at `occurred_at`; backdated entries use their original local time.
 
-Weekly buckets respect `week_start`. Monthly buckets are calendar months. Yearly buckets are calendar years.
+Because every period opens on a day boundary, `day_start_minute` shifts weekly,
+monthly and yearly windows too: with a 7:00 AM day start, a month beginning on
+the 1st begins at 7:00 AM on the 1st.
+
+A bucket's label names the calendar day/month/year it *opens* in — a month
+window running May 8 → June 7 is labelled `2026-05` — which keeps labels unique
+and sortable whatever the window.
+
+Streaks count the same logical days: a 3:00 AM entry extends the previous day's
+run when the day starts at 7:00 AM.
+
+**Not yet honored:** a per-tracker timezone. All of the above is computed in the
+*server's* local zone. When tracker timezones land, `server/internal/core/periods.go`
+(and its TS mirror `packages/core/src/aggregations/periods.ts`) is where they go.
 
 ## Appendix C — License
 

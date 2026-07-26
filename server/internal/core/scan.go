@@ -53,6 +53,8 @@ func trackerFromRow(r storage.Row) *Tracker {
 		ResetPeriod:    asString(r.Get("reset_period")),
 		WeekStart:      asInt(r.Get("week_start")),
 		DayStartMinute: asInt(r.Get("day_start_minute")),
+		MonthStartDay:  asInt(r.Get("month_start_day")),
+		YearStartMonth: asInt(r.Get("year_start_month")),
 		DefaultValue:   asFloat(r.Get("default_value")),
 		ArchivedAt:     asNullString(r.Get("archived_at")),
 		SortOrder:      asInt(r.Get("sort_order")),

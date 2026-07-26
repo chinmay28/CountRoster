@@ -54,6 +54,8 @@ export const trackerInputSchema = z.object({
   reset_period: resetPeriodSchema.default('never'),
   week_start: weekStartSchema.default(1),
   day_start_minute: z.number().int().min(0).max(1439).default(0),
+  month_start_day: z.number().int().min(1).max(28).default(1),
+  year_start_month: z.number().int().min(1).max(12).default(1),
   default_value: z.number().finite().default(1),
   sort_order: z.number().int().default(0),
   /** Hidden trackers are omitted from list() unless `includeHidden` is set. */

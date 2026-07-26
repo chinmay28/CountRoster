@@ -26,7 +26,7 @@ export function HomePage() {
     const totals = new Map(
       await Promise.all(
         trackers.map(async (t) => {
-          const range = resetPeriodRange(t.reset_period, t.week_start);
+          const range = resetPeriodRange(t.reset_period, t);
           const entries = await core.entries.forTracker(t.id, range ?? undefined);
           const value = t.is_snapshot === 1 ? latestValue(entries) : sumValues(entries);
           return [t.id, value] as const;

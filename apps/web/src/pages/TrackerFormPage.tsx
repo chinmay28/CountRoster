@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { Tracker, TrackerInput, TrackerKind } from '@countroster/core';
+import type { Tracker, TrackerInput, TrackerKind, WeekStart } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
 import { useHiddenMode } from '../app/HiddenMode.tsx';
 import {
   KIND_LABELS,
   TRACKER_KINDS,
   RESET_PERIOD_OPTIONS,
+  WEEK_START_OPTIONS,
+  MONTH_NAMES,
+  MONTH_START_DAYS,
+  describePeriodWindow,
+  minuteToTimeInput,
+  ordinal,
+  timeInputFromValue,
   type ResetChoice,
 } from '../lib/format.ts';
 
@@ -30,6 +37,11 @@ interface FormValues {
   isDerived: boolean;
   /** When true, the tracker only shows while hidden mode is unlocked. */
   isHidden: boolean;
+  /** Where the tracker's periods begin — see the Period windows fieldset. */
+  dayStart: string;
+  weekStart: WeekStart;
+  monthStartDay: number;
+  yearStartMonth: number;
   links: LinkRow[];
 }
 
@@ -44,6 +56,10 @@ const DEFAULTS: FormValues = {
   reset_period: 'never',
   isDerived: false,
   isHidden: false,
+  dayStart: '00:00',
+  weekStart: 1,
+  monthStartDay: 1,
+  yearStartMonth: 1,
   links: [],
 };
 
@@ -100,6 +116,10 @@ export function TrackerFormPage() {
         reset_period: t.is_snapshot === 1 ? 'snapshot' : t.reset_period,
         isDerived,
         isHidden: t.is_hidden === 1,
+        dayStart: minuteToTimeInput(t.day_start_minute),
+        weekStart: t.week_start,
+        monthStartDay: t.month_start_day,
+        yearStartMonth: t.year_start_month,
         links: linkRows.map((l) => ({
           source_id: l.source_id,
           coefficient: String(l.coefficient),
@@ -161,6 +181,12 @@ export function TrackerFormPage() {
         default_value: values.isDerived ? 0 : Number(values.default_value) || 0,
         reset_period: isSnapshot ? 'never' : values.reset_period,
         is_snapshot: isSnapshot ? 1 : 0,
+        // Where this tracker's periods begin. Sent on create and update
+        // alike, so clearing a custom window restores calendar bucketing.
+        day_start_minute: timeInputFromValue(values.dayStart),
+        week_start: values.weekStart,
+        month_start_day: values.monthStartDay,
+        year_start_month: values.yearStartMonth,
         // Zod fills the rest of the required defaults.
       } as TrackerInput;
       const description = values.description.trim();
@@ -317,6 +343,8 @@ export function TrackerFormPage() {
           </select>
         </label>
 
+        <PeriodWindowFields values={values} set={set} />
+
         <label className="field">
           <span>Target (optional)</span>
           <input
@@ -356,6 +384,95 @@ export function TrackerFormPage() {
         </div>
       </form>
     </section>
+  );
+}
+
+/**
+ * Where this tracker's periods begin. A tracker need not follow the calendar:
+ * a day can run 7:00 AM → 6:59 AM (so a 3 AM log still counts for "yesterday"),
+ * a month the 8th → the 7th, a year April → March. These bound every total,
+ * chart bucket, target window and streak the tracker reports.
+ *
+ * Collapsed by default — it opens itself for a tracker that already has a
+ * custom window, and the summary always spells the current one out.
+ */
+function PeriodWindowFields({
+  values,
+  set,
+}: {
+  values: FormValues;
+  set: <K extends keyof FormValues>(key: K, value: FormValues[K]) => void;
+}) {
+  const summary = describePeriodWindow({
+    day_start_minute: timeInputFromValue(values.dayStart),
+    week_start: values.weekStart,
+    month_start_day: values.monthStartDay,
+    year_start_month: values.yearStartMonth,
+  });
+  const custom =
+    timeInputFromValue(values.dayStart) !== 0 ||
+    values.weekStart !== 1 ||
+    values.monthStartDay !== 1 ||
+    values.yearStartMonth !== 1;
+
+  return (
+    <details className="field period-window" open={custom}>
+      <summary>
+        Period windows
+        <span className="muted period-window__summary">{summary}</span>
+      </summary>
+
+      <label className="field">
+        <span>Day starts at</span>
+        <input
+          type="time"
+          value={values.dayStart}
+          onChange={(e) => set('dayStart', e.target.value || '00:00')}
+        />
+      </label>
+
+      <label className="field">
+        <span>Week starts on</span>
+        <select
+          value={values.weekStart}
+          onChange={(e) => set('weekStart', Number(e.target.value) as WeekStart)}
+        >
+          {WEEK_START_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="field">
+        <span>Month starts on</span>
+        <select
+          value={values.monthStartDay}
+          onChange={(e) => set('monthStartDay', Number(e.target.value))}
+        >
+          {MONTH_START_DAYS.map((d) => (
+            <option key={d} value={d}>
+              {`the ${ordinal(d)}`}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="field">
+        <span>Year starts in</span>
+        <select
+          value={values.yearStartMonth}
+          onChange={(e) => set('yearStartMonth', Number(e.target.value))}
+        >
+          {MONTH_NAMES.map((name, i) => (
+            <option key={name} value={i + 1}>
+              {`${name}${values.monthStartDay === 1 ? '' : ` ${ordinal(values.monthStartDay)}`}`}
+            </option>
+          ))}
+        </select>
+      </label>
+    </details>
   );
 }
 

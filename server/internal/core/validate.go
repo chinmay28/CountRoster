@@ -228,6 +228,8 @@ type TrackerPatch struct {
 	ResetPeriod    Opt[string]
 	WeekStart      Opt[int]
 	DayStartMinute Opt[int]
+	MonthStartDay  Opt[int]
+	YearStartMonth Opt[int]
 	DefaultValue   Opt[float64]
 	SortOrder      Opt[int]
 	IsHidden       Opt[int]
@@ -246,6 +248,8 @@ func parseTrackerFields(c *vctx, m map[string]any, nameRequired bool) TrackerPat
 		Target:         c.num(m, "target", true, false, false, 0, 0),
 		ResetPeriod:    c.enum(m, "reset_period", resetPeriods),
 		DayStartMinute: optInt(c.num(m, "day_start_minute", false, true, true, 0, 1439)),
+		MonthStartDay:  optInt(c.num(m, "month_start_day", false, true, true, 1, 28)),
+		YearStartMonth: optInt(c.num(m, "year_start_month", false, true, true, 1, 12)),
 		DefaultValue:   c.num(m, "default_value", false, false, false, 0, 0),
 		SortOrder:      optInt(c.num(m, "sort_order", false, true, false, 0, 0)),
 		IsHidden:       c.zeroOne(m, "is_hidden"),
@@ -321,6 +325,8 @@ func ParseTrackerInput(v any) (*TrackerPatch, error) {
 	applyDefault(&p.ResetPeriod, "never")
 	applyDefault(&p.WeekStart, 1)
 	applyDefault(&p.DayStartMinute, 0)
+	applyDefault(&p.MonthStartDay, 1)
+	applyDefault(&p.YearStartMonth, 1)
 	applyDefault(&p.DefaultValue, 1)
 	applyDefault(&p.SortOrder, 0)
 	applyDefault(&p.IsHidden, 0)

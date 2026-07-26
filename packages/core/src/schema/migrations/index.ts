@@ -3,6 +3,7 @@ import { M002_DERIVED_TRACKERS } from './002_derived_trackers.js';
 import { M003_HIDDEN_TRACKERS } from './003_hidden_trackers.js';
 import { M004_SNAPSHOT_TRACKERS } from './004_snapshot_trackers.js';
 import { M005_CARD_TRANSACTIONS } from './005_card_transactions.js';
+import { M006_PERIOD_WINDOWS } from './006_period_windows.js';
 
 export interface Migration {
   readonly version: number;
@@ -20,6 +21,7 @@ export const MIGRATIONS: readonly Migration[] = [
   M003_HIDDEN_TRACKERS,
   M004_SNAPSHOT_TRACKERS,
   M005_CARD_TRANSACTIONS,
+  M006_PERIOD_WINDOWS,
 ] as const;
 
 export const LATEST_VERSION: number = MIGRATIONS[MIGRATIONS.length - 1]!.version;

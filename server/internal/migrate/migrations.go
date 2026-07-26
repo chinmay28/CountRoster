@@ -20,6 +20,7 @@ var Migrations = []Migration{
 	{Version: 3, Name: "003_hidden_trackers", Up: m003HiddenTrackers},
 	{Version: 4, Name: "004_snapshot_trackers", Up: m004SnapshotTrackers},
 	{Version: 5, Name: "005_card_transactions", Up: m005CardTransactions},
+	{Version: 6, Name: "006_period_windows", Up: m006PeriodWindows},
 }
 
 // LatestVersion is the highest schema version known to this build.
@@ -190,4 +191,14 @@ const m005CardTransactions = `
     );
     CREATE INDEX IF NOT EXISTS category_rules_tracker_idx
       ON category_rules (tracker_id);
+  `
+
+const m006PeriodWindows = `
+    ALTER TABLE trackers
+      ADD COLUMN month_start_day INTEGER NOT NULL DEFAULT 1
+      CHECK (month_start_day BETWEEN 1 AND 28);
+
+    ALTER TABLE trackers
+      ADD COLUMN year_start_month INTEGER NOT NULL DEFAULT 1
+      CHECK (year_start_month BETWEEN 1 AND 12);
   `

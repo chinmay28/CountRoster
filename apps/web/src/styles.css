@@ -464,6 +464,31 @@ a {
   color: var(--text);
 }
 
+/* Period-window fields: a disclosure that stays out of the way until the
+   tracker actually leaves the calendar (it opens itself when it has). */
+.period-window {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  gap: 0.75rem;
+}
+.period-window > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  /* list-item keeps the disclosure triangle, which `display: grid` would
+     drop — the parent .field's grid already stacks summary and fields. */
+  display: list-item;
+  list-style-position: inside;
+}
+.period-window__summary {
+  display: block;
+  font-size: 0.8rem;
+  margin-top: 0.15rem;
+}
+.period-window[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
 /* "Derived from" panel on the detail page. */
 .derivation-list {
   list-style: none;

@@ -15,7 +15,8 @@ export const BACKUP_TABLES: ReadonlyArray<{
     name: 'trackers',
     columns: [
       'id', 'name', 'description', 'color', 'icon', 'kind', 'unit', 'target',
-      'reset_period', 'week_start', 'day_start_minute', 'default_value',
+      'reset_period', 'week_start', 'day_start_minute', 'month_start_day',
+      'year_start_month', 'default_value',
       'archived_at', 'sort_order', 'is_derived', 'is_hidden', 'is_snapshot',
       'created_at', 'updated_at',
     ],

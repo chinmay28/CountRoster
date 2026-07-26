@@ -57,7 +57,11 @@ export interface StatsService {
     period: BucketPeriod,
   ): Promise<StatBucket[]>;
 
-  /** Consecutive-day logging streak: current run and longest ever. */
+  /**
+   * Consecutive-day logging streak: current run and longest ever. "Day" is
+   * the tracker's own day window — with a 7:00 AM day start, a 3:00 AM entry
+   * extends the previous day's run.
+   */
   streak(trackerId: string): Promise<{ current: number; longest: number }>;
 
   /** Progress toward the tracker's target within its current reset period. */
@@ -100,7 +104,8 @@ class StatsServiceImpl implements StatsService {
     period: BucketPeriod,
   ): Promise<StatBucket[]> {
     const tracker = await this.getTracker(trackerId);
-    const weekStart = tracker?.week_start ?? 1;
+    // The tracker doubles as its own PeriodWindow (matching column names).
+    const window = tracker ?? {};
     const isSnapshot = tracker?.is_snapshot === 1;
 
     const source = await effectiveEntrySource(this.storage, trackerId);
@@ -119,9 +124,9 @@ class StatsServiceImpl implements StatsService {
     const buckets: StatBucket[] = [];
     const index = new Map<string, StatBucket>();
     const rangeEnd = new Date(range.end);
-    let cursor = bucketStart(new Date(range.start), period, weekStart);
+    let cursor = bucketStart(new Date(range.start), period, window);
     while (cursor < rangeEnd) {
-      const end = bucketEnd(cursor, period, weekStart);
+      const end = bucketEnd(cursor, period, window);
       const b: StatBucket = {
         start: cursor.toISOString(),
         end: end.toISOString(),
@@ -136,7 +141,7 @@ class StatsServiceImpl implements StatsService {
 
     for (const e of entries) {
       const label = bucketLabel(
-        bucketStart(new Date(e.occurred_at), period, weekStart),
+        bucketStart(new Date(e.occurred_at), period, window),
         period,
       );
       const b = index.get(label);
@@ -170,12 +175,19 @@ class StatsServiceImpl implements StatsService {
   }
 
   async streak(trackerId: string): Promise<{ current: number; longest: number }> {
+    const tracker = await this.getTracker(trackerId);
+    const dayStartMinute = tracker?.day_start_minute ?? 0;
+
     const source = await effectiveEntrySource(this.storage, trackerId);
+    // The logical day of an entry is its *local* wall clock (occurred_at's
+    // first 19 chars, before the offset) shifted back by the day start — a
+    // SQLite date() modifier, so the shift can cross a day or month boundary.
+    // The modifier's placeholder precedes the source's in the statement.
     const rows = await this.storage.query<{ occurred_at: string }>(
-      `SELECT DISTINCT substr(occurred_at, 1, 10) AS occurred_at
+      `SELECT DISTINCT date(substr(occurred_at, 1, 19), ?) AS occurred_at
          FROM ${source.sql}
         ORDER BY occurred_at ASC`,
-      source.params,
+      [`-${dayStartMinute} minutes`, ...source.params],
     );
     const days = rows.map((r) => r.occurred_at);
     if (days.length === 0) return { current: 0, longest: 0 };
@@ -194,8 +206,11 @@ class StatsServiceImpl implements StatsService {
       if (run > longest) longest = run;
     }
 
-    // Current run: walk back from today (or yesterday, if today isn't logged yet).
-    const today = this.clock.nowISO().slice(0, 10);
+    // Current run: walk back from today (or yesterday, if today isn't logged
+    // yet) — "today" being the day window currently open. Shift the clock in
+    // *its own* offset, exactly as the query above shifts each entry's stored
+    // wall clock, so the comparison never depends on the host's zone.
+    const today = shiftBackDays(this.clock.nowISO(), dayStartMinute);
     let anchor: string | null = null;
     if (present.has(today)) anchor = today;
     else if (present.has(addDays(today, -1))) anchor = addDays(today, -1);
@@ -237,8 +252,8 @@ class StatsServiceImpl implements StatsService {
     let end: string | null = null;
     if (tracker.reset_period !== 'never') {
       const period = RESET_TO_PERIOD[tracker.reset_period];
-      start = bucketStart(instant, period, tracker.week_start).toISOString();
-      end = bucketEnd(instant, period, tracker.week_start).toISOString();
+      start = bucketStart(instant, period, tracker).toISOString();
+      end = bucketEnd(instant, period, tracker).toISOString();
     }
 
     const params: SqlParam[] = [...source.params];
@@ -365,6 +380,19 @@ const RESET_TO_PERIOD: Record<
   monthly: 'month',
   yearly: 'year',
 };
+
+/**
+ * The YYYY-MM-DD an ISO timestamp falls on once its own wall clock is stepped
+ * back `minutes` — the JS twin of the SQL
+ * `date(substr(occurred_at, 1, 19), '-N minutes')` in streak(). Reading the
+ * wall clock as if it were UTC keeps the host's zone out of it.
+ */
+function shiftBackDays(iso: string, minutes: number): string {
+  const wall = new Date(`${iso.slice(0, 19)}Z`);
+  if (Number.isNaN(wall.getTime())) return iso.slice(0, 10);
+  wall.setUTCMinutes(wall.getUTCMinutes() - minutes);
+  return wall.toISOString().slice(0, 10);
+}
 
 /** True if `b` (YYYY-MM-DD) is the calendar day immediately after `a`. */
 function isNextDay(a: string, b: string): boolean {

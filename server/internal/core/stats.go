@@ -28,12 +28,8 @@ func (s *StatsService) Bucket(trackerID, start, end string, period BucketPeriod)
 	if err != nil {
 		return nil, err
 	}
-	weekStart := 1
-	isSnapshot := false
-	if tracker != nil {
-		weekStart = tracker.WeekStart
-		isSnapshot = tracker.IsSnapshot == 1
-	}
+	window := windowOf(tracker)
+	isSnapshot := tracker != nil && tracker.IsSnapshot == 1
 
 	source, err := effectiveEntrySource(s.st, trackerID)
 	if err != nil {
@@ -64,9 +60,9 @@ func (s *StatsService) Bucket(trackerID, start, end string, period BucketPeriod)
 
 	buckets := []StatBucket{}
 	index := map[string]int{}
-	cursor := bucketStart(startInstant, period, weekStart)
+	cursor := bucketStart(startInstant, period, window)
 	for cursor.Before(rangeEnd) {
-		bEnd := bucketEnd(cursor, period, weekStart)
+		bEnd := bucketEnd(cursor, period, window)
 		label := bucketLabel(cursor, period)
 		buckets = append(buckets, StatBucket{
 			Start: timeutil.ToUTCISO(cursor),
@@ -82,7 +78,7 @@ func (s *StatsService) Bucket(trackerID, start, end string, period BucketPeriod)
 		if !ok {
 			continue
 		}
-		label := bucketLabel(bucketStart(occurred, period, weekStart), period)
+		label := bucketLabel(bucketStart(occurred, period, window), period)
 		if i, hit := index[label]; hit {
 			// Snapshots are levels, not amounts: the bucket takes the latest
 			// reading (entries arrive in occurred_at order) instead of a sum.
@@ -128,16 +124,28 @@ func (s *StatsService) Bucket(trackerID, start, end string, period BucketPeriod)
 }
 
 // StreakFor computes the consecutive-day logging streak: current run and
-// longest ever.
+// longest ever. "Day" is the tracker's own day window — with a 7:00 AM day
+// start, a 3:00 AM entry extends the previous day's run.
 func (s *StatsService) StreakFor(trackerID string) (Streak, error) {
+	tracker, err := s.getTracker(trackerID)
+	if err != nil {
+		return Streak{}, err
+	}
+	window := windowOf(tracker)
+
 	source, err := effectiveEntrySource(s.st, trackerID)
 	if err != nil {
 		return Streak{}, err
 	}
+	// The logical day of an entry is its *local* wall clock (occurred_at's
+	// first 19 chars, before the offset) shifted back by the day start — a
+	// SQLite date() modifier, so the shift can cross a day or month boundary.
+	// The modifier's placeholder precedes the source's in the statement.
+	params := append([]any{minuteModifier(window.DayStartMinute)}, source.params...)
 	rows, err := s.st.Query(
-		`SELECT DISTINCT substr(occurred_at, 1, 10) AS occurred_at
+		`SELECT DISTINCT date(substr(occurred_at, 1, 19), ?) AS occurred_at
          FROM `+source.sql+`
-        ORDER BY occurred_at ASC`, source.params...)
+        ORDER BY occurred_at ASC`, params...)
 	if err != nil {
 		return Streak{}, err
 	}
@@ -165,8 +173,10 @@ func (s *StatsService) StreakFor(trackerID string) (Streak, error) {
 	}
 
 	// Current run: walk back from today (or yesterday, if today isn't logged
-	// yet).
-	today := s.clock.NowISO()[:10]
+	// yet) — "today" being the day window currently open. Shift the clock in
+	// *its own* offset, exactly as the query above shifts each entry's stored
+	// wall clock, so the comparison never depends on the host's zone.
+	today := shiftBackDays(s.clock.NowISO(), window.DayStartMinute)
 	anchor := ""
 	if present[today] {
 		anchor = today
@@ -237,9 +247,10 @@ func (s *StatsService) TargetProgressFor(trackerID, at string) (TargetProgress, 
 		// misplace entries near the window edges.
 		whereSQL = " WHERE julianday(occurred_at) >= julianday(?)" +
 			" AND julianday(occurred_at) < julianday(?)"
+		window := windowOf(tracker)
 		params = append(params,
-			timeutil.ToUTCISO(bucketStart(instant, period, tracker.WeekStart)),
-			timeutil.ToUTCISO(bucketEnd(instant, period, tracker.WeekStart)))
+			timeutil.ToUTCISO(bucketStart(instant, period, window)),
+			timeutil.ToUTCISO(bucketEnd(instant, period, window)))
 	}
 	rows, err := s.st.Query(
 		`SELECT SUM(value) AS total FROM `+source.sql+whereSQL, params...)
@@ -377,6 +388,24 @@ var resetToPeriod = map[string]BucketPeriod{
 	"weekly":  PeriodWeek,
 	"monthly": PeriodMonth,
 	"yearly":  PeriodYear,
+}
+
+// minuteModifier renders a SQLite datetime modifier that steps back n
+// minutes, e.g. "-420 minutes".
+func minuteModifier(n int) string {
+	return "-" + itoa(n) + " minutes"
+}
+
+// shiftBackDays returns the YYYY-MM-DD an ISO timestamp falls on once its own
+// wall clock is stepped back `minutes` — the Go twin of the SQL
+// `date(substr(occurred_at, 1, 19), '-N minutes')` above.
+func shiftBackDays(iso string, minutes int) string {
+	t, ok := timeutil.ParseInstant(iso)
+	if !ok {
+		return iso[:min(len(iso), 10)]
+	}
+	// Add preserves the parsed offset, so Format reads the shifted wall clock.
+	return t.Add(-time.Duration(minutes) * time.Minute).Format("2006-01-02")
 }
 
 // addDays adds delta days to a YYYY-MM-DD string, returning YYYY-MM-DD.

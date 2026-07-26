@@ -223,21 +223,16 @@ func TestImportsNodeBundle(t *testing.T) {
 		}
 	}
 
-	// The imported DB is bit-for-bit the same data for every table the Node
-	// bundle carried, so hashing just those tables must reproduce the Node
-	// manifest's exact checksum. (A full Go re-export also covers tables added
-	// to the schema since that bundle was written, so its own checksum
-	// legitimately differs.)
+	// The imported DB is bit-for-bit the same data for every table *and
+	// column* the Node bundle carried, so hashing exactly that projection must
+	// reproduce the Node manifest's checksum. Tables and columns the schema
+	// grew since the bundle was written are projected away — a full Go
+	// re-export covers them, so its own checksum legitimately differs.
 	tables, err := f.backup.readAllTables()
 	if err != nil {
 		t.Fatal(err)
 	}
-	shared := jsjson.NewObj()
-	for _, bt := range backupTables {
-		if _, ok := nodeManifest.RowCounts[bt.Name]; ok {
-			shared.Set(bt.Name, tables.Get(bt.Name))
-		}
-	}
+	shared := projectOnto(bundleTables(t, data), tables)
 	if got := checksumTables(shared); got != nodeManifest.Checksums.Tables {
 		t.Errorf("Go checksum %s != Node checksum %s", got, nodeManifest.Checksums.Tables)
 	}
@@ -270,6 +265,69 @@ func TestImportsNodeBundle(t *testing.T) {
 	if byName["Weight"] == nil || byName["Weight"].IsSnapshot != 1 {
 		t.Error("snapshot tracker lost its flag")
 	}
+}
+
+// bundleTables extracts the `tables` payload of a bundle's all.json.
+func bundleTables(t *testing.T, data []byte) *jsjson.Obj {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range zr.File {
+		if f.Name != "all.json" {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rc.Close()
+		raw, err := io.ReadAll(rc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsed, err := jsjson.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return parsed.(*jsjson.Obj).Get("tables").(*jsjson.Obj)
+	}
+	t.Fatal("bundle has no all.json")
+	return nil
+}
+
+// projectOnto narrows `have` to the shape of `want`: only the tables `want`
+// holds, and within each row only the columns its rows carry, in their order.
+// That's what lets a checksum written before a later ALTER TABLE still be
+// reproducible from a database that has since grown columns.
+func projectOnto(want, have *jsjson.Obj) *jsjson.Obj {
+	out := jsjson.NewObj()
+	for _, table := range want.Keys() {
+		wantRows, _ := want.Get(table).([]any)
+		haveRows, _ := have.Get(table).([]any)
+		var columns []string
+		if len(wantRows) > 0 {
+			if row, ok := wantRows[0].(*jsjson.Obj); ok {
+				columns = row.Keys()
+			}
+		}
+		projected := make([]any, 0, len(haveRows))
+		for _, item := range haveRows {
+			row, ok := item.(*jsjson.Obj)
+			if !ok {
+				projected = append(projected, item)
+				continue
+			}
+			narrowed := jsjson.NewObj()
+			for _, c := range columns {
+				narrowed.Set(c, row.Get(c))
+			}
+			projected = append(projected, narrowed)
+		}
+		out.Set(table, projected)
+	}
+	return out
 }
 
 // TestGoBundleReadableByTSUnzip pins the properties the TS unzip relies on:
