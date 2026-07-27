@@ -41,7 +41,10 @@ export function PeriodTable({ tracker, earliest, refreshKey }: PeriodTableProps)
     periodForReset(tracker.reset_period),
   );
   const [shown, setShown] = useState(PAGE_SIZE);
-  const [hideEmpty, setHideEmpty] = useState(false);
+  // Periods with nothing in them are the common case for anything logged less
+  // than daily, and a screen of em dashes buries the rows that say something —
+  // so the table opens filtered, and unticking brings the gaps back.
+  const [hideEmpty, setHideEmpty] = useState(true);
 
   // One extra, older bucket is fetched but never rendered: it supplies the
   // oldest visible row's "vs previous period" comparison.

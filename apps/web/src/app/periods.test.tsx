@@ -191,12 +191,46 @@ describe('current-period tab', () => {
 
     await screen.findByRole('tab', { name: 'This month' });
     expect(windowRows('This month')[0]![2]).toBe('Coffee beans');
-    // The Note column only exists because this entry carries one.
+    // The Notes column only exists because this entry carries one.
     expect(
       within(within(screen.getByRole('tabpanel', { name: 'This month' })).getByRole('table'))
         .getAllByRole('columnheader')
         .map((h) => h.textContent),
-    ).toEqual(['Time', 'Value', 'Note', 'Change']);
+    ).toEqual(['Time', 'Value', 'Notes', 'Change']);
+  });
+
+  it('reads an entry’s answers and its note out of one Notes column', async () => {
+    const tracker = await test.createTracker({
+      name: 'Milk',
+      kind: 'number',
+      reset_period: 'daily',
+      unit: 'ml',
+    });
+    const [wetDiaper] = await test.core.fields.replace(tracker.id, [
+      { name: 'Wet diaper', kind: 'flag' },
+    ]);
+    const entry = await test.core.entries.log(tracker.id, {
+      value: 70,
+      occurred_at: daysAgo(0, 9),
+      fields: { [wetDiaper!.id]: true },
+    });
+    await test.core.notes.create({
+      tracker_id: tracker.id,
+      entry_id: entry.id,
+      body: '+Multivitamin',
+    });
+    renderApp(test, `/trackers/${tracker.id}`);
+
+    await screen.findByRole('tab', { name: 'Today' });
+    const table = within(screen.getByRole('tabpanel', { name: 'Today' })).getByRole('table');
+    // One column, not two: the answer and the note stack in the same cell.
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((h) => h.textContent),
+    ).toEqual(['Time', 'Value', 'Notes', 'Change']);
+    const cell = within(table).getByText('+Multivitamin').closest('td')!;
+    expect(within(cell).getByText('✓ Wet diaper')).toBeInTheDocument();
   });
 
   it('reads but never writes — editing belongs to the All entries tab', async () => {
@@ -271,20 +305,21 @@ describe('period table', () => {
     expect(within(today).getAllByRole('cell')[2]).toHaveTextContent('▼ 1 glass');
   });
 
-  it('shows empty periods until asked to hide them', async () => {
+  it('hides empty periods until asked to show them', async () => {
     const tracker = await seedDaily(test);
     const user = userEvent.setup();
     renderApp(test, `/trackers/${tracker.id}`);
     await user.click(await screen.findByRole('tab', { name: 'By period' }));
     await screen.findByRole('table');
-    const before = tableRows().length;
-    // 12 days shown, only 2 of which have entries.
-    expect(before).toBeGreaterThan(4);
-
-    await user.click(screen.getByLabelText('Hide empty periods'));
-    // Header + the two logged days + footer.
+    // The table opens filtered: header + the two logged days + footer.
+    const toggle = screen.getByLabelText('Hide empty periods');
+    expect(toggle).toBeChecked();
     expect(tableRows()).toHaveLength(4);
     expect(screen.queryByText('—')).not.toBeInTheDocument();
+
+    // Unticking brings the gaps back — 12 days shown, only 2 with entries.
+    await user.click(toggle);
+    expect(tableRows().length).toBeGreaterThan(4);
   });
 
   it('re-buckets when the period changes', async () => {
@@ -367,7 +402,9 @@ describe('period table', () => {
 
     // A level persists, so the day after a reading still shows it — but a day
     // *before* the first reading ever has no level to show, and must not
-    // claim the user weighed nothing.
+    // claim the user weighed nothing. Empty days are filtered out by default,
+    // so ask for them back before reading one.
+    await user.click(screen.getByLabelText('Hide empty periods'));
     const rows = within(table).getAllByRole('row');
     const preHistory = rows.at(-2)!; // last body row; the footer is last
     expect(within(preHistory).getAllByRole('cell')[0]).toHaveTextContent('—');
@@ -425,11 +462,14 @@ describe('period table', () => {
     const footer = () =>
       within(screen.getByRole('table')).getAllByRole('row').at(-1)!;
     await screen.findByRole('table');
-    expect(footer()).toHaveTextContent('12 days');
-
-    await user.click(screen.getByLabelText('Hide empty periods'));
+    // Empty periods are hidden to begin with, so the footer counts the two
+    // days on screen rather than the twelve the range reaches back over.
     expect(footer()).toHaveTextContent('2 days');
     // The total is unchanged — the hidden periods contributed nothing.
+    expect(footer()).toHaveTextContent('7 glasses');
+
+    await user.click(screen.getByLabelText('Hide empty periods'));
+    expect(footer()).toHaveTextContent('12 days');
     expect(footer()).toHaveTextContent('7 glasses');
   });
 });
