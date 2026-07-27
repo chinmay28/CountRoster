@@ -7,7 +7,8 @@ import { AppLayout } from './AppLayout.tsx';
 import { HomePage } from '../pages/HomePage.tsx';
 import { TrackerFormPage } from '../pages/TrackerFormPage.tsx';
 import { TrackerDetailPage } from '../pages/TrackerDetailPage.tsx';
-import { unlockTapCount } from './HiddenMode.tsx';
+import { QuickLogPage } from '../pages/QuickLogPage.tsx';
+import { HiddenModeProvider, unlockTapCount } from './HiddenMode.tsx';
 import { makeTestCore, type TestCore } from '../test/makeTestCore.ts';
 
 function renderApp(test: TestCore, initialPath = '/') {
@@ -28,6 +29,35 @@ function renderApp(test: TestCore, initialPath = '/') {
   return render(
     <CoreValueProvider value={{ core: test.core, connected: true }}>
       <RouterProvider router={router} />
+    </CoreValueProvider>,
+  );
+}
+
+/**
+ * The real route shape from `main.tsx`: the quick-log screen is a sibling of
+ * the app shell, not a child of it, and hidden mode is provided above the
+ * router. Navigating between the two therefore unmounts the shell.
+ */
+function renderWithQuickLog(test: TestCore, initialPath: string) {
+  const router = createMemoryRouter(
+    [
+      { path: '/trackers/:id/quick', element: <QuickLogPage /> },
+      {
+        path: '/',
+        element: <AppLayout />,
+        children: [
+          { index: true, element: <HomePage /> },
+          { path: 'trackers/:id', element: <TrackerDetailPage /> },
+        ],
+      },
+    ],
+    { initialEntries: [initialPath] },
+  );
+  return render(
+    <CoreValueProvider value={{ core: test.core, connected: true }}>
+      <HiddenModeProvider>
+        <RouterProvider router={router} />
+      </HiddenModeProvider>
     </CoreValueProvider>,
   );
 }
@@ -115,5 +145,26 @@ describe('hidden tracker mode', () => {
     const t = await test.createTracker({ name: 'Secret habit', is_hidden: 1 });
     renderApp(test, `/trackers/${t.id}`);
     expect(await screen.findByText('Tracker not found')).toBeInTheDocument();
+  });
+
+  it('stays unlocked across the quick-log screen, which routes outside the shell', async () => {
+    const user = userEvent.setup();
+    const t = await test.createTracker({ name: 'Secret habit', is_hidden: 1 });
+    renderWithQuickLog(test, '/');
+
+    await tapBrand(user, UNLOCK_TAPS);
+    await user.click(await screen.findByText('Secret habit'));
+    expect(await screen.findByRole('heading', { name: 'Secret habit' })).toBeInTheDocument();
+
+    // Out to the quick-log screen (no app shell) and back to the detail page.
+    await user.click(screen.getByRole('link', { name: 'Quick log' }));
+    await screen.findByRole('link', { name: /Details/ });
+    await user.click(screen.getByRole('link', { name: /Details/ }));
+
+    // The tracker is still visible: hidden mode outlived the shell unmount.
+    expect(await screen.findByRole('heading', { name: 'Secret habit' })).toBeInTheDocument();
+    expect(screen.queryByText('Tracker not found')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Hidden trackers visible')).toBeInTheDocument();
+    expect(t.is_hidden).toBe(1);
   });
 });

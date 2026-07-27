@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { CoreProvider } from './app/CoreContext.tsx';
 import { AppLayout } from './app/AppLayout.tsx';
+import { HiddenModeProvider } from './app/HiddenMode.tsx';
 import { HomePage } from './pages/HomePage.tsx';
 import { TrackerDetailPage } from './pages/TrackerDetailPage.tsx';
 import { TrackerFormPage } from './pages/TrackerFormPage.tsx';
@@ -44,7 +45,12 @@ if (!rootEl) throw new Error('Root element #root not found');
 createRoot(rootEl).render(
   <StrictMode>
     <CoreProvider>
-      <RouterProvider router={router} />
+      {/* Above the router, so hidden mode spans every route — including the
+          quick-log screen, which renders outside the app shell. Unlocking it
+          and stepping onto that screen must not relock on the way back. */}
+      <HiddenModeProvider>
+        <RouterProvider router={router} />
+      </HiddenModeProvider>
     </CoreProvider>
   </StrictMode>,
 );
