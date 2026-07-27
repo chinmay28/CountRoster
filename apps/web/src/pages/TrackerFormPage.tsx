@@ -55,7 +55,7 @@ const DEFAULTS: FormValues = {
   name: '',
   description: '',
   color: '#4ECDC4',
-  kind: 'count',
+  kind: 'number',
   unit: '',
   target: '',
   default_value: '1',

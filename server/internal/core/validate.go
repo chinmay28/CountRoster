@@ -364,7 +364,7 @@ func ParseTrackerInput(v any) (*TrackerPatch, error) {
 		return nil, err
 	}
 	applyDefault(&p.Color, "#888888")
-	applyDefault(&p.Kind, "count")
+	applyDefault(&p.Kind, "number")
 	applyDefault(&p.ResetPeriod, "never")
 	applyDefault(&p.WeekStart, 1)
 	applyDefault(&p.DayStartMinute, 0)

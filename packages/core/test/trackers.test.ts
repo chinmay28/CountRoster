@@ -8,7 +8,7 @@ describe('TrackerService', () => {
     const tracker = await app.trackers.create({ name: 'Water' });
 
     expect(tracker.name).toBe('Water');
-    expect(tracker.kind).toBe('count');
+    expect(tracker.kind).toBe('number');
     expect(tracker.reset_period).toBe('never');
     expect(tracker.default_value).toBe(1);
     expect(tracker.color).toBe('#888888');
