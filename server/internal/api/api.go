@@ -17,10 +17,13 @@ import (
 	"github.com/chinmay28/countroster/server/internal/core"
 	"github.com/chinmay28/countroster/server/internal/jsjson"
 	"github.com/chinmay28/countroster/server/internal/timeutil"
+	"github.com/chinmay28/countroster/server/internal/version"
 )
 
-// AppVersion mirrors APP_VERSION in the TS server.
-const AppVersion = "0.1.0"
+// AppVersion is what /api/health and the backup manifest report (the role
+// APP_VERSION played in the TS server). Its patch number is the repository's
+// commit count, stamped at link time — see internal/version.
+var AppVersion = version.String()
 
 const (
 	jsonBodyLimit   = 5 << 20   // express.json({ limit: '5mb' })

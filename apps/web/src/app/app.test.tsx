@@ -13,6 +13,7 @@ import { TrackerFormPage } from '../pages/TrackerFormPage.tsx';
 import { NotFoundPage } from '../pages/NotFoundPage.tsx';
 import { makeTestCore, type TestCore } from '../test/makeTestCore.ts';
 import { toLocalISO } from '@countroster/core';
+import { APP_VERSION } from '../version.ts';
 
 function renderApp(test: TestCore, initialPath = '/') {
   const router = createMemoryRouter(
@@ -270,5 +271,20 @@ describe('note editing with history', () => {
 
     await user.click(screen.getByRole('button', { name: 'History' }));
     expect(await screen.findByText('Felt off today.')).toBeInTheDocument();
+  });
+});
+
+describe('app version in the header', () => {
+  it('renders the running version under the wordmark', async () => {
+    renderApp(test);
+
+    // Assert the shape, never the literal: the patch number is the commit
+    // count, so it changes with every commit.
+    const version = await screen.findByText(/^\d+\.\d+\.\d+$/);
+    expect(version).toBe(document.querySelector('.app__brand-version'));
+    expect(version.textContent).toBe(APP_VERSION);
+
+    // It lives inside the brand link, which is also the hidden-mode tap target.
+    expect(screen.getByRole('link', { name: /CountRoster/ })).toContainElement(version);
   });
 });

@@ -96,6 +96,13 @@ the quick-start does), copy `apps/web/dist/` into `server/cmd/countroster/webdis
 before `go build`. Otherwise the server falls back to serving the `--web-dist`
 directory from disk.
 
+`npm run build` stamps the version into both artifacts. It's
+`MAJOR.MINOR.PATCH` where the patch number is the repository's **commit
+count** — `1.1.311` is the 311th commit on the 1.1 line — shown in the app
+header, printed by `countroster version`, and returned by `/api/health`. Major
+and minor are constants in `server/internal/version/version.go`; a build made
+without git reports patch `0`. See [`server/README.md`](./server/README.md#version).
+
 Configure the server with `countroster serve` flags — prefer these over the
 env vars, which remain only as fallbacks:
 

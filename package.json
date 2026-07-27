@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present && npm run build:server",
-    "build:server": "cd server && CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o bin/countroster ./cmd/countroster",
+    "build:server": "cd server && CGO_ENABLED=0 go build -trimpath -ldflags \"-s -w -X github.com/chinmay28/countroster/server/internal/version.Patch=$(node ../scripts/version.mjs --patch)\" -o bin/countroster ./cmd/countroster",
     "test": "npm run test --workspaces --if-present && npm run test:server",
     "test:server": "cd server && go test ./...",
     "typecheck": "npm run typecheck --workspaces --if-present && npm run vet:server",
