@@ -1,5 +1,6 @@
+import type { CSSProperties } from 'react';
 import type { TrackerField } from '@countroster/core';
-import { sliceColor, type FieldAnswers } from '../lib/fields.ts';
+import { fieldColumnBasis, sliceColor, type FieldAnswers } from '../lib/fields.ts';
 import { readableInk } from '../lib/color.ts';
 
 interface EntryFieldsInputProps {
@@ -22,6 +23,12 @@ interface EntryFieldsInputProps {
  * this sits under a thumb on a phone, and a one-tap answer is the whole point
  * of a quick log. Tapping the selected pill again clears it, which is the only
  * way back to "unanswered" for a field that isn't required.
+ *
+ * The fields themselves flow into up to three columns: each one declares the
+ * width its own label and answers need (`--field-basis`, see
+ * `fieldColumnBasis`) and the layout in styles.css breaks the row where that
+ * width no longer fits. A screen of Yes/No fields packs onto one line instead
+ * of pushing the log control off the bottom.
  */
 export function EntryFieldsInput({
   fields,
@@ -43,12 +50,14 @@ export function EntryFieldsInput({
         // No field is ever mandatory, so nothing is marked as such: an
         // unanswered field is a legitimate state, not an omission.
         const label = <span className="entry-fields__label">{field.name}</span>;
+        const width = { '--field-basis': fieldColumnBasis(field) } as CSSProperties;
 
         if (field.kind === 'choice') {
           return (
             <div
               className="entry-fields__group"
               key={field.id}
+              style={width}
               role="group"
               aria-label={field.name}
             >
@@ -89,6 +98,7 @@ export function EntryFieldsInput({
             <div
               className="entry-fields__group"
               key={field.id}
+              style={width}
               role="group"
               aria-label={field.name}
             >
@@ -120,7 +130,7 @@ export function EntryFieldsInput({
 
         if (field.kind === 'number') {
           return (
-            <label className="field entry-fields__field" key={field.id}>
+            <label className="field entry-fields__field" key={field.id} style={width}>
               {label}
               <input
                 type="number"
@@ -138,7 +148,7 @@ export function EntryFieldsInput({
         }
 
         return (
-          <label className="field entry-fields__field" key={field.id}>
+          <label className="field entry-fields__field" key={field.id} style={width}>
             {label}
             <input
               type="text"

@@ -2170,10 +2170,32 @@ input.txn__name:focus {
   max-width: 11rem;
 }
 
-/* The answer controls, shared by every place an entry is written. */
+/* The answer controls, shared by every place an entry is written.
+   Fields flow into columns instead of stacking: each asks for the width its
+   own text needs (`--field-basis`, measured in EntryFieldsInput) and the row
+   breaks where the next one no longer fits — so three Yes/No fields share a
+   line while a field with long option labels keeps one to itself. They never
+   shrink below what they asked for, which is what makes the break honest. */
 .entry-fields {
-  display: grid;
-  gap: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  /* Tighter between columns than between rows: the horizontal room is what
+     decides whether a third Yes/No fits on a phone. */
+  gap: 0.7rem 0.5rem;
+}
+.entry-fields > * {
+  /* Grow to share the row, never shrink below the asked-for width, and never
+     ask for more than the row holds (which would overflow rather than wrap).
+     Longhands, because the `flex` shorthand won't parse a `min()` basis. */
+  flex-grow: 1;
+  flex-shrink: 0;
+  flex-basis: min(100%, var(--field-basis, 8rem));
+  /* A third of the row is the floor, so narrow answers stop at three columns
+     and each pill stays under a thumb. The 1.2rem covers the two gaps a
+     three-column row spends, with a little slack so rounding can't drop the
+     third column onto its own line. */
+  min-width: calc((100% - 1.2rem) / 3);
 }
 .entry-fields__group {
   display: grid;
@@ -2195,13 +2217,18 @@ input.txn__name:focus {
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
+  /* An input's intrinsic width is wider than a column; let it take the column
+     it's in rather than pushing the row wide. */
+  width: 100%;
+  min-width: 0;
 }
 
-/* A tap target big enough for a thumb, since this is the quick-log path. */
+/* A tap target big enough for a thumb, since this is the quick-log path. The
+   height carries that; the sides stay trim so a Yes/No answer fits a column. */
 .pill {
   font: inherit;
   font-size: 0.9rem;
-  padding: 0.45rem 0.85rem;
+  padding: 0.45rem 0.7rem;
   min-height: 2.4rem;
   border: 1.5px solid var(--border);
   border-radius: 999px;
