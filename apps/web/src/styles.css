@@ -2170,10 +2170,32 @@ input.txn__name:focus {
   max-width: 11rem;
 }
 
-/* The answer controls, shared by every place an entry is written. */
+/* The answer controls, shared by every place an entry is written.
+   Fields flow into columns instead of stacking: each asks for the width its
+   own text needs (`--field-basis`, measured in EntryFieldsInput) and the row
+   breaks where the next one no longer fits — so a pair of Yes/No fields share
+   a line while a field with long option labels keeps one to itself. They never
+   shrink below what they asked for, which is what makes the break honest. */
 .entry-fields {
-  display: grid;
-  gap: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  /* A wider gap between rows than between columns, so a row of fields reads
+     as one row rather than as a block of loose pills. */
+  gap: 0.7rem 0.6rem;
+}
+.entry-fields > * {
+  /* Grow to share the row, never shrink below the asked-for width, and never
+     ask for more than the row holds (which would overflow rather than wrap).
+     Longhands, because the `flex` shorthand won't parse a `min()` basis. */
+  flex-grow: 1;
+  flex-shrink: 0;
+  flex-basis: min(100%, var(--field-basis, 8rem));
+  /* Half the row is the floor, so narrow answers stop at two columns — three
+     across leaves each one too cramped to read at a glance. The 0.75rem covers
+     the gap a two-column row spends, with a little slack so rounding can't
+     drop the second column onto its own line. */
+  min-width: calc((100% - 0.75rem) / 2);
 }
 .entry-fields__group {
   display: grid;
@@ -2195,6 +2217,10 @@ input.txn__name:focus {
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
+  /* An input's intrinsic width is wider than a column; let it take the column
+     it's in rather than pushing the row wide. */
+  width: 100%;
+  min-width: 0;
 }
 
 /* A tap target big enough for a thumb, since this is the quick-log path. */
@@ -2225,6 +2251,17 @@ input.txn__name:focus {
   width: min(28rem, 100%);
   margin: 0 auto;
   padding: 0 1rem;
+}
+/* This screen reads down a centre line — headline, amount, keypad — and a
+   column is wider than the pills it holds. Centre the answers inside their
+   columns so the margins either side of the block match instead of all the
+   slack piling up on the right. Only here: the detail and edit forms are
+   left-aligned, and their fields belong to that edge. */
+.quick__fields .entry-fields__label {
+  text-align: center;
+}
+.quick__fields .entry-fields__pills {
+  justify-content: center;
 }
 /* On a painted screen the controls ride on the tracker's color. */
 .quick--painted .quick__fields .entry-fields__label {

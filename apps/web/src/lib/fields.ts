@@ -116,6 +116,48 @@ export function entryChips(
   return chips;
 }
 
+/**
+ * Roughly how much width one field's controls want, as a CSS length.
+ *
+ * The answer controls flow into columns rather than stacking, so two Yes/No
+ * fields sit side by side instead of eating two rows above the keypad. Only
+ * the browser knows the real widths, so each field asks for the room its own
+ * text needs and the row breaks wherever the next one stops fitting — a field
+ * with long option labels asks for more than a row holds and gets one to
+ * itself. The constants track `.pill` and `.entry-fields__label` in
+ * styles.css; they only have to be close, since guessing wrong costs a column,
+ * not a readable layout.
+ */
+export function fieldColumnBasis(field: TrackerField): string {
+  /** Average glyph advance in a pill's 0.9rem text, in rem. */
+  const PILL_CHAR = 0.55;
+  /** Average glyph advance in the 0.85rem field label, in rem. */
+  const LABEL_CHAR = 0.47;
+  /** A pill's horizontal padding plus its border. */
+  const PILL_CHROME = 1.9;
+  /** The gap between pills in a row. */
+  const PILL_GAP = 0.4;
+  /** Room for a typed number and its unit placeholder. */
+  const NUMBER = 8;
+
+  const pills = (labels: readonly string[]) =>
+    labels.reduce((sum, label) => sum + PILL_CHROME + label.length * PILL_CHAR, 0) +
+    Math.max(0, labels.length - 1) * PILL_GAP;
+
+  // Free text is never narrow enough to share a row, so don't pretend.
+  if (field.kind === 'text') return '100%';
+
+  const name = field.name.length * LABEL_CHAR;
+  const controls =
+    field.kind === 'flag'
+      ? pills(['Yes', 'No'])
+      : field.kind === 'choice'
+        ? pills(field.options.map((o) => o.label))
+        : NUMBER;
+
+  return `${Math.round(Math.max(name, controls) * 100) / 100}rem`;
+}
+
 /** Fields a breakdown can chart — a number field has no distinct answers. */
 export function chartableFields(fields: readonly TrackerField[]): TrackerField[] {
   return fields.filter((f) => f.kind !== 'number');
