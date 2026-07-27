@@ -69,7 +69,7 @@ export const trackerInputSchema = z.object({
   description: z.string().max(2000).optional().nullable(),
   color: hexColor.default('#888888'),
   icon: z.string().max(60).optional().nullable(),
-  kind: trackerKindSchema.default('count'),
+  kind: trackerKindSchema.default('number'),
   unit: z.string().max(30).optional().nullable(),
   target: z.number().finite().optional().nullable(),
   reset_period: resetPeriodSchema.default('never'),

@@ -57,7 +57,7 @@ describe('quick log — one tap (count)', () => {
   });
 
   it('shows the running total for the reset window', async () => {
-    const t = await test.createTracker({ name: 'Water', reset_period: 'daily' });
+    const t = await test.createTracker({ name: 'Water', kind: 'count', reset_period: 'daily' });
     await test.core.entries.log(t.id, { value: 3 });
     renderQuick(test, `/trackers/${t.id}/quick`);
 
@@ -67,7 +67,7 @@ describe('quick log — one tap (count)', () => {
   });
 
   it('puts Details on the left and Home on the right', async () => {
-    const t = await test.createTracker({ name: 'Water' });
+    const t = await test.createTracker({ name: 'Water', kind: 'count' });
     renderQuick(test, `/trackers/${t.id}/quick`);
 
     await screen.findByText('Water');
@@ -79,7 +79,7 @@ describe('quick log — one tap (count)', () => {
   });
 
   it('renders without the app shell, so nothing competes with the tap', async () => {
-    const t = await test.createTracker({ name: 'Water' });
+    const t = await test.createTracker({ name: 'Water', kind: 'count' });
     renderQuick(test, `/trackers/${t.id}/quick`);
 
     await screen.findByText('Water');
@@ -89,7 +89,7 @@ describe('quick log — one tap (count)', () => {
 
   it('logs a custom value with a note attached to that entry', async () => {
     const user = userEvent.setup();
-    const t = await test.createTracker({ name: 'Water' });
+    const t = await test.createTracker({ name: 'Water', kind: 'count' });
     renderQuick(test, `/trackers/${t.id}/quick`);
 
     await user.click(await screen.findByRole('button', { name: 'Custom value' }));
@@ -109,7 +109,7 @@ describe('quick log — one tap (count)', () => {
 
   it('undoing an entry logged with a note removes the note too', async () => {
     const user = userEvent.setup();
-    const t = await test.createTracker({ name: 'Water' });
+    const t = await test.createTracker({ name: 'Water', kind: 'count' });
     renderQuick(test, `/trackers/${t.id}/quick`);
 
     await user.click(await screen.findByRole('button', { name: 'Custom value' }));

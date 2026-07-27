@@ -9,7 +9,7 @@ func TestCreateTrackerDefaults(t *testing.T) {
 	a := newTestApp(t)
 	tr := mustCreate(t, a, obj("name", "Water"))
 
-	if tr.Name != "Water" || tr.Kind != "count" || tr.ResetPeriod != "never" ||
+	if tr.Name != "Water" || tr.Kind != "number" || tr.ResetPeriod != "never" ||
 		tr.DefaultValue != 1 || tr.Color != "#888888" {
 		t.Errorf("unexpected defaults: %+v", tr)
 	}
