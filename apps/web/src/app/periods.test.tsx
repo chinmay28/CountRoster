@@ -191,12 +191,46 @@ describe('current-period tab', () => {
 
     await screen.findByRole('tab', { name: 'This month' });
     expect(windowRows('This month')[0]![2]).toBe('Coffee beans');
-    // The Note column only exists because this entry carries one.
+    // The Notes column only exists because this entry carries one.
     expect(
       within(within(screen.getByRole('tabpanel', { name: 'This month' })).getByRole('table'))
         .getAllByRole('columnheader')
         .map((h) => h.textContent),
-    ).toEqual(['Time', 'Value', 'Note', 'Change']);
+    ).toEqual(['Time', 'Value', 'Notes', 'Change']);
+  });
+
+  it('reads an entry’s answers and its note out of one Notes column', async () => {
+    const tracker = await test.createTracker({
+      name: 'Milk',
+      kind: 'number',
+      reset_period: 'daily',
+      unit: 'ml',
+    });
+    const [wetDiaper] = await test.core.fields.replace(tracker.id, [
+      { name: 'Wet diaper', kind: 'flag' },
+    ]);
+    const entry = await test.core.entries.log(tracker.id, {
+      value: 70,
+      occurred_at: daysAgo(0, 9),
+      fields: { [wetDiaper!.id]: true },
+    });
+    await test.core.notes.create({
+      tracker_id: tracker.id,
+      entry_id: entry.id,
+      body: '+Multivitamin',
+    });
+    renderApp(test, `/trackers/${tracker.id}`);
+
+    await screen.findByRole('tab', { name: 'Today' });
+    const table = within(screen.getByRole('tabpanel', { name: 'Today' })).getByRole('table');
+    // One column, not two: the answer and the note stack in the same cell.
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((h) => h.textContent),
+    ).toEqual(['Time', 'Value', 'Notes', 'Change']);
+    const cell = within(table).getByText('+Multivitamin').closest('td')!;
+    expect(within(cell).getByText('✓ Wet diaper')).toBeInTheDocument();
   });
 
   it('reads but never writes — editing belongs to the All entries tab', async () => {

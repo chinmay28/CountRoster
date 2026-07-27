@@ -2503,3 +2503,11 @@ input.txn__name:focus {
 .periods__chips {
   margin: 0;
 }
+/* Answers and the note share one Notes cell: the note's words go under the
+   chips, not beside them, so neither has to compete for the column's width. */
+.periods__note-body {
+  display: block;
+}
+.periods__chips + .periods__note-body {
+  margin-top: 0.3rem;
+}

@@ -70,14 +70,13 @@ export function EntryTable({
     })
     .reverse();
 
-  // A column of nothing but em dashes is noise, and on a phone it is noise
-  // that costs a quarter of the width — so the Note column only exists when
-  // something in this window actually carries one.
-  const showNotes = rows.some((r) => r.note !== null);
-  // A tracker that captures custom answers shows them here too — this is the
-  // tab the page opens on, so an answer logged a moment ago has to be visible
-  // without hunting for the timeline.
-  const showChips = rows.some((r) => r.chips.length > 0);
+  // Answers and notes are both "what else was true about this entry", and on a
+  // phone two columns of mostly em dashes cost half the width — so they share
+  // one Notes column, chips above the note's words. It exists only when
+  // something in this window carries one or the other. (A tracker's answers
+  // have to show here too: this is the tab the page opens on, so an answer
+  // logged a moment ago is visible without hunting for the timeline.)
+  const showNotes = rows.some((r) => r.note !== null || r.chips.length > 0);
 
   const total = isSnapshot ? latestValue(entries) : sumValues(entries);
   const ratio =
@@ -95,8 +94,7 @@ export function EntryTable({
               <th scope="col" className="periods__num">
                 {isSnapshot ? 'Reading' : 'Value'}
               </th>
-              {showChips && <th scope="col">Answers</th>}
-              {showNotes && <th scope="col">Note</th>}
+              {showNotes && <th scope="col">Notes</th>}
               <th scope="col" className="periods__num">
                 Change
               </th>
@@ -110,7 +108,6 @@ export function EntryTable({
                 entry={entry}
                 note={note}
                 chips={chips}
-                showChips={showChips}
                 change={change}
                 showNotes={showNotes}
                 windowPeriod={windowPeriod}
@@ -123,7 +120,6 @@ export function EntryTable({
                 {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
               </th>
               <td className="periods__num">{formatValue(tracker, total)}</td>
-              {showChips && <td />}
               {showNotes && <td />}
               <td className="periods__num">
                 {ratio === null ? '' : `${ratio}%`}
@@ -156,7 +152,6 @@ function EntryTableRow({
   entry,
   note,
   chips,
-  showChips,
   change,
   showNotes,
   windowPeriod,
@@ -166,11 +161,9 @@ function EntryTableRow({
   note: Note | null;
   /** This entry's custom-field answers, ready to render. */
   chips: { key: string; label: string; color: string | null }[];
-  /** Whether the table is rendering an Answers column at all. */
-  showChips: boolean;
   /** Step from the entry before it; null for the window's first. */
   change: number | null;
-  /** Whether the table is rendering a Note column at all. */
+  /** Whether the table is rendering a Notes column at all. */
   showNotes: boolean;
   windowPeriod: BucketPeriod;
 }) {
@@ -180,35 +173,35 @@ function EntryTableRow({
       <td className="periods__num" style={{ color: tracker.color }}>
         {formatValue(tracker, entry.value)}
       </td>
-      {showChips && (
-        <td className="periods__note-cell">
-          {chips.length === 0 ? (
-            <span className="muted">—</span>
-          ) : (
-            <ul className="entry__chips periods__chips">
-              {chips.map((chip) => (
-                <li
-                  key={chip.key}
-                  className="chip"
-                  style={
-                    chip.color
-                      ? {
-                          borderColor: chip.color,
-                          background: `color-mix(in srgb, ${chip.color} 18%, transparent)`,
-                        }
-                      : undefined
-                  }
-                >
-                  {chip.label}
-                </li>
-              ))}
-            </ul>
-          )}
-        </td>
-      )}
       {showNotes && (
         <td className="periods__note-cell">
-          {note ? note.body : <span className="muted">—</span>}
+          {chips.length === 0 && !note ? (
+            <span className="muted">—</span>
+          ) : (
+            <>
+              {chips.length > 0 && (
+                <ul className="entry__chips periods__chips">
+                  {chips.map((chip) => (
+                    <li
+                      key={chip.key}
+                      className="chip"
+                      style={
+                        chip.color
+                          ? {
+                              borderColor: chip.color,
+                              background: `color-mix(in srgb, ${chip.color} 18%, transparent)`,
+                            }
+                          : undefined
+                      }
+                    >
+                      {chip.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {note && <span className="periods__note-body">{note.body}</span>}
+            </>
+          )}
         </td>
       )}
       <td className="periods__num">
