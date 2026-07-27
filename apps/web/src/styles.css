@@ -2252,6 +2252,17 @@ input.txn__name:focus {
   margin: 0 auto;
   padding: 0 1rem;
 }
+/* This screen reads down a centre line — headline, amount, keypad — and a
+   column is wider than the pills it holds. Centre the answers inside their
+   columns so the margins either side of the block match instead of all the
+   slack piling up on the right. Only here: the detail and edit forms are
+   left-aligned, and their fields belong to that edge. */
+.quick__fields .entry-fields__label {
+  text-align: center;
+}
+.quick__fields .entry-fields__pills {
+  justify-content: center;
+}
 /* On a painted screen the controls ride on the tracker's color. */
 .quick--painted .quick__fields .entry-fields__label {
   color: color-mix(in srgb, var(--quick-ink) 75%, transparent);
