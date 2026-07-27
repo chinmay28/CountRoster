@@ -54,7 +54,7 @@
 >   the assets embedded at build time, or `apps/web/dist` relative to the
 >   working directory.
 > - **Version stamping needs full git history.** The version is
->   `MAJOR.MINOR.PATCH`, where the patch number is the repository's commit count
+>   `vMAJOR.MINOR.PATCH`, where the patch number is the repository's commit count
 >   — the header and `countroster version` both report it, and `/api/health`
 >   returns it. The `-X` flag above is what puts it there;
 >   `scripts/version.mjs` is the single place it's assembled (major/minor from
@@ -62,8 +62,8 @@
 >
 >   **Don't build from a shallow clone.** A `--depth 1` checkout answers that
 >   count with `1` — not an error, just a build that quietly calls itself
->   `1.1.1`. `version.mjs` detects shallowness and reports patch **0** instead,
->   so you get a visibly-unstamped `1.1.0` rather than a plausible lie, but the
+>   `v1.1.1`. `version.mjs` detects shallowness and reports patch **0** instead,
+>   so you get a visibly-unstamped `v1.1.0` rather than a plausible lie, but the
 >   real fix is to give the build the history: `--filter=blob:none` instead of
 >   `--depth 1` when cloning (full commit graph, only the blobs the checkout
 >   needs), or `fetch-depth: 0` on GitHub Actions. A tree with no `.git` at all

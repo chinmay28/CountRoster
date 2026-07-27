@@ -280,7 +280,7 @@ describe('app version in the header', () => {
 
     // Assert the shape, never the literal: the patch number is the commit
     // count, so it changes with every commit.
-    const version = await screen.findByText(/^\d+\.\d+\.\d+$/);
+    const version = await screen.findByText(/^v\d+\.\d+\.\d+$/);
     expect(version).toBe(document.querySelector('.app__brand-version'));
     expect(version.textContent).toBe(APP_VERSION);
 

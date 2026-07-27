@@ -1,7 +1,7 @@
 // Package version carries the application version.
 //
-// The scheme is MAJOR.MINOR.PATCH where the patch number is the repository's
-// commit count — every commit is a patch release, so `1.1.311` is the 311th
+// The scheme is vMAJOR.MINOR.PATCH where the patch number is the repository's
+// commit count — every commit is a patch release, so `v1.1.311` is the 311th
 // commit on the 1.1 line. Major and minor are declared here in source and
 // bumped by hand; the patch number can only come from git, which a compiled
 // binary has no access to, so it is stamped at link time instead:
@@ -26,7 +26,9 @@ const (
 // unstamped development build, never a release.
 var Patch = "0"
 
-// String renders the full MAJOR.MINOR.PATCH version.
+// String renders the full version, `v`-prefixed to match how the project tags
+// releases (v1.0.0). This is the one rendering — it's what the CLI prints, what
+// /api/health reports, what a backup manifest records, and what the PWA shows.
 func String() string {
-	return strconv.Itoa(Major) + "." + strconv.Itoa(Minor) + "." + Patch
+	return "v" + strconv.Itoa(Major) + "." + strconv.Itoa(Minor) + "." + Patch
 }

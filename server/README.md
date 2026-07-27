@@ -16,7 +16,7 @@ go build -o bin/countroster ./cmd/countroster   # Go >= 1.21 bootstraps; go.mod 
 ./bin/countroster serve --port 9000             # same thing, on a chosen port
 ```
 
-A bare `go build` reports version `1.1.0` — patch **0** marks an unstamped dev
+A bare `go build` reports version `v1.1.0` — patch **0** marks an unstamped dev
 build. Releases get the real patch number (the commit count) stamped in; see
 [Version](#version) below.
 
@@ -59,8 +59,8 @@ Go — the result is a fully static binary, cross-compilable with plain
 
 ## Version
 
-`MAJOR.MINOR.PATCH`, where the patch number is the repository's **commit
-count** — every commit is a patch release, so `1.1.311` is the 311th commit on
+`vMAJOR.MINOR.PATCH`, where the patch number is the repository's **commit
+count** — every commit is a patch release, so `v1.1.311` is the 311th commit on
 the 1.1 line. It's what `countroster version` prints, what `/api/health`
 returns, what the backup manifest records as `app_version`, and what the PWA
 shows under the wordmark in its header.
@@ -75,9 +75,9 @@ command above). Unstamped, `Patch` stays `"0"`: **patch 0 means a dev build**,
 never a release.
 
 **The count needs full history.** A `--depth 1` clone answers `rev-list --count
-HEAD` with `1`, which is not an error — it's a build that calls itself `1.1.1`.
+HEAD` with `1`, which is not an error — it's a build that calls itself `v1.1.1`.
 `version.mjs` checks `rev-parse --is-shallow-repository` and reports 0 rather
-than the fake count, so the failure shows up as an obviously-unstamped `1.1.0`.
+than the fake count, so the failure shows up as an obviously-unstamped `v1.1.0`.
 Clone with `--filter=blob:none` (whole commit graph, only the blobs the
 checkout needs) rather than `--depth 1`, or `fetch-depth: 0` in CI.
 

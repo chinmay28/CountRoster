@@ -2,8 +2,8 @@
 /**
  * The one place the app's version number is assembled.
  *
- * Scheme: MAJOR.MINOR.PATCH, where PATCH is the repository's commit count —
- * every commit is a patch release, so `1.1.311` is the 311th commit on the
+ * Scheme: vMAJOR.MINOR.PATCH, where PATCH is the repository's commit count —
+ * every commit is a patch release, so `v1.1.311` is the 311th commit on the
  * 1.1 line.
  *
  *   - MAJOR/MINOR are source constants, read out of
@@ -14,8 +14,8 @@
  *     it inlined by Vite. Both call this file, so they can never disagree.
  *
  * Usage:
- *   node scripts/version.mjs            # print e.g. 1.1.50
- *   node scripts/version.mjs --patch    # print just the commit count
+ *   node scripts/version.mjs            # print e.g. v1.1.311
+ *   node scripts/version.mjs --patch    # print just the commit count (311)
  *   import { appVersion } from './scripts/version.mjs'
  */
 import { execFileSync } from 'node:child_process';
@@ -80,10 +80,16 @@ export function commitCount() {
   return git(['rev-list', '--count', 'HEAD']) ?? '0';
 }
 
-/** The full MAJOR.MINOR.PATCH version string. */
+/**
+ * The full version string, `v`-prefixed to match how the project tags releases
+ * (v1.0.0). Must stay byte-identical to version.String() in the Go package.
+ *
+ * Note `--patch` / commitCount() stays bare: that one feeds `-ldflags -X` as
+ * the value of `version.Patch`, which is the number alone.
+ */
 export function appVersion() {
   const { major, minor } = majorMinor();
-  return `${major}.${minor}.${commitCount()}`;
+  return `v${major}.${minor}.${commitCount()}`;
 }
 
 // Invoked directly (by the build scripts), print rather than export.

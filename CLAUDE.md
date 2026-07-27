@@ -102,9 +102,9 @@ Over the wire an `Entry` grows a `fields` array (always present, `[]` when there
 
 `internal/backup` produces/consumes the `.countroster.zip` bundle (manifest + `all.json` + CSVs, stored uncompressed). The manifest checksum is SHA-256 over the **JavaScript-canonical** JSON serialization of the tables — `internal/jsjson` reproduces `JSON.stringify` byte-for-byte (ECMA number formatting, minimal escaping, insertion-ordered keys). Golden fixtures in `internal/backup/testdata/` (a bundle exported by the TS implementation) prove bundles round-trip across implementations; don't regenerate them casually. (Reminders were removed as a feature; the `reminders` table remains in the schema because migrations are append-only and old backups must round-trip.)
 
-### Versioning is `MAJOR.MINOR.<commit count>`
+### Versioning is `vMAJOR.MINOR.<commit count>`
 
-`1.1.311` is the 311th commit on the 1.1 line. `Major`/`Minor` are consts in
+`v1.1.311` is the 311th commit on the 1.1 line. `Major`/`Minor` are consts in
 `server/internal/version/version.go`; the patch number can only come from git,
 so it's stamped at build time — `-ldflags -X …version.Patch=` for the binary,
 Vite `define` for the bundle. Both read `scripts/version.mjs`, which is the one
