@@ -113,6 +113,11 @@ so keep them as plain `Major = 1` lines its regex can find). An unstamped build
 reports patch `0`. The web reads it from `apps/web/src/version.ts`; **don't
 assert the literal version string in a test** — it changes with every commit.
 
+The count needs the full commit graph: a `--depth 1` clone answers it with `1`,
+silently. `version.mjs` refuses a shallow repo (reports 0 instead of the fake
+count) and `quickstart.sh` clones with `--filter=blob:none` — keep both, and
+don't reintroduce `--depth 1` anywhere that feeds a build.
+
 ### Aggregations
 
 `internal/core/periods.go` (`bucketStart`/`bucketEnd`/`bucketLabel`) implements day/week/month/year bucketing in host-local time, mirroring the JS `Date` math of the original. Boundaries come from the tracker's `PeriodWindow` — `day_start_minute`, `week_start`, `month_start_day`, `year_start_month` — so a day can run 7:00 AM → 6:59 AM, a month the 8th → the 7th, a year April → March (see DESIGN.md Appendix B). It does **not yet** honor custom timezones; that work belongs in this file when added, alongside the TS mirror in `packages/core/src/aggregations/periods.ts` and the web client's `apps/web/src/lib/range.ts` (which passes a tracker straight in as its window).

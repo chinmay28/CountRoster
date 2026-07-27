@@ -74,6 +74,13 @@ The stamp is `-ldflags "-X .../internal/version.Patch=<count>"` (see the build
 command above). Unstamped, `Patch` stays `"0"`: **patch 0 means a dev build**,
 never a release.
 
+**The count needs full history.** A `--depth 1` clone answers `rev-list --count
+HEAD` with `1`, which is not an error — it's a build that calls itself `1.1.1`.
+`version.mjs` checks `rev-parse --is-shallow-repository` and reports 0 rather
+than the fake count, so the failure shows up as an obviously-unstamped `1.1.0`.
+Clone with `--filter=blob:none` (whole commit graph, only the blobs the
+checkout needs) rather than `--depth 1`, or `fetch-depth: 0` in CI.
+
 `scripts/version.mjs` at the repo root is the one place the number is
 assembled — it reads `Major`/`Minor` straight out of `version.go` and runs the
 `git rev-list`. The Go build and the web build both call it, so the binary and
