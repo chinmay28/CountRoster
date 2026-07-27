@@ -21,7 +21,8 @@
 > npm run build --workspace @countroster/core      # TS types the web build imports
 > npm run build --workspace @countroster/web         # → apps/web/dist (the PWA)
 > cp -r apps/web/dist/. server/cmd/countroster/webdist/   # embed the PWA in the binary
-> (cd server && CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' \
+> (cd server && CGO_ENABLED=0 go build -trimpath \
+>    -ldflags "-s -w -X github.com/chinmay28/countroster/server/internal/version.Patch=$(node ../scripts/version.mjs --patch)" \
 >    -o bin/countroster ./cmd/countroster)            # → one static binary
 >
 > ./server/bin/countroster serve \
@@ -52,6 +53,15 @@
 >   The binary serves the PWA from (in order) `--web-dist` (env `WEB_DIST`),
 >   the assets embedded at build time, or `apps/web/dist` relative to the
 >   working directory.
+> - **Version stamping.** The version is `MAJOR.MINOR.PATCH`, where the patch
+>   number is the repository's commit count — the header and `countroster
+>   version` both report it, and `/api/health` returns it. The `-X` flag above
+>   is what puts it there; `scripts/version.mjs` is the single place it's
+>   assembled (major/minor from `server/internal/version/version.go`, patch from
+>   `git rev-list --count HEAD`). A build with no `.git` — a source tarball, or a
+>   `COPY` that excludes it — reports patch **0**. If you build in a container or
+>   CI, copy `.git` in and use a **full** clone (`fetch-depth: 0`): a shallow one
+>   counts only the commits it fetched.
 > - **A reasonable container** is `FROM scratch` (plus CA certs if you ever add
 >   outbound TLS): run the builds above in a builder stage, then
 >   `COPY server/bin/countroster /` and

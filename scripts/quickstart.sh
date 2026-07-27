@@ -250,9 +250,12 @@ build_src() {
     mkdir -p "$WEBDIST_DIR"
     cp -r "$SRC_DIR/apps/web/dist/." "$WEBDIST_DIR/"
     chown -R "$SVC_USER" "$WEBDIST_DIR" 2>/dev/null || true
+    # Version patch number = the commit count (see scripts/version.mjs). Falls
+    # back to 0 — the "unstamped dev build" marker — outside a git checkout.
+    patch="$(node "$SRC_DIR/scripts/version.mjs" --patch 2>/dev/null || echo 0)"
     # CGO_ENABLED=0 → fully static binary (the SQLite driver is pure Go).
     as_svc env PATH="$GO_DIR:$PATH" CGO_ENABLED=0 \
-      sh -c "cd '$SRC_DIR/server' && go build -trimpath -ldflags '-s -w' -o '$SERVER_BIN' ./cmd/countroster"
+      sh -c "cd '$SRC_DIR/server' && go build -trimpath -ldflags '-s -w -X github.com/chinmay28/countroster/server/internal/version.Patch=$patch' -o '$SERVER_BIN' ./cmd/countroster"
     [ -x "$SERVER_BIN" ] || die "build produced no server binary"
   else
     # Legacy (pre-Go) tree: the deployable unit is the compiled Node server.

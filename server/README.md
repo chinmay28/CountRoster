@@ -16,6 +16,10 @@ go build -o bin/countroster ./cmd/countroster   # Go >= 1.21 bootstraps; go.mod 
 ./bin/countroster serve --port 9000             # same thing, on a chosen port
 ```
 
+A bare `go build` reports version `1.1.0` — patch **0** marks an unstamped dev
+build. Releases get the real patch number (the commit count) stamped in; see
+[Version](#version) below.
+
 ## CLI
 
 ```
@@ -44,12 +48,37 @@ built PWA in before compiling (this is what `scripts/quickstart.sh` does):
 
 ```bash
 cp -r ../apps/web/dist/. cmd/countroster/webdist/
-CGO_ENABLED=0 go build -trimpath -ldflags '-s -w' -o bin/countroster ./cmd/countroster
+CGO_ENABLED=0 go build -trimpath \
+  -ldflags "-s -w -X github.com/chinmay28/countroster/server/internal/version.Patch=$(node ../scripts/version.mjs --patch)" \
+  -o bin/countroster ./cmd/countroster
 ```
 
 `CGO_ENABLED=0` works because the SQLite driver (`modernc.org/sqlite`) is pure
 Go — the result is a fully static binary, cross-compilable with plain
 `GOOS`/`GOARCH`.
+
+## Version
+
+`MAJOR.MINOR.PATCH`, where the patch number is the repository's **commit
+count** — every commit is a patch release, so `1.1.311` is the 311th commit on
+the 1.1 line. It's what `countroster version` prints, what `/api/health`
+returns, what the backup manifest records as `app_version`, and what the PWA
+shows under the wordmark in its header.
+
+| Part | Source |
+|---|---|
+| Major, minor | `Major`/`Minor` consts in `internal/version/version.go`. Bump by hand. |
+| Patch | `git rev-list --count HEAD`, stamped at link time — a binary has no repo to ask. |
+
+The stamp is `-ldflags "-X .../internal/version.Patch=<count>"` (see the build
+command above). Unstamped, `Patch` stays `"0"`: **patch 0 means a dev build**,
+never a release.
+
+`scripts/version.mjs` at the repo root is the one place the number is
+assembled — it reads `Major`/`Minor` straight out of `version.go` and runs the
+`git rev-list`. The Go build and the web build both call it, so the binary and
+the bundle can't report different versions. Keep the two constants in a form
+that file's regex still matches (`Major = 1` on its own line).
 
 ## Layout
 

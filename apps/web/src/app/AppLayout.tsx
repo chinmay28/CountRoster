@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useCoreContext } from './CoreContext.tsx';
 import { HiddenModeProvider, useHiddenMode } from './HiddenMode.tsx';
 import { useKeyboardOpen } from './useKeyboardOpen.ts';
+import { APP_VERSION } from '../version.ts';
 
 /** Primary destinations, shown in the desktop header and the mobile tab bar. */
 const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
@@ -40,7 +41,13 @@ function AppShell() {
       <header className="app__header">
         <Link to="/" className="app__brand" onClick={registerTap}>
           <img className="app__brand-logo" src="/icon.svg" alt="" aria-hidden="true" />
-          CountRoster
+          {/* Name over version, as a lockup. The version has to live inside
+              the brand link — the link is also the hidden-mode tap target, and
+              splitting it would put a dead zone in the middle of that target. */}
+          <span className="app__brand-text">
+            CountRoster
+            <span className="app__brand-version">{APP_VERSION}</span>
+          </span>
           {hiddenMode && (
             <span
               className="app__brand-hidden"
