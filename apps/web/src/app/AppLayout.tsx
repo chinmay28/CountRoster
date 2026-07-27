@@ -16,9 +16,10 @@ const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
 /** App chrome: header, connectivity banner, the routed page outlet, and a
  * mobile bottom tab bar with a floating "new tracker" action. */
 export function AppLayout() {
-  // Hidden-tracker mode is provided here (not in main.tsx) so the routed
-  // pages in the Outlet — and component tests that mount AppLayout — all see
-  // the same session-only state the header brand toggles.
+  // The app-wide provider lives above the router (main.tsx) so hidden mode
+  // survives the quick-log screen, which routes outside this shell. This one
+  // is the fallback for trees that mount the shell on its own — component
+  // tests — and is a passthrough whenever an outer provider exists.
   return (
     <HiddenModeProvider>
       <AppShell />

@@ -34,6 +34,8 @@ interface HiddenModeValue {
   enabled: boolean;
   /** Register one tap on the header brand (logo or text). */
   registerTap: () => void;
+  /** False only in the default value — i.e. no provider above this point. */
+  provided: boolean;
 }
 
 /**
@@ -43,9 +45,26 @@ interface HiddenModeValue {
 const HiddenModeContext = createContext<HiddenModeValue>({
   enabled: false,
   registerTap: () => {},
+  provided: false,
 });
 
+/**
+ * Nesting is a passthrough: the outermost provider owns the state.
+ *
+ * That matters because the app shell mounts one of these *and* is itself
+ * rendered inside the app-wide one. Without this, the shell's provider would
+ * shadow the outer state and unmount with the shell — so stepping onto the
+ * quick-log screen (which renders outside the shell) and back would silently
+ * relock hidden mode, making the hidden tracker you came from read as "Tracker
+ * not found".
+ */
 export function HiddenModeProvider({ children }: { children: ReactNode }) {
+  const outer = useContext(HiddenModeContext);
+  if (outer.provided) return <>{children}</>;
+  return <HiddenModeState>{children}</HiddenModeState>;
+}
+
+function HiddenModeState({ children }: { children: ReactNode }) {
   const [enabled, setEnabled] = useState(false);
   // Tap timestamps (ms). A ref, not state: taps shouldn't re-render anything
   // until the mode actually flips.
@@ -68,7 +87,7 @@ export function HiddenModeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <HiddenModeContext.Provider value={{ enabled, registerTap }}>
+    <HiddenModeContext.Provider value={{ enabled, registerTap, provided: true }}>
       {children}
     </HiddenModeContext.Provider>
   );
