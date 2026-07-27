@@ -217,14 +217,29 @@ if [ -n "$LOCAL_CHECKOUT" ]; then
 elif [ -d "$SRC_DIR/.git" ]; then
   PREV_SHA="$(git -C "$SRC_DIR" rev-parse HEAD 2>/dev/null || true)"
   log "updating to $COUNTROSTER_REF…"
-  as_svc git -C "$SRC_DIR" fetch --depth 1 origin "$COUNTROSTER_REF"
+  # Installs before the versioning change left a --depth 1 checkout behind.
+  # Deepen it once, or every build from here reports patch 1 (see below).
+  if [ "$(as_svc git -C "$SRC_DIR" rev-parse --is-shallow-repository 2>/dev/null || echo false)" = true ]; then
+    log "deepening shallow checkout (the version's patch number is the commit count)…"
+    as_svc git -C "$SRC_DIR" fetch --unshallow --filter=blob:none origin \
+      || as_svc git -C "$SRC_DIR" fetch --unshallow origin \
+      || warn "could not deepen; this build will report patch 0."
+  fi
+  as_svc git -C "$SRC_DIR" fetch --filter=blob:none origin "$COUNTROSTER_REF" \
+    || as_svc git -C "$SRC_DIR" fetch origin "$COUNTROSTER_REF"
   as_svc git -C "$SRC_DIR" checkout -q -B deploy FETCH_HEAD
   ok "updated $( [ -n "$PREV_SHA" ] && echo "${PREV_SHA:0:12} → " )$(git -C "$SRC_DIR" rev-parse --short HEAD)"
 else
   log "cloning $COUNTROSTER_REPO (ref: $COUNTROSTER_REF)…"
   mkdir -p "$PREFIX"
-  git clone --depth 1 --branch "$COUNTROSTER_REF" "$COUNTROSTER_REPO" "$SRC_DIR" \
-    || git clone --depth 1 "$COUNTROSTER_REPO" "$SRC_DIR"
+  # NOT --depth 1: the version's patch number is the commit count, and a
+  # shallow clone would make every build call itself 1.1.1. --filter=blob:none
+  # keeps it cheap — the whole commit graph, but only the blobs the checkout
+  # actually needs. Fall back to a plain clone if the server or git is too old
+  # for partial clone (needs git >= 2.19).
+  git clone --filter=blob:none --branch "$COUNTROSTER_REF" "$COUNTROSTER_REPO" "$SRC_DIR" \
+    || git clone --branch "$COUNTROSTER_REF" "$COUNTROSTER_REPO" "$SRC_DIR" \
+    || git clone "$COUNTROSTER_REPO" "$SRC_DIR"
   chown -R "$SVC_USER" "$PREFIX"
   ok "cloned to $SRC_DIR"
 fi
@@ -250,9 +265,11 @@ build_src() {
     mkdir -p "$WEBDIST_DIR"
     cp -r "$SRC_DIR/apps/web/dist/." "$WEBDIST_DIR/"
     chown -R "$SVC_USER" "$WEBDIST_DIR" 2>/dev/null || true
-    # Version patch number = the commit count (see scripts/version.mjs). Falls
-    # back to 0 — the "unstamped dev build" marker — outside a git checkout.
-    patch="$(node "$SRC_DIR/scripts/version.mjs" --patch 2>/dev/null || echo 0)"
+    # Version patch number = the commit count (see scripts/version.mjs). Run it
+    # as the service user like every other build step: git refuses to read a
+    # repo owned by someone else, so asking as root would silently yield 0.
+    # Falls back to 0 — the "unstamped build" marker — if it can't be known.
+    patch="$(as_svc node "$SRC_DIR/scripts/version.mjs" --patch 2>/dev/null || echo 0)"
     # CGO_ENABLED=0 → fully static binary (the SQLite driver is pure Go).
     as_svc env PATH="$GO_DIR:$PATH" CGO_ENABLED=0 \
       sh -c "cd '$SRC_DIR/server' && go build -trimpath -ldflags '-s -w -X github.com/chinmay28/countroster/server/internal/version.Patch=$patch' -o '$SERVER_BIN' ./cmd/countroster"

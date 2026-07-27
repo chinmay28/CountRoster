@@ -1,6 +1,6 @@
 /**
- * The running client's version, `MAJOR.MINOR.PATCH`, where the patch number is
- * the repository's commit count (so `1.1.311` is the 311th commit on the 1.1
+ * The running client's version, `vMAJOR.MINOR.PATCH`, where the patch number is
+ * the repository's commit count (so `v1.1.311` is the 311th commit on the 1.1
  * line).
  *
  * Inlined at build time by Vite's `define` (see vite.config.ts) from

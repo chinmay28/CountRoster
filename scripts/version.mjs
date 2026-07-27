@@ -2,8 +2,8 @@
 /**
  * The one place the app's version number is assembled.
  *
- * Scheme: MAJOR.MINOR.PATCH, where PATCH is the repository's commit count —
- * every commit is a patch release, so `1.1.311` is the 311th commit on the
+ * Scheme: vMAJOR.MINOR.PATCH, where PATCH is the repository's commit count —
+ * every commit is a patch release, so `v1.1.311` is the 311th commit on the
  * 1.1 line.
  *
  *   - MAJOR/MINOR are source constants, read out of
@@ -14,8 +14,8 @@
  *     it inlined by Vite. Both call this file, so they can never disagree.
  *
  * Usage:
- *   node scripts/version.mjs            # print e.g. 1.1.50
- *   node scripts/version.mjs --patch    # print just the commit count
+ *   node scripts/version.mjs            # print e.g. v1.1.311
+ *   node scripts/version.mjs --patch    # print just the commit count (311)
  *   import { appVersion } from './scripts/version.mjs'
  */
 import { execFileSync } from 'node:child_process';
@@ -39,30 +39,57 @@ function majorMinor() {
   return { major: read('Major'), minor: read('Minor') };
 }
 
-/**
- * The commit count on HEAD. Returns '0' when git can't answer — no repo (a
- * tarball or `COPY` without `.git`), or git missing. Patch 0 is the agreed
- * marker for an unstamped development build, matching the Go default.
- *
- * A shallow clone counts only the commits it fetched, so CI that builds
- * releases needs `fetch-depth: 0` for the number to mean anything.
- */
-export function commitCount() {
+/** Run git in the repo root; null if it fails (no repo, no git, old git). */
+function git(args) {
   try {
-    return execFileSync('git', ['rev-list', '--count', 'HEAD'], {
+    return execFileSync('git', args, {
       cwd: repoRoot,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
   } catch {
-    return '0';
+    return null;
   }
 }
 
-/** The full MAJOR.MINOR.PATCH version string. */
+/**
+ * The commit count on HEAD, or '0' when it can't be known — no repo (a tarball,
+ * or a `COPY` that skipped `.git`), no git, or a **shallow** clone.
+ *
+ * Shallow is the trap, and it's why this isn't a bare `rev-list`: a clone made
+ * with `--depth 1` answers `rev-list --count HEAD` with `1`, which is not an
+ * error and not obviously wrong — it just quietly ships a build calling itself
+ * `1.1.1`. Refuse it. Patch 0 is the agreed "unstamped build" marker (it
+ * matches the Go default), and a version ending in `.0` is visibly a
+ * non-release rather than a plausible lie.
+ *
+ * Anything building a release therefore needs the full commit graph:
+ * `fetch-depth: 0` on GitHub Actions, `--filter=blob:none` rather than
+ * `--depth 1` for a cheap clone that still carries all of it.
+ */
+export function commitCount() {
+  if (git(['rev-parse', '--is-shallow-repository']) === 'true') {
+    process.emitWarning(
+      'shallow git clone — the commit count is not the real one, reporting patch 0. ' +
+        'Clone with --filter=blob:none (or fetch --unshallow) for a real version.',
+    );
+    return '0';
+  }
+  // A failed probe (git older than 2.15, or no repo at all) is not proof of
+  // shallowness — fall through and let the count itself answer.
+  return git(['rev-list', '--count', 'HEAD']) ?? '0';
+}
+
+/**
+ * The full version string, `v`-prefixed to match how the project tags releases
+ * (v1.0.0). Must stay byte-identical to version.String() in the Go package.
+ *
+ * Note `--patch` / commitCount() stays bare: that one feeds `-ldflags -X` as
+ * the value of `version.Patch`, which is the number alone.
+ */
 export function appVersion() {
   const { major, minor } = majorMinor();
-  return `${major}.${minor}.${commitCount()}`;
+  return `v${major}.${minor}.${commitCount()}`;
 }
 
 // Invoked directly (by the build scripts), print rather than export.
