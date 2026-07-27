@@ -119,8 +119,8 @@ export function entryChips(
 /**
  * Roughly how much width one field's controls want, as a CSS length.
  *
- * The answer controls flow into columns rather than stacking, so three Yes/No
- * fields sit side by side instead of eating three rows above the keypad. Only
+ * The answer controls flow into columns rather than stacking, so two Yes/No
+ * fields sit side by side instead of eating two rows above the keypad. Only
  * the browser knows the real widths, so each field asks for the room its own
  * text needs and the row breaks wherever the next one stops fitting — a field
  * with long option labels asks for more than a row holds and gets one to
@@ -134,7 +134,7 @@ export function fieldColumnBasis(field: TrackerField): string {
   /** Average glyph advance in the 0.85rem field label, in rem. */
   const LABEL_CHAR = 0.47;
   /** A pill's horizontal padding plus its border. */
-  const PILL_CHROME = 1.6;
+  const PILL_CHROME = 1.9;
   /** The gap between pills in a row. */
   const PILL_GAP = 0.4;
   /** Room for a typed number and its unit placeholder. */

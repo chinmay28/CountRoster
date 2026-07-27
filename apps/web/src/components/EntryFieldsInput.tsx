@@ -24,11 +24,11 @@ interface EntryFieldsInputProps {
  * of a quick log. Tapping the selected pill again clears it, which is the only
  * way back to "unanswered" for a field that isn't required.
  *
- * The fields themselves flow into up to three columns: each one declares the
+ * The fields themselves flow into up to two columns: each one declares the
  * width its own label and answers need (`--field-basis`, see
  * `fieldColumnBasis`) and the layout in styles.css breaks the row where that
- * width no longer fits. A screen of Yes/No fields packs onto one line instead
- * of pushing the log control off the bottom.
+ * width no longer fits. A screen of Yes/No fields pairs up instead of pushing
+ * the log control off the bottom.
  */
 export function EntryFieldsInput({
   fields,

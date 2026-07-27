@@ -27,10 +27,10 @@ function rem(basis: string): number {
 }
 
 describe('fieldColumnBasis', () => {
-  it('keeps a yes/no field narrow enough for three to a row', () => {
-    // The quick screen gives its fields ~20.5rem on a 390px phone; three
-    // columns spend two 0.5rem gaps on top of their own width.
-    expect(3 * rem(fieldColumnBasis(field())) + 1).toBeLessThan(20.5);
+  it('keeps a yes/no field narrow enough for two to a row', () => {
+    // The quick screen gives its fields ~20.5rem on a 390px phone; two
+    // columns spend a 0.6rem gap on top of their own width.
+    expect(2 * rem(fieldColumnBasis(field())) + 0.6).toBeLessThan(20.5);
   });
 
   it('asks for the room a long field name needs', () => {
@@ -52,7 +52,7 @@ describe('fieldColumnBasis', () => {
     });
     expect(rem(fieldColumnBasis(two))).toBeLessThan(rem(fieldColumnBasis(many)));
     // Long labels outgrow a column, which is how a field claims its own row.
-    expect(rem(fieldColumnBasis(many))).toBeGreaterThan(28 / 3);
+    expect(rem(fieldColumnBasis(many))).toBeGreaterThan(20.5 / 2);
   });
 
   it('gives free text a row of its own', () => {

@@ -2173,16 +2173,16 @@ input.txn__name:focus {
 /* The answer controls, shared by every place an entry is written.
    Fields flow into columns instead of stacking: each asks for the width its
    own text needs (`--field-basis`, measured in EntryFieldsInput) and the row
-   breaks where the next one no longer fits — so three Yes/No fields share a
-   line while a field with long option labels keeps one to itself. They never
+   breaks where the next one no longer fits — so a pair of Yes/No fields share
+   a line while a field with long option labels keeps one to itself. They never
    shrink below what they asked for, which is what makes the break honest. */
 .entry-fields {
   display: flex;
   flex-wrap: wrap;
   align-items: start;
-  /* Tighter between columns than between rows: the horizontal room is what
-     decides whether a third Yes/No fits on a phone. */
-  gap: 0.7rem 0.5rem;
+  /* A wider gap between rows than between columns, so a row of fields reads
+     as one row rather than as a block of loose pills. */
+  gap: 0.7rem 0.6rem;
 }
 .entry-fields > * {
   /* Grow to share the row, never shrink below the asked-for width, and never
@@ -2191,11 +2191,11 @@ input.txn__name:focus {
   flex-grow: 1;
   flex-shrink: 0;
   flex-basis: min(100%, var(--field-basis, 8rem));
-  /* A third of the row is the floor, so narrow answers stop at three columns
-     and each pill stays under a thumb. The 1.2rem covers the two gaps a
-     three-column row spends, with a little slack so rounding can't drop the
-     third column onto its own line. */
-  min-width: calc((100% - 1.2rem) / 3);
+  /* Half the row is the floor, so narrow answers stop at two columns — three
+     across leaves each one too cramped to read at a glance. The 0.75rem covers
+     the gap a two-column row spends, with a little slack so rounding can't
+     drop the second column onto its own line. */
+  min-width: calc((100% - 0.75rem) / 2);
 }
 .entry-fields__group {
   display: grid;
@@ -2223,12 +2223,11 @@ input.txn__name:focus {
   min-width: 0;
 }
 
-/* A tap target big enough for a thumb, since this is the quick-log path. The
-   height carries that; the sides stay trim so a Yes/No answer fits a column. */
+/* A tap target big enough for a thumb, since this is the quick-log path. */
 .pill {
   font: inherit;
   font-size: 0.9rem;
-  padding: 0.45rem 0.7rem;
+  padding: 0.45rem 0.85rem;
   min-height: 2.4rem;
   border: 1.5px solid var(--border);
   border-radius: 999px;
