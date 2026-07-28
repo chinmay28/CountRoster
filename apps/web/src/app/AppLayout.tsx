@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useCoreContext } from './CoreContext.tsx';
 import { HiddenModeProvider, useHiddenMode } from './HiddenMode.tsx';
@@ -12,6 +12,11 @@ const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
   { to: '/groups', label: 'Groups', icon: <GroupsIcon /> },
   { to: '/data', label: 'Data', icon: <DataIcon /> },
 ];
+
+/** How long the developer badge stays on screen when the header mark is
+ * tapped. Kept in sync with the `dev-flash*` animation durations in
+ * styles.css — the CSS fades out on its own clock, this unmounts it. */
+const DEV_FLASH_MS = 3000;
 
 /** App chrome: header, connectivity banner, the routed page outlet, and a
  * mobile bottom tab bar with a floating "new tracker" action. */
@@ -36,6 +41,23 @@ function AppShell() {
   const keyboardOpen = useKeyboardOpen();
   // The FAB *is* the "new tracker" action, so don't show it on that form.
   const showFab = !pathname.startsWith('/trackers/new') && !pathname.endsWith('/edit');
+  // Tapping the developer mark throws the badge up full screen for a beat.
+  const [devFlash, setDevFlash] = useState(false);
+
+  useEffect(() => {
+    if (!devFlash) return;
+    const timer = window.setTimeout(() => setDevFlash(false), DEV_FLASH_MS);
+    // Nobody should be stuck waiting out an animation — Escape ends it early,
+    // as does a tap anywhere on the overlay.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDevFlash(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [devFlash]);
 
   return (
     <div className={`app${keyboardOpen ? ' app--keyboard-open' : ''}`}>
@@ -84,10 +106,18 @@ function AppShell() {
           </nav>
           {/* Developer credit. Deliberately quiet — a muted disk that only
               comes to full strength on hover, so it never competes with the
-              primary action next to it. */}
-          <span className="app__dev" title="Built by CM Hegday · 0x434d">
-            <img className="app__dev-logo" src="/dev-badge.png" alt="Built by CM Hegday" />
-          </span>
+              primary action next to it. Tapping it shows the badge full
+              screen, which is the only place its detail is readable. */}
+          <button
+            type="button"
+            className="app__dev"
+            title="Built by CM Hegday · 0x434d"
+            aria-label="Show the developer badge"
+            onClick={() => setDevFlash(true)}
+          >
+            {/* The button carries the label; the image would only repeat it. */}
+            <img className="app__dev-logo" src="/dev-badge.png" alt="" aria-hidden="true" />
+          </button>
         </div>
       </header>
 
@@ -136,6 +166,24 @@ function AppShell() {
           </NavLink>
         ))}
       </nav>
+
+      {/* Developer badge, full screen for three seconds. It lives out here
+          rather than in the header because the header's backdrop-filter makes
+          it a containing block — a fixed overlay inside it would be trapped
+          in the header's strip instead of covering the viewport. */}
+      {devFlash && (
+        <div
+          className="dev-flash"
+          role="presentation"
+          onClick={() => setDevFlash(false)}
+        >
+          <img
+            className="dev-flash__logo"
+            src="/dev-badge-full.png"
+            alt="Built by CM Hegday — 0x434d"
+          />
+        </div>
+      )}
     </div>
   );
 }
