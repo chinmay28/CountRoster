@@ -297,6 +297,8 @@ describe('developer mark in the header', () => {
     expect(mark.querySelector('img')).toHaveAttribute('src', '/dev-badge.png');
     // A credit, not a destination — it must not navigate anywhere.
     expect(mark.closest('a')).toBeNull();
+    // Nothing but the mark until it's tapped.
+    expect(screen.queryByText('github.com/chinmay28')).toBeNull();
   });
 
   it('flashes the badge full screen and clears itself after three seconds', async () => {
@@ -307,6 +309,9 @@ describe('developer mark in the header', () => {
     // The full-resolution art, not the header thumbnail.
     const flash = await screen.findByRole('img', { name: /CM Hegday/ });
     expect(flash).toHaveAttribute('src', '/dev-badge-full.png');
+    // The handle sits under the badge, and only ever there — the header mark
+    // is too small to carry it.
+    expect(screen.getByText('github.com/chinmay28')).toBeInTheDocument();
 
     // It goes away on its own — no dismissal needed. Real timers here: the
     // three seconds are the feature.

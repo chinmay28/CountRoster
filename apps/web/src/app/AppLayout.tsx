@@ -177,11 +177,14 @@ function AppShell() {
           role="presentation"
           onClick={() => setDevFlash(false)}
         >
-          <img
-            className="dev-flash__logo"
-            src="/dev-badge-full.png"
-            alt="Built by CM Hegday — 0x434d"
-          />
+          <div className="dev-flash__lockup">
+            <img
+              className="dev-flash__logo"
+              src="/dev-badge-full.png"
+              alt="Built by CM Hegday — 0x434d"
+            />
+            <span className="dev-flash__handle">github.com/chinmay28</span>
+          </div>
         </div>
       )}
     </div>
