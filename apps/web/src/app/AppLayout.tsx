@@ -60,24 +60,35 @@ function AppShell() {
             </span>
           )}
         </Link>
-        {/* Desktop / wide-screen navigation. The mobile tab bar mirrors it. */}
-        <nav className="app__nav" aria-label="Primary">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) =>
-                `btn btn--ghost${isActive ? ' btn--active' : ''}`
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
-          <Link to="/trackers/new" className="btn btn--primary">
-            New tracker
-          </Link>
-        </nav>
+        {/* Everything that hangs off the right edge. Grouping the nav with the
+            developer mark keeps them together when the nav collapses on
+            mobile — the mark then sits alone opposite the brand. */}
+        <div className="app__header-end">
+          {/* Desktop / wide-screen navigation. The mobile tab bar mirrors it. */}
+          <nav className="app__nav" aria-label="Primary">
+            {NAV_ITEMS.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) =>
+                  `btn btn--ghost${isActive ? ' btn--active' : ''}`
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+            <Link to="/trackers/new" className="btn btn--primary">
+              New tracker
+            </Link>
+          </nav>
+          {/* Developer credit. Deliberately quiet — a muted disk that only
+              comes to full strength on hover, so it never competes with the
+              primary action next to it. */}
+          <span className="app__dev" title="Built by CM Hegday · 0x434d">
+            <img className="app__dev-logo" src="/dev-badge.png" alt="Built by CM Hegday" />
+          </span>
+        </div>
       </header>
 
       {!connected && (

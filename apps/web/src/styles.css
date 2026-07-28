@@ -119,6 +119,42 @@ a {
   height: 100%;
 }
 
+/* Right-hand side of the header: nav (wide screens only) + developer mark. */
+.app__header-end {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+/* Developer credit mark. The artwork is a dark badge of its own, so it stays
+   dark in both themes and is separated from the nav by a hairline; the ring
+   keeps it from floating as a hole on the light background. */
+.app__dev {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding-left: 0.6rem;
+  border-left: 1px solid var(--border);
+}
+.app__dev-logo {
+  display: block;
+  /* 36px is the smallest size the badge's wordmark still reads at — below it
+     the mark collapses into an anonymous dark dot. */
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: #101010;
+  box-shadow: 0 0 0 1px var(--border);
+  opacity: 0.8;
+  transition: opacity 140ms ease, box-shadow 140ms ease;
+}
+.app__dev:hover .app__dev-logo,
+.app__dev:focus-visible .app__dev-logo {
+  opacity: 1;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 55%, transparent);
+}
+
 .app__main {
   flex: 1;
   padding: 1.5rem 0;
@@ -1258,6 +1294,12 @@ input.txn__name:focus {
   /* The header keeps only the brand; navigation moves to the tab bar. */
   .app__nav {
     display: none;
+  }
+  /* With the nav gone the developer mark stands alone, so the divider it hung
+     off the nav with has nothing left to divide. */
+  .app__dev {
+    padding-left: 0;
+    border-left: none;
   }
   /* App-shell layout. The shell is the full screen, with the tab bar as an
      in-flow flex child at its bottom and `.app__main` scrolling inside it.

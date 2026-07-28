@@ -23,7 +23,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon.svg', 'favicon.svg'],
+      includeAssets: ['icon.svg', 'favicon.svg', 'dev-badge.png'],
       manifest: {
         name: 'CountRoster',
         short_name: 'CountRoster',

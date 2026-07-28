@@ -288,3 +288,14 @@ describe('app version in the header', () => {
     expect(screen.getByRole('link', { name: /CountRoster/ })).toContainElement(version);
   });
 });
+
+describe('developer mark in the header', () => {
+  it('renders the credit badge opposite the brand, and never as a link', async () => {
+    renderApp(test);
+
+    const badge = await screen.findByRole('img', { name: 'Built by CM Hegday' });
+    expect(badge).toHaveAttribute('src', '/dev-badge.png');
+    // A credit, not a destination — it must not steal taps from the nav.
+    expect(badge.closest('a')).toBeNull();
+  });
+});
