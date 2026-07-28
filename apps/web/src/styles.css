@@ -119,6 +119,106 @@ a {
   height: 100%;
 }
 
+/* Right-hand side of the header: nav (wide screens only) + developer mark. */
+.app__header-end {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+/* Developer credit mark. The artwork is a dark badge of its own, so it stays
+   dark in both themes and is separated from the nav by a hairline; the ring
+   keeps it from floating as a hole on the light background. */
+.app__dev {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  /* It's a button now (tap → full-screen badge), so strip the chrome down to
+     the divider it hangs off the nav with. */
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: none;
+  padding: 0 0 0 0.6rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.app__dev:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: 0.25rem;
+}
+.app__dev:active .app__dev-logo {
+  transform: scale(0.94);
+}
+.app__dev-logo {
+  display: block;
+  /* 36px is the smallest size the badge's wordmark still reads at — below it
+     the mark collapses into an anonymous dark dot. */
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: #101010;
+  box-shadow: 0 0 0 1px var(--border);
+  opacity: 0.8;
+  transition: opacity 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+.app__dev:hover .app__dev-logo,
+.app__dev:focus-visible .app__dev-logo {
+  opacity: 1;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 55%, transparent);
+}
+
+/* ------------------------------------------------------------------ *
+ * The developer badge, thrown up full screen for three seconds when the
+ * header mark is tapped. Everything below is on that one clock: the
+ * overlay fades in, holds, and fades out over exactly DEV_FLASH_MS
+ * (AppLayout.tsx), which is when React unmounts it.
+ * ------------------------------------------------------------------ */
+.dev-flash {
+  position: fixed;
+  inset: 0;
+  /* Above every other layer: header (20), tab bar (25), FAB and toasts (30). */
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: saturate(1.2) blur(14px);
+  animation: dev-flash-veil 3s ease-in-out forwards;
+}
+.dev-flash__logo {
+  width: min(64vmin, 26rem);
+  height: min(64vmin, 26rem);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-lg);
+  animation: dev-flash-badge 3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes dev-flash-veil {
+  0% { opacity: 0; }
+  7% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { opacity: 0; }
+}
+/* Lands with a small overshoot, then drifts out as the veil clears. */
+@keyframes dev-flash-badge {
+  0% { transform: scale(0.82); }
+  14% { transform: scale(1.02); }
+  22% { transform: scale(1); }
+  82% { transform: scale(1); }
+  100% { transform: scale(1.06); }
+}
+
+/* The cross-fade stays — it isn't motion — but the scale doesn't. */
+@media (prefers-reduced-motion: reduce) {
+  .dev-flash__logo {
+    animation: none;
+  }
+}
+
 .app__main {
   flex: 1;
   padding: 1.5rem 0;
@@ -1258,6 +1358,12 @@ input.txn__name:focus {
   /* The header keeps only the brand; navigation moves to the tab bar. */
   .app__nav {
     display: none;
+  }
+  /* With the nav gone the developer mark stands alone, so the divider it hung
+     off the nav with has nothing left to divide. */
+  .app__dev {
+    padding-left: 0;
+    border-left: none;
   }
   /* App-shell layout. The shell is the full screen, with the tab bar as an
      in-flow flex child at its bottom and `.app__main` scrolling inside it.

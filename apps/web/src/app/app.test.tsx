@@ -288,3 +288,41 @@ describe('app version in the header', () => {
     expect(screen.getByRole('link', { name: /CountRoster/ })).toContainElement(version);
   });
 });
+
+describe('developer mark in the header', () => {
+  it('renders the credit badge opposite the brand, and never as a link', async () => {
+    renderApp(test);
+
+    const mark = await screen.findByRole('button', { name: 'Show the developer badge' });
+    expect(mark.querySelector('img')).toHaveAttribute('src', '/dev-badge.png');
+    // A credit, not a destination — it must not navigate anywhere.
+    expect(mark.closest('a')).toBeNull();
+  });
+
+  it('flashes the badge full screen and clears itself after three seconds', async () => {
+    const user = userEvent.setup();
+    renderApp(test);
+
+    await user.click(await screen.findByRole('button', { name: 'Show the developer badge' }));
+    // The full-resolution art, not the header thumbnail.
+    const flash = await screen.findByRole('img', { name: /CM Hegday/ });
+    expect(flash).toHaveAttribute('src', '/dev-badge-full.png');
+
+    // It goes away on its own — no dismissal needed. Real timers here: the
+    // three seconds are the feature.
+    await waitFor(() => expect(document.querySelector('.dev-flash')).toBeNull(), {
+      timeout: 5000,
+    });
+  }, 10000);
+
+  it('lets Escape end the flash early', async () => {
+    const user = userEvent.setup();
+    renderApp(test);
+
+    await user.click(await screen.findByRole('button', { name: 'Show the developer badge' }));
+    expect(document.querySelector('.dev-flash')).not.toBeNull();
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(document.querySelector('.dev-flash')).toBeNull());
+  });
+});
