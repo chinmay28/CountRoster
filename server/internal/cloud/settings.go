@@ -99,14 +99,27 @@ func (s *Settings) Public() PublicSettings {
 	}
 }
 
-// PublicProvider describes one destination the UI can offer. `configured` is
-// 0 when the operator hasn't registered an OAuth client for it — the button
-// is shown either way, because "Dropbox needs setup" is more useful than a
-// screen with nothing on it.
+// PublicProvider describes one destination the UI can offer, and everything
+// the setup form needs. `configured` is 0 when no OAuth client has been
+// registered for it — the button is shown either way, because "Dropbox needs
+// setup" is more useful than a screen with nothing on it.
+//
+// `client_id` is echoed back deliberately: it is not a secret (it travels in
+// the authorize URL the browser opens), and showing it is how a user checks
+// that what they pasted is what got stored. The secret only ever reports
+// whether one is present.
 type PublicProvider struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
 	Configured int    `json:"configured"`
+	ClientID   string `json:"client_id"`
+	HasSecret  int    `json:"has_secret"`
+	// SecretRequired is 1 for providers that reject a PKCE-only client.
+	SecretRequired int `json:"secret_required"`
+	// Source is "settings", "server", or "" — see the Source* constants.
+	Source string `json:"source"`
+	// SetupURL is the provider's developer console, linked from the form.
+	SetupURL string `json:"setup_url"`
 }
 
 // loadSettings reads the singleton row. The migration seeds it, but a

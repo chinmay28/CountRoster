@@ -2,7 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CloudBackupSettings } from '../components/CloudBackupSettings.tsx';
-import type { CloudBackupSettings as Settings } from '../api/cloud.ts';
+import type {
+  CloudBackupSettings as Settings,
+  CloudProviderInfo,
+} from '../api/cloud.ts';
 
 /**
  * The cloud backup settings surface. It has no domain half — the schedule,
@@ -39,10 +42,35 @@ const CONNECTED: Settings = {
   last_file_name: 'countroster-2026-05-25-1200.countroster.zip',
 };
 
-const PROVIDERS = [
-  { id: 'dropbox', name: 'Dropbox', configured: 1 as const },
-  { id: 'google_drive', name: 'Google Drive', configured: 0 as const },
+const PROVIDERS: CloudProviderInfo[] = [
+  {
+    id: 'dropbox',
+    name: 'Dropbox',
+    configured: 1,
+    client_id: 'app-key',
+    has_secret: 0,
+    secret_required: 0,
+    source: 'settings',
+    setup_url: 'https://www.dropbox.com/developers/apps',
+  },
+  {
+    id: 'google_drive',
+    name: 'Google Drive',
+    configured: 0,
+    client_id: '',
+    has_secret: 0,
+    secret_required: 1,
+    source: '',
+    setup_url: 'https://console.cloud.google.com/apis/credentials',
+  },
 ];
+
+const REDIRECT_URI = 'https://roster.example/api/cloud/backup/callback';
+
+/** The GET payload, with the fields every render reads. */
+function state(settings: Settings, providers: CloudProviderInfo[] = PROVIDERS) {
+  return { settings, providers, redirect_uri: REDIRECT_URI };
+}
 
 /** One recorded request, so a test can assert on what was actually sent. */
 interface Call {
@@ -93,19 +121,19 @@ beforeEach(() => {
 });
 
 describe('CloudBackupSettings', () => {
-  it('offers each provider, disabling the ones the server has no client id for', async () => {
-    stubFetch({
-      'GET /api/cloud/backup': { settings: DISCONNECTED, providers: PROVIDERS },
-    });
+  // A provider with no OAuth client gets a working "Set up" button, not a
+  // dead "Connect" with the reason buried in a tooltip no touch screen shows.
+  it('offers Connect for a ready provider and Set up for one that needs it', async () => {
+    stubFetch({ 'GET /api/cloud/backup': state(DISCONNECTED) });
     render(<CloudBackupSettings />);
 
-    const dropbox = await screen.findByRole('button', { name: 'Connect Dropbox' });
-    expect(dropbox).toBeEnabled();
-    expect(
-      screen.getByRole('button', { name: 'Connect Google Drive' }),
-    ).toBeDisabled();
-    // And the operator is told how to close the gap.
-    expect(screen.getByText(/--google-client-id/)).toBeInTheDocument();
+    expect(await screen.findByText('Dropbox')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled();
+
+    expect(screen.getByText('Google Drive')).toBeInTheDocument();
+    const setUp = screen.getByRole('button', { name: 'Set up' });
+    expect(setUp).toBeEnabled();
+    expect(screen.getByText('Needs a one-time setup')).toBeInTheDocument();
   });
 
   // A server built without cloud support doesn't register the routes; the
@@ -118,7 +146,7 @@ describe('CloudBackupSettings', () => {
 
   it('sends the browser to the provider consent screen', async () => {
     const calls = stubFetch({
-      'GET /api/cloud/backup': { settings: DISCONNECTED, providers: PROVIDERS },
+      'GET /api/cloud/backup': state(DISCONNECTED),
       'POST /api/cloud/backup/connect': {
         authorize_url: 'https://www.dropbox.com/oauth2/authorize?x=1',
       },
@@ -128,9 +156,7 @@ describe('CloudBackupSettings', () => {
     vi.stubGlobal('location', { ...window.location, assign, search: '' });
 
     render(<CloudBackupSettings />);
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'Connect Dropbox' }),
-    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Connect' }));
 
     await waitFor(() =>
       expect(assign).toHaveBeenCalledWith(
@@ -145,7 +171,7 @@ describe('CloudBackupSettings', () => {
 
   it('shows the account, folder, schedule and last run once connected', async () => {
     stubFetch({
-      'GET /api/cloud/backup': { settings: CONNECTED, providers: PROVIDERS },
+      'GET /api/cloud/backup': state(CONNECTED),
     });
     render(<CloudBackupSettings />);
 
@@ -159,15 +185,12 @@ describe('CloudBackupSettings', () => {
 
   it('reports a failed run with the provider’s own message', async () => {
     stubFetch({
-      'GET /api/cloud/backup': {
-        settings: {
-          ...CONNECTED,
-          last_status: 'error',
-          last_error: 'Dropbox: path/not_found',
-          last_file_name: null,
-        },
-        providers: PROVIDERS,
-      },
+      'GET /api/cloud/backup': state({
+        ...CONNECTED,
+        last_status: 'error',
+        last_error: 'Dropbox: path/not_found',
+        last_file_name: null,
+      }),
     });
     render(<CloudBackupSettings />);
     expect(
@@ -177,11 +200,8 @@ describe('CloudBackupSettings', () => {
 
   it('changes the schedule', async () => {
     const calls = stubFetch({
-      'GET /api/cloud/backup': { settings: CONNECTED, providers: PROVIDERS },
-      'PATCH /api/cloud/backup': {
-        settings: { ...CONNECTED, frequency: 'weekly' },
-        providers: PROVIDERS,
-      },
+      'GET /api/cloud/backup': state(CONNECTED),
+      'PATCH /api/cloud/backup': state({ ...CONNECTED, frequency: 'weekly' }),
     });
     render(<CloudBackupSettings />);
 
@@ -204,10 +224,12 @@ describe('CloudBackupSettings', () => {
   // that would start one stay inert until a folder is picked.
   it('keeps the schedule and manual run disabled until a folder is chosen', async () => {
     stubFetch({
-      'GET /api/cloud/backup': {
-        settings: { ...CONNECTED, folder_id: null, folder_path: null, frequency: 'off' },
-        providers: PROVIDERS,
-      },
+      'GET /api/cloud/backup': state({
+        ...CONNECTED,
+        folder_id: null,
+        folder_path: null,
+        frequency: 'off',
+      }),
     });
     render(<CloudBackupSettings />);
 
@@ -218,17 +240,15 @@ describe('CloudBackupSettings', () => {
 
   it('browses into a folder and saves it as the destination', async () => {
     const calls = stubFetch({
-      'GET /api/cloud/backup': {
-        settings: { ...CONNECTED, folder_id: null, folder_path: null },
-        providers: PROVIDERS,
-      },
+      'GET /api/cloud/backup': state({ ...CONNECTED, folder_id: null, folder_path: null }),
       'GET /api/cloud/backup/folders': {
         folders: [{ id: '/Apps', name: 'Apps', path: '/Apps' }],
       },
-      'PATCH /api/cloud/backup': {
-        settings: { ...CONNECTED, folder_id: '/Apps', folder_path: '/Apps' },
-        providers: PROVIDERS,
-      },
+      'PATCH /api/cloud/backup': state({
+        ...CONNECTED,
+        folder_id: '/Apps',
+        folder_path: '/Apps',
+      }),
     });
     render(<CloudBackupSettings />);
 
@@ -253,7 +273,7 @@ describe('CloudBackupSettings', () => {
 
   it('uploads on demand', async () => {
     const calls = stubFetch({
-      'GET /api/cloud/backup': { settings: CONNECTED, providers: PROVIDERS },
+      'GET /api/cloud/backup': state(CONNECTED),
       'POST /api/cloud/backup/run': {
         file_name: 'countroster-2026-05-25-1400.countroster.zip',
         bytes: 2048,
@@ -275,7 +295,7 @@ describe('CloudBackupSettings', () => {
 
   it('surfaces a 502 from the provider', async () => {
     stubFetch({
-      'GET /api/cloud/backup': { settings: CONNECTED, providers: PROVIDERS },
+      'GET /api/cloud/backup': state(CONNECTED),
       'POST /api/cloud/backup/run': {
         status: 502,
         payload: { error: 'Dropbox: insufficient_space' },
@@ -295,7 +315,7 @@ describe('CloudBackupSettings', () => {
   // back in the query string — and must not survive a refresh.
   it('reports the OAuth outcome from the callback and scrubs the URL', async () => {
     stubFetch({
-      'GET /api/cloud/backup': { settings: CONNECTED, providers: PROVIDERS },
+      'GET /api/cloud/backup': state(CONNECTED),
     });
     window.history.replaceState(null, '', '/data?cloud=connected');
 
@@ -308,7 +328,7 @@ describe('CloudBackupSettings', () => {
 
   it('reports a refused authorization', async () => {
     stubFetch({
-      'GET /api/cloud/backup': { settings: DISCONNECTED, providers: PROVIDERS },
+      'GET /api/cloud/backup': state(DISCONNECTED),
     });
     window.history.replaceState(
       null,
@@ -318,5 +338,90 @@ describe('CloudBackupSettings', () => {
 
     render(<CloudBackupSettings />);
     expect(await screen.findByText('access_denied')).toBeInTheDocument();
+  });
+  // The point of the whole setup form: getting a provider working must be
+  // possible from the phone in your hand, with no shell on the server.
+  it('sets a provider up from the page, with no CLI involved', async () => {
+    const READY: CloudProviderInfo = {
+      ...PROVIDERS[1]!,
+      configured: 1,
+      client_id: 'pasted-id',
+      has_secret: 1,
+      source: 'settings',
+    };
+    const calls = stubFetch({
+      'GET /api/cloud/backup': state(DISCONNECTED),
+      'PUT /api/cloud/backup/providers/google_drive': state(DISCONNECTED, [
+        PROVIDERS[0]!,
+        READY,
+      ]),
+    });
+    render(<CloudBackupSettings />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Set up' }));
+
+    // The redirect URI is the step people get wrong, so it's shown verbatim.
+    expect(screen.getByText(REDIRECT_URI)).toBeInTheDocument();
+    // And the console is one tap away rather than a paragraph of instructions.
+    expect(
+      screen.getByRole('link', { name: /developer console/ }),
+    ).toHaveAttribute('href', PROVIDERS[1]!.setup_url);
+
+    await userEvent.type(screen.getByLabelText('Client id'), 'pasted-id');
+    await userEvent.type(
+      screen.getByLabelText(/Client secret/),
+      'pasted-secret',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Save setup' }));
+
+    await waitFor(() =>
+      expect(calls.at(-1)).toMatchObject({
+        method: 'PUT',
+        body: { client_id: 'pasted-id', client_secret: 'pasted-secret' },
+      }),
+    );
+    // Having saved, the provider is connectable — two Connect buttons now.
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Connect' })).toHaveLength(2),
+    );
+  });
+
+  // Google rejects a PKCE-only client; the form says so up front rather than
+  // letting the failure land at the token endpoint after a consent screen.
+  it('marks the client secret required where the provider demands one', async () => {
+    stubFetch({ 'GET /api/cloud/backup': state(DISCONNECTED) });
+    render(<CloudBackupSettings />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Set up' }));
+    expect(screen.getByLabelText(/Client secret \(required\)/)).toBeInTheDocument();
+  });
+
+  it('surfaces a rejected client id from the server', async () => {
+    stubFetch({
+      'GET /api/cloud/backup': state(DISCONNECTED),
+      'PUT /api/cloud/backup/providers/google_drive': {
+        status: 400,
+        payload: {
+          error: 'Validation failed',
+          issues: [{ message: 'A client id is required.' }],
+        },
+      },
+    });
+    render(<CloudBackupSettings />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Set up' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save setup' }));
+    expect(await screen.findByText('Validation failed')).toBeInTheDocument();
+  });
+
+  // A client id pinned by a startup flag still works, and is labelled as
+  // coming from the server so nobody wonders where it was set.
+  it('shows a server-supplied client id as such', async () => {
+    stubFetch({
+      'GET /api/cloud/backup': state(DISCONNECTED, [
+        { ...PROVIDERS[0]!, source: 'server' },
+        PROVIDERS[1]!,
+      ]),
+    });
+    render(<CloudBackupSettings />);
+    expect(await screen.findByText('Set up on the server')).toBeInTheDocument();
   });
 });

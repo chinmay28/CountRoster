@@ -192,9 +192,9 @@ func run(cfg config) error {
 	return http.ListenAndServe(addr, handler)
 }
 
-// logCloudProviders says at startup which cloud destinations are usable, so
-// an operator who forgot a client id finds out from the log rather than from
-// a greyed-out button.
+// logCloudProviders says at startup which cloud destinations are usable. Not
+// having one isn't a misconfiguration to warn about — setup lives on the Data
+// page now — so the line just says where to go.
 func logCloudProviders(svc *cloud.Service) {
 	var ready []string
 	for _, p := range svc.PublicProviders() {
@@ -203,8 +203,8 @@ func logCloudProviders(svc *cloud.Service) {
 		}
 	}
 	if len(ready) == 0 {
-		log.Printf("[countroster] automatic cloud backup: no provider configured " +
-			"(set --dropbox-client-id and/or --google-client-id to enable)")
+		log.Printf("[countroster] automatic cloud backup: no provider set up yet " +
+			"(Data → Automatic cloud backup, or pass --dropbox-client-id / --google-client-id)")
 		return
 	}
 	log.Printf("[countroster] automatic cloud backup available via %s; OAuth redirect URI is <origin>%s",

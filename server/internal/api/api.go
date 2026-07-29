@@ -128,6 +128,8 @@ func New(app *core.App, bk *backup.Service, file FileSource, cl *cloud.Service) 
 		mux.HandleFunc("POST /api/cloud/backup/disconnect", s.cloudBackupDisconnect)
 		mux.HandleFunc("GET /api/cloud/backup/folders", s.cloudBackupFolders)
 		mux.HandleFunc("POST /api/cloud/backup/run", s.cloudBackupRun)
+		mux.HandleFunc("PUT /api/cloud/backup/providers/{provider}", s.cloudBackupSetCredentials)
+		mux.HandleFunc("DELETE /api/cloud/backup/providers/{provider}", s.cloudBackupClearCredentials)
 	}
 
 	mux.HandleFunc("GET /api/health", s.health)

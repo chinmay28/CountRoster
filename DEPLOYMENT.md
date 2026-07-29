@@ -88,10 +88,19 @@
 > exactly the `.countroster.zip` the download button produces, so anything it
 > writes restores through the same Restore box.
 >
-> **You register the OAuth app, not us.** CountRoster is self-hosted: there is
-> no shipped application identity to borrow, and shipping one would mean every
-> deployment sharing a secret. The provider sees *your* app asking for access
-> to *your* Drive.
+> **Set up from the Data page — no shell needed.** Everything below is entered
+> in the app itself (Data → Automatic cloud backup → Set up), including the
+> redirect URI, which the page shows with a Copy button. The `--dropbox-client-id`
+> / `--google-client-id` flags still work and act as the fallback when nothing
+> has been entered, but they exist for automated deployments; a phone has no
+> command line, and it shouldn't need one.
+>
+> **You register the OAuth app, not us.** CountRoster is self-hosted: your
+> server lives at an address nobody can predict, and OAuth providers require
+> every redirect URI to be registered in advance — so a single shipped
+> registration can't cover arbitrary self-hosted origins the way it covers a
+> store app's fixed `com.app://` scheme. Hence one app, registered by you. The
+> provider sees *your* app asking for access to *your* Drive.
 >
 > **Dropbox**
 >
@@ -101,8 +110,8 @@
 >    `files.metadata.read` and `files.content.write`, then submit.
 > 3. On **Settings**, add the redirect URI
 >    `https://<your origin>/api/cloud/backup/callback`.
-> 4. Start the server with `--dropbox-client-id <app key>`. The app secret is
->    optional — leave it out and the PKCE-only flow is used.
+> 4. Paste the app key into Data → Automatic cloud backup → Dropbox → Set up.
+>    The app secret is optional — leave it blank and the PKCE-only flow is used.
 >
 > **Google Drive**
 >
@@ -112,8 +121,9 @@
 >    deployment needs, and it avoids Google's verification review.
 > 3. Create an **OAuth client ID** of type *Web application* with the authorized
 >    redirect URI `https://<your origin>/api/cloud/backup/callback`.
-> 4. Start the server with `--google-client-id` and `--google-client-secret`
->    (Google's web clients require the secret).
+> 4. Paste the client id **and secret** into Data → Automatic cloud backup →
+>    Google Drive → Set up. Google's web clients require the secret, and the
+>    form marks it required for exactly that reason.
 >
 > The requested scope is full `drive` access. The narrower `drive.file` only
 > reaches files the app itself created, which can't browse your existing folders
@@ -121,16 +131,24 @@
 > feature.
 >
 > **Getting the redirect URI right.** It has to match what you registered,
-> character for character. By default the server builds it from the origin the
-> request arrived on, honoring `X-Forwarded-Proto` / `X-Forwarded-Host` so a
-> TLS-terminating proxy works. If your proxy sets neither, pin it:
-> `--public-url https://roster.example` (env `COUNTROSTER_PUBLIC_URL`).
+> character for character — which is why the setup form shows the exact string
+> to copy rather than making you assemble it. The server builds it from the
+> origin the request arrived on, honoring `X-Forwarded-Proto` /
+> `X-Forwarded-Host` so a TLS-terminating proxy works. If your proxy sets
+> neither, pin it: `--public-url https://roster.example`
+> (env `COUNTROSTER_PUBLIC_URL`).
 >
-> **What's stored, and where it isn't.** The access and refresh tokens live in
-> the `cloud_backup_settings` row of your SQLite file. They are never returned
+> Note that both providers require an **https** redirect URI (localhost is the
+> only exception), so a plain-http LAN deployment can't complete the flow —
+> another reason to front the server with Tailscale Serve or a reverse proxy,
+> as the PWA install already wants.
+>
+> **What's stored, and where it isn't.** The client id and secret live in
+> `cloud_provider_credentials`; the access and refresh tokens live in the
+> `cloud_backup_settings` row of your SQLite file. They are never returned
 > by the API — the settings endpoint is redacted — and they are deliberately
-> **excluded from the backup bundle**, so an exported `.countroster.zip` is
-> never also a credential file, and restoring one taken on another machine
+> **excluded from the backup bundle** — both tables — so an exported
+> `.countroster.zip` is never also a credential file, and restoring one taken on another machine
 > can't repoint this server at that machine's cloud account. Treat the SQLite
 > file itself as secret-bearing, and remember there's still no auth in front of
 > the API: anyone who can reach the server can trigger a backup or disconnect

@@ -7,6 +7,7 @@ import { M006_PERIOD_WINDOWS } from './006_period_windows.js';
 import { M007_TRACKER_FIELDS } from './007_tracker_fields.js';
 import { M008_SECTION_ORDER } from './008_section_order.js';
 import { M009_CLOUD_BACKUP } from './009_cloud_backup.js';
+import { M010_CLOUD_PROVIDER_CREDENTIALS } from './010_cloud_provider_credentials.js';
 
 export interface Migration {
   readonly version: number;
@@ -28,6 +29,7 @@ export const MIGRATIONS: readonly Migration[] = [
   M007_TRACKER_FIELDS,
   M008_SECTION_ORDER,
   M009_CLOUD_BACKUP,
+  M010_CLOUD_PROVIDER_CREDENTIALS,
 ] as const;
 
 export const LATEST_VERSION: number = MIGRATIONS[MIGRATIONS.length - 1]!.version;

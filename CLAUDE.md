@@ -96,7 +96,7 @@ Over the wire an `Entry` grows a `fields` array (always present, `[]` when there
 
 `server/internal/migrate` holds the numbered migrations (SQL copied **verbatim** from the TS core — both implementations must produce identical databases) and the runner (reads `schema_version` from `app_meta`, applies pending migrations in one transaction, idempotent).
 
-**Never edit a shipped migration — add a new one.** When you change the schema, update in lockstep: the migration SQL, the row structs in `internal/core/types.go`, the validators in `internal/core/validate.go`, the backup table list in `internal/backup/tables.go`, **and** the TS mirrors (`packages/core/src/schema/{tables,validators}.ts` + a matching TS migration) so the web test double stays faithful. (`cloud_backup_settings`, migration 009, is the one table deliberately left out of the backup list — it holds OAuth tokens. See below.)
+**Never edit a shipped migration — add a new one.** When you change the schema, update in lockstep: the migration SQL, the row structs in `internal/core/types.go`, the validators in `internal/core/validate.go`, the backup table list in `internal/backup/tables.go`, **and** the TS mirrors (`packages/core/src/schema/{tables,validators}.ts` + a matching TS migration) so the web test double stays faithful. (`cloud_backup_settings` and `cloud_provider_credentials`, migrations 009/010, are deliberately left out of the backup list — they hold OAuth tokens and client secrets. See below.)
 
 ### Automatic cloud backup lives in `internal/cloud`
 
@@ -115,9 +115,14 @@ Three rules to preserve:
   is redacted). It holds OAuth tokens; an export is the documented egress point
   and must not double as a credential file, and a restore must not repoint a
   server at another machine's cloud account.
-- **No shipped OAuth identity.** Each deployment registers its own app and
-  passes `--dropbox-client-id` / `--google-client-id`; an unconfigured provider
-  is still listed in the UI, greyed out with the reason.
+- **No shipped OAuth identity.** A self-hosted server has an unpredictable
+  origin and providers pre-register redirect URIs, so one shipped client id
+  can't serve every install. Each deployment registers its own app; the client
+  id is entered on the Data page (`cloud_provider_credentials`, migration 010)
+  with `--dropbox-client-id` / `--google-client-id` as the fallback — settings
+  row wins. `Provider.WithCredentials` is how the resolved pair reaches a
+  provider, so never bake credentials in at construction. Changing a client id
+  disconnects the account: tokens belong to the client that minted them.
 - **`next_run_at` lives in the database**, not in a timer — that's what lets a
   server that was off over its deadline pick the run up on the next tick.
 

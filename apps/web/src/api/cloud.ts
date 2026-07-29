@@ -14,8 +14,17 @@ import { API_BASE, ApiError } from './client.ts';
 export interface CloudProviderInfo {
   id: string;
   name: string;
-  /** 0 when the operator hasn't registered an OAuth client for it. */
+  /** 0 until an OAuth client has been registered for it. */
   configured: 0 | 1;
+  /** The client id in effect — not a secret, it rides in the authorize URL. */
+  client_id: string;
+  has_secret: 0 | 1;
+  /** 1 for providers that reject a PKCE-only (secret-less) client. */
+  secret_required: 0 | 1;
+  /** "settings" (entered here), "server" (a startup flag), or "". */
+  source: 'settings' | 'server' | '';
+  /** The provider's developer console, where the OAuth app is registered. */
+  setup_url: string;
 }
 
 /** The server's cloud backup configuration, with every token redacted. */
@@ -55,6 +64,12 @@ export const CLOUD_FREQUENCIES: ReadonlyArray<{
 export interface CloudBackupState {
   settings: CloudBackupSettings;
   providers: CloudProviderInfo[];
+  /**
+   * The exact redirect URI to register with the provider. The server derives
+   * it from the origin this request arrived on, so the setup form can show
+   * something copy-pasteable instead of asking the user to assemble it.
+   */
+  redirect_uri: string;
 }
 
 /** One folder in the connected account. */
@@ -164,4 +179,29 @@ export async function listCloudFolders(
 /** Export and upload a bundle right now, outside the schedule. */
 export function runCloudBackup(baseUrl = API_BASE): Promise<CloudRunResult> {
   return request('POST', '/backup/run', {}, baseUrl);
+}
+
+/**
+ * Store the OAuth client for a provider — the client id (and secret, where
+ * the provider needs one) from an app the user registered themselves.
+ *
+ * This is what makes the feature reachable from a phone. The client id has to
+ * come from *somewhere*: OAuth has no anonymous mode, and a self-hosted server
+ * at an address nobody can predict can't share one shipped registration.
+ * Entering it here beats a startup flag, because a phone has no command line.
+ */
+export function setProviderCredentials(
+  provider: string,
+  credentials: { client_id: string; client_secret?: string },
+  baseUrl = API_BASE,
+): Promise<CloudBackupState> {
+  return request('PUT', `/backup/providers/${encodeURIComponent(provider)}`, credentials, baseUrl);
+}
+
+/** Forget a stored OAuth client, falling back to the server's startup flag. */
+export function clearProviderCredentials(
+  provider: string,
+  baseUrl = API_BASE,
+): Promise<CloudBackupState> {
+  return request('DELETE', `/backup/providers/${encodeURIComponent(provider)}`, undefined, baseUrl);
 }

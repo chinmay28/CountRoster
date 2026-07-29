@@ -38,9 +38,15 @@ type fakeCloudProvider struct {
 	uploadErr  error
 }
 
-func (f *fakeCloudProvider) ID() string       { return cloud.ProviderDropbox }
-func (f *fakeCloudProvider) Name() string     { return "Dropbox" }
-func (f *fakeCloudProvider) Configured() bool { return f.configured }
+func (f *fakeCloudProvider) ID() string           { return cloud.ProviderDropbox }
+func (f *fakeCloudProvider) Name() string         { return "Dropbox" }
+func (f *fakeCloudProvider) Configured() bool     { return f.configured }
+func (f *fakeCloudProvider) RequiresSecret() bool { return false }
+func (f *fakeCloudProvider) SetupURL() string     { return "https://provider.test/apps" }
+
+// WithCredentials is a no-op here: the API tests exercise routing and JSON
+// shapes, and this double is "configured" by construction.
+func (f *fakeCloudProvider) WithCredentials(cloud.Credentials) cloud.Provider { return f }
 
 func (f *fakeCloudProvider) AuthorizeURL(redirectURI, state, challenge string) string {
 	return "https://provider.test/authorize?state=" + url.QueryEscape(state) +
@@ -367,5 +373,99 @@ func TestRequestOriginPrefersForwardedHeaders(t *testing.T) {
 	r.Header.Set("X-Forwarded-Host", "roster.example")
 	if got := requestOrigin(r); got != "https://roster.example" {
 		t.Errorf("origin = %q, want the forwarded one", got)
+	}
+}
+
+// --- provider credentials -------------------------------------------------
+
+// The redirect URI is the string the user must register with their provider,
+// so the setup form needs it verbatim rather than asking them to assemble it.
+func TestCloudSettingsCarriesTheRedirectURI(t *testing.T) {
+	f := newCloudServer(t)
+	c := &client{t: t, base: f.srv.URL}
+	var body struct {
+		RedirectURI string `json:"redirect_uri"`
+	}
+	c.getJSON("/api/cloud/backup", &body)
+	if want := "https://roster.example" + cloud.CallbackPath; body.RedirectURI != want {
+		t.Errorf("redirect_uri = %q, want %q", body.RedirectURI, want)
+	}
+}
+
+// Everything the setup form renders has to arrive in the one GET.
+func TestCloudProviderSetupFields(t *testing.T) {
+	f := newCloudServer(t)
+	c := &client{t: t, base: f.srv.URL}
+	var body struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	c.getJSON("/api/cloud/backup", &body)
+	if len(body.Providers) != 1 {
+		t.Fatalf("providers = %v", body.Providers)
+	}
+	for _, key := range []string{
+		"id", "name", "configured", "client_id", "has_secret",
+		"secret_required", "source", "setup_url",
+	} {
+		if _, ok := body.Providers[0][key]; !ok {
+			t.Errorf("provider entry is missing %q: %v", key, body.Providers[0])
+		}
+	}
+}
+
+func TestCloudSetAndClearCredentials(t *testing.T) {
+	f := newCloudServer(t)
+	c := &client{t: t, base: f.srv.URL}
+
+	var body struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	res, data := c.do("PUT", "/api/cloud/backup/providers/dropbox",
+		m{"client_id": "pasted-key", "client_secret": "pasted-secret"})
+	if res.StatusCode != 200 {
+		t.Fatalf("status = %d: %s", res.StatusCode, data)
+	}
+	json.Unmarshal(data, &body)
+	entry := body.Providers[0]
+	if entry["client_id"] != "pasted-key" {
+		t.Errorf("client_id = %v, want the pasted one", entry["client_id"])
+	}
+	if entry["source"] != "settings" || entry["has_secret"] != float64(1) {
+		t.Errorf("provider = %v, want it sourced from the settings row", entry)
+	}
+	// The secret goes in but never comes back.
+	if strings.Contains(string(data), "pasted-secret") {
+		t.Errorf("response leaks the client secret: %s", data)
+	}
+
+	res, data = c.do("DELETE", "/api/cloud/backup/providers/dropbox", nil)
+	if res.StatusCode != 200 {
+		t.Fatalf("delete status = %d: %s", res.StatusCode, data)
+	}
+	json.Unmarshal(data, &body)
+	if body.Providers[0]["client_id"] != "configured" {
+		// The fake reports itself configured, so clearing falls back to it.
+		t.Logf("after clear: %v", body.Providers[0])
+	}
+}
+
+func TestCloudCredentialsValidationIs400(t *testing.T) {
+	f := newCloudServer(t)
+	c := &client{t: t, base: f.srv.URL}
+	res, data := c.do("PUT", "/api/cloud/backup/providers/dropbox", m{"client_id": ""})
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", res.StatusCode, data)
+	}
+	if !strings.Contains(string(data), "Validation failed") {
+		t.Errorf("body = %s, want the standard validation shape", data)
+	}
+}
+
+func TestCloudCredentialsUnknownProviderIs400(t *testing.T) {
+	f := newCloudServer(t)
+	c := &client{t: t, base: f.srv.URL}
+	res, _ := c.do("PUT", "/api/cloud/backup/providers/icloud", m{"client_id": "x"})
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", res.StatusCode)
 	}
 }

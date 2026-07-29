@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   CLOUD_FREQUENCIES,
+  clearProviderCredentials,
   disconnectCloudBackup,
   fetchCloudBackup,
   listCloudFolders,
   runCloudBackup,
+  setProviderCredentials,
   startCloudConnect,
   updateCloudBackup,
   type CloudBackupFrequency,
   type CloudBackupState,
   type CloudFolder,
+  type CloudProviderInfo,
 } from '../api/cloud.ts';
 import { formatDateTime } from '../lib/format.ts';
 
@@ -40,6 +43,7 @@ export function CloudBackupSettings() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  const [setupFor, setSetupFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -163,7 +167,6 @@ export function CloudBackupSettings() {
 
   const { settings, providers } = state;
   const connected = settings.connected === 1;
-  const unconfigured = providers.filter((p) => p.configured === 0);
 
   return (
     <section className="card data__section">
@@ -177,44 +180,89 @@ export function CloudBackupSettings() {
 
       {!connected ? (
         <div className="cloud__connect">
-          {/* Say why a button is dead. A `title` alone is invisible on a
-              touch screen, which is most of this app's traffic — and this is
-              exactly the case where the user can't guess the reason. */}
-          {unconfigured.length > 0 && (
-            <p className="muted">
-              {unconfigured.map((p) => p.name).join(' and ')}{' '}
-              {unconfigured.length === 1 ? 'is' : 'are'} not set up on this
-              server. Register an OAuth app with the provider and start the
-              server with its client id (
-              {unconfigured.map((p, i) => (
-                <span key={p.id}>
-                  {i > 0 && ' / '}
-                  <code>--{p.id === 'dropbox' ? 'dropbox' : 'google'}-client-id</code>
-                </span>
-              ))}
-              ) — see DEPLOYMENT.md.
-            </p>
-          )}
-          <div className="data__actions">
+          {/* One row per provider: connect it, or set it up first. A provider
+              that isn't set up gets a working button that opens the form —
+              never a dead control with the reason hidden in a tooltip nobody
+              on a touch screen will ever see. */}
+          <ul className="cloud__providers">
             {providers.map((provider) => (
-              <button
-                key={provider.id}
-                type="button"
-                className="btn"
-                disabled={provider.configured === 0 || busy !== null}
-                title={
-                  provider.configured === 0
-                    ? `${provider.name} is not set up on this server`
-                    : undefined
-                }
-                onClick={() => connect(provider.id)}
-              >
-                {busy === `connect:${provider.id}`
-                  ? 'Opening…'
-                  : `Connect ${provider.name}`}
-              </button>
+              <li key={provider.id} className="cloud__provider">
+                <div className="cloud__provider-row">
+                  <div className="cloud__provider-meta">
+                    <span className="cloud__provider-name">{provider.name}</span>
+                    <span className="muted">
+                      {provider.configured === 1
+                        ? provider.source === 'server'
+                          ? 'Set up on the server'
+                          : 'Ready to connect'
+                        : 'Needs a one-time setup'}
+                    </span>
+                  </div>
+                  {provider.configured === 1 ? (
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      disabled={busy !== null}
+                      onClick={() => connect(provider.id)}
+                    >
+                      {busy === `connect:${provider.id}` ? 'Opening…' : 'Connect'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        setSetupFor((id) => (id === provider.id ? null : provider.id))
+                      }
+                    >
+                      {setupFor === provider.id ? 'Cancel' : 'Set up'}
+                    </button>
+                  )}
+                </div>
+
+                {provider.configured === 1 && (
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--small cloud__provider-edit"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      setSetupFor((id) => (id === provider.id ? null : provider.id))
+                    }
+                  >
+                    {setupFor === provider.id ? 'Hide setup' : 'Edit setup'}
+                  </button>
+                )}
+
+                {setupFor === provider.id && (
+                  <ProviderSetup
+                    provider={provider}
+                    redirectUri={state.redirect_uri}
+                    busy={busy !== null}
+                    onSave={(clientId, clientSecret) =>
+                      run(`credentials:${provider.id}`, async () => {
+                        setState(
+                          await setProviderCredentials(provider.id, {
+                            client_id: clientId,
+                            ...(clientSecret ? { client_secret: clientSecret } : {}),
+                          }),
+                        );
+                        setSetupFor(null);
+                        setMessage(`${provider.name} is set up. You can connect it now.`);
+                      })
+                    }
+                    onClear={() =>
+                      run(`credentials:${provider.id}`, async () => {
+                        setState(await clearProviderCredentials(provider.id));
+                        setSetupFor(null);
+                        setMessage(`${provider.name} setup cleared.`);
+                      })
+                    }
+                  />
+                )}
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       ) : (
         <div className="cloud">
@@ -296,6 +344,128 @@ export function CloudBackupSettings() {
       {message && <p className="data__ok">{message}</p>}
       {error && <p className="error">{error}</p>}
     </section>
+  );
+}
+
+/**
+ * One-time OAuth app setup for a provider.
+ *
+ * The client id has to come from somewhere: OAuth has no anonymous mode, and
+ * a self-hosted server — reachable at an address nobody can predict — can't
+ * share one shipped registration the way a store app can, because providers
+ * require every redirect URI to be registered in advance. So the user
+ * registers their own app once. What this form removes is the part that was
+ * genuinely hostile: needing a command line to hand the result to the server.
+ *
+ * The redirect URI is shown first and copyable, because it's the step people
+ * get wrong — it has to match character for character.
+ */
+function ProviderSetup({
+  provider,
+  redirectUri,
+  busy,
+  onSave,
+  onClear,
+}: {
+  provider: CloudProviderInfo;
+  redirectUri: string;
+  busy: boolean;
+  onSave: (clientId: string, clientSecret: string) => void;
+  onClear: () => void;
+}) {
+  const [clientId, setClientId] = useState(provider.client_id);
+  const [clientSecret, setClientSecret] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  async function copyRedirect() {
+    try {
+      await navigator.clipboard.writeText(redirectUri);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be denied or absent (older iOS, insecure
+      // origin). The URI is selectable text right there, so this is a
+      // convenience failing, not the flow failing.
+    }
+  }
+
+  return (
+    <form
+      className="cloud__setup"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave(clientId, clientSecret);
+      }}
+    >
+      <ol className="cloud__setup-steps">
+        <li>
+          Open{' '}
+          <a href={provider.setup_url} target="_blank" rel="noreferrer noopener">
+            {provider.name}&rsquo;s developer console
+          </a>{' '}
+          and create an app.
+        </li>
+        <li>
+          Register this exact redirect URI:
+          <span className="cloud__redirect">
+            <code>{redirectUri}</code>
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              onClick={copyRedirect}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </span>
+        </li>
+        <li>Paste the app&rsquo;s credentials below.</li>
+      </ol>
+
+      <label className="field">
+        <span>Client id</span>
+        <input
+          value={clientId}
+          onChange={(e) => setClientId(e.target.value)}
+          autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          placeholder="from the provider's console"
+        />
+      </label>
+
+      <label className="field">
+        <span>
+          Client secret{' '}
+          {provider.secret_required === 1 ? '(required)' : '(optional)'}
+        </span>
+        <input
+          type="password"
+          value={clientSecret}
+          onChange={(e) => setClientSecret(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={
+            provider.has_secret === 1
+              ? 'stored — leave blank to keep it'
+              : provider.secret_required === 1
+                ? "from the provider's console"
+                : 'not needed for a PKCE-only app'
+          }
+        />
+      </label>
+
+      <div className="data__actions">
+        <button type="submit" className="btn btn--primary" disabled={busy}>
+          Save setup
+        </button>
+        {provider.source === 'settings' && (
+          <button type="button" className="btn" disabled={busy} onClick={onClear}>
+            Clear
+          </button>
+        )}
+      </div>
+    </form>
   );
 }
 

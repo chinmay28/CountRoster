@@ -287,3 +287,20 @@ export interface CloudBackupSettings {
   last_file_name: string | null;
   updated_at: string | null;
 }
+
+/**
+ * One deployment's OAuth client for a cloud backup provider (migration 010).
+ *
+ * Self-hosted means self-registered: there is no shipped application identity
+ * to borrow. These are entered from the Data page (or supplied as startup
+ * flags, which act as the fallback), and like `CloudBackupSettings` the row is
+ * excluded from the backup bundle — the secret is a credential.
+ */
+export interface CloudProviderCredentials {
+  provider: CloudProvider;
+  /** Not a secret: it travels in the authorize URL the browser opens. */
+  client_id: string;
+  /** Null for a PKCE-only public client (Dropbox allows one; Google doesn't). */
+  client_secret: string | null;
+  updated_at: string | null;
+}

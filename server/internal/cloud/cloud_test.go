@@ -710,3 +710,167 @@ func contains(list []string, want string) bool {
 	}
 	return false
 }
+
+// --- provider credentials -------------------------------------------------
+
+// The whole point of storing credentials in the database: a phone can reach a
+// provider's developer console, but not the server's command line. Entering a
+// client id here has to make the provider connectable with no restart.
+func TestCredentialsEnteredInSettingsMakeAProviderUsable(t *testing.T) {
+	h := newHarness(t)
+	// A registry whose provider carries no startup-flag credentials.
+	h.svc.Registry = Registry{h.dbx.provider(h.svc.Now)}
+	h.svc.Registry[0] = h.svc.Registry[0].WithCredentials(Credentials{})
+
+	if got := h.svc.PublicProviders()[0].Configured; got != 0 {
+		t.Fatalf("configured = %d, want 0 before setup", got)
+	}
+	if _, err := h.svc.StartConnect(ProviderDropbox, "http://countroster.test"); !IsConfigError(err) {
+		t.Fatalf("StartConnect error = %v, want a ConfigError", err)
+	}
+
+	if err := h.svc.SetCredentials(ProviderDropbox, "pasted-app-key", ""); err != nil {
+		t.Fatalf("SetCredentials: %v", err)
+	}
+	entry := h.svc.PublicProviders()[0]
+	if entry.Configured != 1 || entry.ClientID != "pasted-app-key" {
+		t.Errorf("provider = %+v, want it configured from the settings row", entry)
+	}
+	if entry.Source != SourceSettings {
+		t.Errorf("source = %q, want %q", entry.Source, SourceSettings)
+	}
+
+	// And the authorize URL is now built with the id that was pasted.
+	raw, err := h.svc.StartConnect(ProviderDropbox, "http://countroster.test")
+	if err != nil {
+		t.Fatalf("StartConnect after setup: %v", err)
+	}
+	u, _ := url.Parse(raw)
+	if got := u.Query().Get("client_id"); got != "pasted-app-key" {
+		t.Errorf("client_id = %q, want the pasted one", got)
+	}
+}
+
+// A startup flag still works — it's the fallback for automated deployments —
+// but what the user entered on the page wins.
+func TestSettingsCredentialsOverrideTheStartupFlag(t *testing.T) {
+	h := newHarness(t)
+	if got := h.svc.PublicProviders()[0]; got.Source != SourceServer || got.ClientID != "app-key" {
+		t.Fatalf("provider = %+v, want the flag credentials in effect", got)
+	}
+	if err := h.svc.SetCredentials(ProviderDropbox, "from-the-page", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.svc.PublicProviders()[0]; got.Source != SourceSettings || got.ClientID != "from-the-page" {
+		t.Errorf("provider = %+v, want the settings credentials to win", got)
+	}
+	// Clearing falls back rather than leaving the provider dead.
+	if err := h.svc.ClearCredentials(ProviderDropbox); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.svc.PublicProviders()[0]; got.Source != SourceServer || got.ClientID != "app-key" {
+		t.Errorf("provider = %+v, want the flag credentials back", got)
+	}
+}
+
+// Tokens belong to the client that minted them. Swapping the client id has to
+// drop the connection now, rather than leaving something that looks connected
+// and dies at the next refresh — hours later, in the scheduler.
+func TestChangingTheClientIDDisconnectsTheAccount(t *testing.T) {
+	h := newHarness(t)
+	h.connect(t)
+	h.svc.Update(ptr(FrequencyDaily), ptr("/Backups"), ptr("/Backups"))
+
+	if err := h.svc.SetCredentials(ProviderDropbox, "a-different-app-key", ""); err != nil {
+		t.Fatalf("SetCredentials: %v", err)
+	}
+	set := h.settings(t)
+	if set.Connected() {
+		t.Error("the account should have been disconnected with its issuing client")
+	}
+	if set.Frequency != FrequencyOff {
+		t.Errorf("frequency = %q, want the schedule stopped too", set.Frequency)
+	}
+}
+
+// Re-saving the same id (to correct a secret, say) is not a client change and
+// must not cost the user their connection.
+func TestResavingTheSameClientIDKeepsTheAccount(t *testing.T) {
+	h := newHarness(t)
+	h.connect(t)
+	h.svc.Update(ptr(FrequencyDaily), ptr("/Backups"), ptr("/Backups"))
+
+	if err := h.svc.SetCredentials(ProviderDropbox, "app-key", "a-new-secret"); err != nil {
+		t.Fatalf("SetCredentials: %v", err)
+	}
+	set := h.settings(t)
+	if !set.Connected() {
+		t.Error("re-saving the same client id should not disconnect")
+	}
+	if set.Frequency != FrequencyDaily {
+		t.Errorf("frequency = %q, want daily kept", set.Frequency)
+	}
+}
+
+func TestCredentialValidation(t *testing.T) {
+	h := newHarness(t)
+	cases := []struct {
+		name, clientID, secret, want string
+	}{
+		{"empty", "", "", "client id is required"},
+		{"whitespace inside", "app key with spaces", "", "space or line break"},
+		{"newline in secret", "app-key", "sec\nret", "space or line break"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := h.svc.SetCredentials(ProviderDropbox, c.clientID, c.secret)
+			if err == nil {
+				t.Fatalf("expected a validation error for %q", c.clientID)
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Errorf("error = %v, want it to mention %q", err, c.want)
+			}
+		})
+	}
+}
+
+// Google rejects a PKCE-only client, so a missing secret is caught on the form
+// rather than at the token endpoint — after the user has already sat through a
+// consent screen.
+func TestGoogleCredentialsRequireASecret(t *testing.T) {
+	h := newHarness(t)
+	h.svc.Registry = append(h.svc.Registry, NewGoogleDrive(Credentials{}, nil, time.Now))
+	err := h.svc.SetCredentials(ProviderGoogleDrive, "google-client-id", "")
+	if err == nil {
+		t.Fatal("expected a validation error")
+	}
+	if !strings.Contains(err.Error(), "requires a client secret") {
+		t.Errorf("error = %v, want it to name the missing secret", err)
+	}
+	if err := h.svc.SetCredentials(ProviderGoogleDrive, "google-client-id", "google-secret"); err != nil {
+		t.Errorf("with a secret: %v", err)
+	}
+}
+
+func TestUnknownProviderCredentialsRejected(t *testing.T) {
+	h := newHarness(t)
+	if err := h.svc.SetCredentials("icloud", "id", ""); !IsConfigError(err) {
+		t.Errorf("error = %v, want a ConfigError", err)
+	}
+}
+
+// The credentials are a secret store, so they must stay out of the bundle for
+// the same reason the tokens do.
+func TestCredentialsAreNotInTheBackupBundle(t *testing.T) {
+	h := newHarness(t)
+	if err := h.svc.SetCredentials(ProviderDropbox, "app-key", "top-secret-value"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := (&backup.Service{St: h.st, Clock: h.clock}).ExportBundle("v1.1.0-test")
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if bytes.Contains(data, []byte("top-secret-value")) {
+		t.Error("the exported bundle carries the client secret")
+	}
+}

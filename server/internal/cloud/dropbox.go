@@ -51,7 +51,21 @@ func NewDropbox(creds Credentials, client *http.Client, now func() time.Time) *D
 func (d *Dropbox) ID() string   { return ProviderDropbox }
 func (d *Dropbox) Name() string { return "Dropbox" }
 
-func (d *Dropbox) Configured() bool { return d.Creds.ClientID != "" }
+func (d *Dropbox) Configured() bool { return d.Creds.Set() }
+
+// WithCredentials returns a copy bound to a different OAuth client. Dropbox
+// app keys are interchangeable at this level, so a shallow copy is enough.
+func (d *Dropbox) WithCredentials(creds Credentials) Provider {
+	next := *d
+	next.Creds = creds
+	return &next
+}
+
+// RequiresSecret is false: a Dropbox app can be registered as a public client
+// and authorized with PKCE alone.
+func (d *Dropbox) RequiresSecret() bool { return false }
+
+func (d *Dropbox) SetupURL() string { return "https://www.dropbox.com/developers/apps" }
 
 // AuthorizeURL asks for an offline grant — without `token_access_type=offline`
 // Dropbox issues a 4-hour token and no refresh token, which would make a

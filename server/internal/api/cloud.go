@@ -25,22 +25,56 @@ import (
 type cloudSettingsBody struct {
 	Settings  cloud.PublicSettings   `json:"settings"`
 	Providers []cloud.PublicProvider `json:"providers"`
+	// RedirectURI is the exact string the user must register with their
+	// provider. It's derived from the origin the request arrived on, so the
+	// setup form can show what to paste rather than asking them to assemble
+	// it from a hostname and a path.
+	RedirectURI string `json:"redirect_uri"`
 }
 
-func (s *server) writeCloudSettings(w http.ResponseWriter, status int) {
+func (s *server) writeCloudSettings(w http.ResponseWriter, r *http.Request, status int) {
 	set, err := s.cloud.Settings()
 	if err != nil {
 		handleErr(w, err)
 		return
 	}
 	writeJSON(w, status, cloudSettingsBody{
-		Settings:  set.Public(),
-		Providers: s.cloud.PublicProviders(),
+		Settings:    set.Public(),
+		Providers:   s.cloud.PublicProviders(),
+		RedirectURI: s.cloud.RedirectURI(requestOrigin(r)),
 	})
 }
 
 func (s *server) cloudBackupSettings(w http.ResponseWriter, r *http.Request) {
-	s.writeCloudSettings(w, http.StatusOK)
+	s.writeCloudSettings(w, r, http.StatusOK)
+}
+
+// cloudBackupSetCredentials stores the OAuth client for one provider — the
+// client id (and secret, where the provider needs one) from an app the user
+// registered. This is what makes the whole feature reachable from a phone:
+// the alternative is a startup flag, and a phone has no command line.
+func (s *server) cloudBackupSetCredentials(w http.ResponseWriter, r *http.Request) {
+	body, ok := decodeBody(w, r)
+	if !ok {
+		return
+	}
+	clientID, _ := bodyField(body, "client_id").(string)
+	clientSecret, _ := bodyField(body, "client_secret").(string)
+	if err := s.cloud.SetCredentials(r.PathValue("provider"), clientID, clientSecret); err != nil {
+		handleErr(w, err)
+		return
+	}
+	s.writeCloudSettings(w, r, http.StatusOK)
+}
+
+// cloudBackupClearCredentials forgets a stored OAuth client, falling back to
+// whatever the startup flags carry.
+func (s *server) cloudBackupClearCredentials(w http.ResponseWriter, r *http.Request) {
+	if err := s.cloud.ClearCredentials(r.PathValue("provider")); err != nil {
+		handleErr(w, err)
+		return
+	}
+	s.writeCloudSettings(w, r, http.StatusOK)
 }
 
 // cloudBackupUpdate patches the schedule and the destination folder. Absent
@@ -67,7 +101,7 @@ func (s *server) cloudBackupUpdate(w http.ResponseWriter, r *http.Request) {
 		handleErr(w, err)
 		return
 	}
-	s.writeCloudSettings(w, http.StatusOK)
+	s.writeCloudSettings(w, r, http.StatusOK)
 }
 
 // cloudBackupConnect starts an OAuth authorization and returns where to send
@@ -127,7 +161,7 @@ func (s *server) cloudBackupDisconnect(w http.ResponseWriter, r *http.Request) {
 		handleErr(w, err)
 		return
 	}
-	s.writeCloudSettings(w, http.StatusOK)
+	s.writeCloudSettings(w, r, http.StatusOK)
 }
 
 // cloudBackupFolders lists the sub-folders of `folder_id` (absent = the
