@@ -23,6 +23,7 @@ var Migrations = []Migration{
 	{Version: 6, Name: "006_period_windows", Up: m006PeriodWindows},
 	{Version: 7, Name: "007_tracker_fields", Up: m007TrackerFields},
 	{Version: 8, Name: "008_section_order", Up: m008SectionOrder},
+	{Version: 9, Name: "009_cloud_backup", Up: m009CloudBackup},
 }
 
 // LatestVersion is the highest schema version known to this build.
@@ -253,4 +254,42 @@ const m007TrackerFields = `
 // ignored rather than rejected, so an older client stays usable.
 const m008SectionOrder = `
     ALTER TABLE trackers ADD COLUMN section_order TEXT;
+  `
+
+// m009CloudBackup stores the automatic cloud backup configuration: which
+// cloud account the server may write to, the folder chosen inside it, how
+// often to export, and the outcome of the last run.
+//
+// One row, `id = 'singleton'` — this is server-wide configuration, not a
+// per-user setting (there are no users). The migration seeds the row so
+// every read hits it and the domain only ever UPDATEs.
+//
+// The OAuth tokens live here rather than in a side file so a single SQLite
+// path stays the whole of the server's state. They are deliberately **not**
+// in the backup bundle (see internal/backup/tables.go): an export is the
+// documented egress point and must not carry credentials, and restoring a
+// bundle taken on another machine must not repoint this server at that
+// machine's cloud account.
+const m009CloudBackup = `
+    CREATE TABLE IF NOT EXISTS cloud_backup_settings (
+      id                TEXT PRIMARY KEY CHECK (id = 'singleton'),
+      provider          TEXT CHECK (provider IN ('dropbox','google_drive')),
+      account_label     TEXT,
+      access_token      TEXT,
+      refresh_token     TEXT,
+      token_expires_at  TEXT,
+      folder_id         TEXT,
+      folder_path       TEXT,
+      frequency         TEXT NOT NULL DEFAULT 'off'
+                        CHECK (frequency IN ('off','hourly','daily','weekly','monthly')),
+      next_run_at       TEXT,
+      last_run_at       TEXT,
+      last_status       TEXT CHECK (last_status IN ('ok','error')),
+      last_error        TEXT,
+      last_file_name    TEXT,
+      updated_at        TEXT
+    );
+
+    INSERT OR IGNORE INTO cloud_backup_settings (id, frequency)
+      VALUES ('singleton', 'off');
   `

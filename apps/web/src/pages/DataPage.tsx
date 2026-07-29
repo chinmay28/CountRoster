@@ -6,11 +6,13 @@ import {
   importBackup,
 } from '../api/client.ts';
 import { ArchivedTrackers } from '../components/ArchivedTrackers.tsx';
+import { CloudBackupSettings } from '../components/CloudBackupSettings.tsx';
 
 /**
  * Backup & restore. Backups are the documented egress point: download a
- * portable .countroster.zip (or the raw SQLite file), or restore the server's
- * data from a previously exported bundle.
+ * portable .countroster.zip (or the raw SQLite file), have the server upload
+ * one to a cloud folder on a schedule, or restore the server's data from a
+ * previously exported bundle.
  */
 export function DataPage() {
   const fileInput = useRef<HTMLInputElement>(null);
@@ -88,6 +90,10 @@ export function DataPage() {
         </div>
         {downloadError && <p className="error">{downloadError}</p>}
       </section>
+
+      {/* Directly under Export: it's the same bundle, just written for you
+          on a schedule instead of on a tap. */}
+      <CloudBackupSettings />
 
       <section className="card data__section">
         <h2>Restore</h2>

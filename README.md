@@ -10,6 +10,10 @@ built as a **client-server** app so every device shares one dataset:
   on a phone — no app store, no native build.
 - **Real data export.** Backups are documented open formats (a `.countroster.zip`
   bundle of JSON + per-table CSVs, plus a raw SQLite download).
+- **Automatic cloud backup.** Point the server at a folder in your Dropbox or
+  Google Drive and it uploads that same bundle hourly, daily, weekly or
+  monthly. Connect the account from the Data page; the deployment registers its
+  own OAuth app ([DEPLOYMENT.md §0.1](./DEPLOYMENT.md)).
 - **Custom fields per tracker.** A tracker's value is *how much*; fields record
   everything else about the same entry. A milk-feeding tracker counts millilitres
   and tags each feed as bottle / formula / breast, flags a wet diaper — then

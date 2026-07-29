@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/chinmay28/countroster/server/internal/backup"
+	"github.com/chinmay28/countroster/server/internal/cloud"
 	"github.com/chinmay28/countroster/server/internal/core"
 	"github.com/chinmay28/countroster/server/internal/jsjson"
 	"github.com/chinmay28/countroster/server/internal/timeutil"
@@ -42,12 +43,14 @@ type server struct {
 	app    *core.App
 	backup *backup.Service
 	file   FileSource
+	cloud  *cloud.Service
 }
 
 // New builds the /api handler. Pure wiring — no listening — so tests can
-// mount it against a memory-backed core.
-func New(app *core.App, bk *backup.Service, file FileSource) http.Handler {
-	s := &server{app: app, backup: bk, file: file}
+// mount it against a memory-backed core. `cl` may be nil, which leaves the
+// cloud-backup routes unregistered.
+func New(app *core.App, bk *backup.Service, file FileSource, cl *cloud.Service) http.Handler {
+	s := &server{app: app, backup: bk, file: file, cloud: cl}
 	mux := http.NewServeMux()
 
 	// Trackers.
@@ -113,6 +116,19 @@ func New(app *core.App, bk *backup.Service, file FileSource) http.Handler {
 	mux.HandleFunc("GET /api/backup/bundle", s.backupBundle)
 	mux.HandleFunc("GET /api/backup/sqlite", s.backupSqlite)
 	mux.HandleFunc("POST /api/backup/import", s.backupImport)
+
+	// Automatic cloud backup. Registered only when the server was built with
+	// a cloud service — an API-only test harness leaves it out, and the web
+	// client treats a 404 here as "this server doesn't do cloud backup".
+	if s.cloud != nil {
+		mux.HandleFunc("GET /api/cloud/backup", s.cloudBackupSettings)
+		mux.HandleFunc("PATCH /api/cloud/backup", s.cloudBackupUpdate)
+		mux.HandleFunc("POST /api/cloud/backup/connect", s.cloudBackupConnect)
+		mux.HandleFunc("GET "+cloud.CallbackPath, s.cloudBackupCallback)
+		mux.HandleFunc("POST /api/cloud/backup/disconnect", s.cloudBackupDisconnect)
+		mux.HandleFunc("GET /api/cloud/backup/folders", s.cloudBackupFolders)
+		mux.HandleFunc("POST /api/cloud/backup/run", s.cloudBackupRun)
+	}
 
 	mux.HandleFunc("GET /api/health", s.health)
 
@@ -202,6 +218,19 @@ func handleErr(w http.ResponseWriter, err error) {
 	var iu *core.TrackerInUseError
 	if errors.As(err, &iu) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": iu.Error()})
+		return
+	}
+	// Cloud backup adds two of its own: a setup gap the caller can close
+	// (400), and a failure that came from Dropbox or Google rather than from
+	// us (502, so the UI can say whose problem it is).
+	var ce *cloud.ConfigError
+	if errors.As(err, &ce) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": ce.Error()})
+		return
+	}
+	var pe *cloud.ProviderError
+	if errors.As(err, &pe) {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": pe.Error()})
 		return
 	}
 	log.Printf("[countroster] unhandled error: %v", err)
