@@ -9,6 +9,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"flag"
@@ -22,9 +23,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/chinmay28/countroster/server/internal/api"
 	"github.com/chinmay28/countroster/server/internal/backup"
+	"github.com/chinmay28/countroster/server/internal/cloud"
 	"github.com/chinmay28/countroster/server/internal/core"
 	"github.com/chinmay28/countroster/server/internal/migrate"
 	"github.com/chinmay28/countroster/server/internal/storage"
@@ -80,6 +83,14 @@ type config struct {
 	port    string
 	db      string
 	webDist string
+	// Automatic cloud backup. CountRoster is self-hosted, so there is no
+	// shipped application identity to borrow: each deployment registers its
+	// own OAuth app with Dropbox / Google and passes the credentials here.
+	// Leave a client id empty and that provider is simply offered as
+	// "needs setup" in the UI.
+	dropbox   cloud.Credentials
+	google    cloud.Credentials
+	publicURL string
 }
 
 func serve(args []string) error {
@@ -101,6 +112,21 @@ func serve(args []string) error {
 		"SQLite file, or :memory: (env COUNTROSTER_DB)")
 	fset.StringVar(&cfg.webDist, "web-dist", os.Getenv("WEB_DIST"),
 		"serve the PWA from this directory, overriding embedded assets (env WEB_DIST)")
+	fset.StringVar(&cfg.dropbox.ClientID, "dropbox-client-id",
+		os.Getenv("COUNTROSTER_DROPBOX_CLIENT_ID"),
+		"Dropbox OAuth app key, enabling cloud backup to Dropbox (env COUNTROSTER_DROPBOX_CLIENT_ID)")
+	fset.StringVar(&cfg.dropbox.ClientSecret, "dropbox-client-secret",
+		os.Getenv("COUNTROSTER_DROPBOX_CLIENT_SECRET"),
+		"Dropbox OAuth app secret; omit for a PKCE-only app (env COUNTROSTER_DROPBOX_CLIENT_SECRET)")
+	fset.StringVar(&cfg.google.ClientID, "google-client-id",
+		os.Getenv("COUNTROSTER_GOOGLE_CLIENT_ID"),
+		"Google OAuth client id, enabling cloud backup to Google Drive (env COUNTROSTER_GOOGLE_CLIENT_ID)")
+	fset.StringVar(&cfg.google.ClientSecret, "google-client-secret",
+		os.Getenv("COUNTROSTER_GOOGLE_CLIENT_SECRET"),
+		"Google OAuth client secret (env COUNTROSTER_GOOGLE_CLIENT_SECRET)")
+	fset.StringVar(&cfg.publicURL, "public-url", os.Getenv("COUNTROSTER_PUBLIC_URL"),
+		"origin this server is reached at, used to build the OAuth redirect URI "+
+			"(env COUNTROSTER_PUBLIC_URL; default: the request's own origin)")
 	fset.BoolVar(&showVersion, "version", false, "print version and exit")
 
 	if err := fset.Parse(args); err != nil {
@@ -141,10 +167,22 @@ func run(cfg config) error {
 
 	app := core.New(db, timeutil.SystemClock)
 	backupSvc := &backup.Service{St: db, Clock: timeutil.SystemClock}
+
+	cloudSvc := cloud.NewService(db, timeutil.SystemClock, backupSvc,
+		cloud.NewRegistry(cfg.dropbox, cfg.google, nil, time.Now),
+		api.AppVersion, cfg.publicURL)
+	// The scheduler is a background poller over the settings row, so it costs
+	// one query a minute when nothing is configured — cheap enough to always
+	// run, and it means enabling a schedule from the UI takes effect without
+	// a restart.
+	scheduler := &cloud.Scheduler{Service: cloudSvc, Log: log.Default()}
+	scheduler.Start(context.Background())
+	logCloudProviders(cloudSvc)
+
 	apiHandler := api.New(app, backupSvc, api.FileSource{
 		Path:       db.Path,
 		Checkpoint: db.Checkpoint,
-	})
+	}, cloudSvc)
 
 	handler := withWebClient(apiHandler, cfg.webDist, app.Trackers.Get)
 
@@ -152,6 +190,25 @@ func run(cfg config) error {
 	log.Printf("[countroster] API listening on http://%s:%s (db: %s, schema v%d)",
 		cfg.host, cfg.port, dbPath, schemaVersion)
 	return http.ListenAndServe(addr, handler)
+}
+
+// logCloudProviders says at startup which cloud destinations are usable, so
+// an operator who forgot a client id finds out from the log rather than from
+// a greyed-out button.
+func logCloudProviders(svc *cloud.Service) {
+	var ready []string
+	for _, p := range svc.PublicProviders() {
+		if p.Configured == 1 {
+			ready = append(ready, p.Name)
+		}
+	}
+	if len(ready) == 0 {
+		log.Printf("[countroster] automatic cloud backup: no provider configured " +
+			"(set --dropbox-client-id and/or --google-client-id to enable)")
+		return
+	}
+	log.Printf("[countroster] automatic cloud backup available via %s; OAuth redirect URI is <origin>%s",
+		strings.Join(ready, ", "), cloud.CallbackPath)
 }
 
 // withWebClient serves the built PWA from the same origin as the API so the

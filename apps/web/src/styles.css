@@ -543,7 +543,8 @@ a {
 .field select,
 .field textarea,
 .notes__add textarea,
-.entry input {
+.entry input,
+.cloud__row select {
   font: inherit;
   padding: 0.5rem;
   border: 1px solid var(--border);
@@ -969,6 +970,98 @@ a {
   background: color-mix(in srgb, var(--primary) 25%, transparent);
   padding: 0.5rem 0.75rem;
   border-radius: var(--radius);
+}
+
+/* Automatic cloud backup. The rows are a label / value / action grid on a
+   wide screen and a plain stack on a phone, so the action never gets squeezed
+   into a two-character button. */
+.cloud {
+  display: grid;
+  gap: 0.75rem;
+}
+.cloud__account {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.cloud__account > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cloud__account button {
+  margin-left: auto;
+}
+.cloud__account-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.cloud__row {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+.cloud__label {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.cloud__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cloud__status {
+  display: grid;
+  gap: 0.25rem;
+}
+.cloud__status p {
+  margin: 0;
+}
+.cloud__picker {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.cloud__crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 0.9rem;
+}
+.cloud__folders {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+  /* Long folder lists scroll inside the picker rather than pushing the
+     "use this folder" button off the bottom of the page. */
+  max-height: 14rem;
+  overflow-y: auto;
+}
+.cloud__folder {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  justify-content: flex-start;
+}
+.cloud__folder-icon {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+@media (max-width: 30rem) {
+  .cloud__row {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
 }
 
 .archived-list {
@@ -1464,6 +1557,7 @@ input.txn__name:focus {
   .notes__add textarea,
   .entry input,
   .entry__note-input,
+  .cloud__row select,
   .tracker-card__custom input,
   .tracker-card__custom textarea {
     font-size: 16px;

@@ -31,7 +31,7 @@ func newServer(t *testing.T) *httptest.Server {
 	}
 	app := core.New(st, timeutil.SystemClock)
 	bk := &backup.Service{St: st, Clock: timeutil.SystemClock}
-	srv := httptest.NewServer(New(app, bk, FileSource{Path: st.Path}))
+	srv := httptest.NewServer(New(app, bk, FileSource{Path: st.Path}, nil))
 	t.Cleanup(srv.Close)
 	return srv
 }

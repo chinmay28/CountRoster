@@ -70,11 +70,76 @@
 >   — a source tarball, a `COPY` that excludes it — also reports patch 0.
 >   `scripts/quickstart.sh` handles all of this, including deepening a shallow
 >   checkout left behind by an older install.
-> - **A reasonable container** is `FROM scratch` (plus CA certs if you ever add
->   outbound TLS): run the builds above in a builder stage, then
+> - **A reasonable container** is `FROM scratch` **plus CA certificates** —
+>   automatic cloud backup makes outbound TLS calls to Dropbox / Google, and a
+>   scratch image with no trust store fails them with `x509: certificate signed
+>   by unknown authority`. Copy them in (`COPY --from=builder
+>   /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/`) or base on
+>   `gcr.io/distroless/static`. Run the builds above in a builder stage, then
 >   `COPY server/bin/countroster /` and
 >   `CMD ["/countroster", "serve", "--db", "/data/countroster.sqlite"]` with the
 >   SQLite file on a mounted volume.
+>
+> ### 0.1 Automatic cloud backup (optional)
+>
+> The Data page can have the server export a bundle on a schedule — hourly,
+> daily, weekly or monthly — and upload it to a folder the user picks in their
+> **Dropbox** or **Google Drive**. It's off until you set it up, and it uploads
+> exactly the `.countroster.zip` the download button produces, so anything it
+> writes restores through the same Restore box.
+>
+> **You register the OAuth app, not us.** CountRoster is self-hosted: there is
+> no shipped application identity to borrow, and shipping one would mean every
+> deployment sharing a secret. The provider sees *your* app asking for access
+> to *your* Drive.
+>
+> **Dropbox**
+>
+> 1. Create an app at <https://www.dropbox.com/developers/apps> — *Scoped
+>    access* → *Full Dropbox* (or *App folder* if you'd rather it be confined).
+> 2. On the **Permissions** tab enable `account_info.read`,
+>    `files.metadata.read` and `files.content.write`, then submit.
+> 3. On **Settings**, add the redirect URI
+>    `https://<your origin>/api/cloud/backup/callback`.
+> 4. Start the server with `--dropbox-client-id <app key>`. The app secret is
+>    optional — leave it out and the PKCE-only flow is used.
+>
+> **Google Drive**
+>
+> 1. In the Google Cloud console create a project and enable the **Drive API**.
+> 2. Configure the OAuth consent screen. A personal project stays in *Testing*,
+>    where you add your own account under *Test users* — that's all a household
+>    deployment needs, and it avoids Google's verification review.
+> 3. Create an **OAuth client ID** of type *Web application* with the authorized
+>    redirect URI `https://<your origin>/api/cloud/backup/callback`.
+> 4. Start the server with `--google-client-id` and `--google-client-secret`
+>    (Google's web clients require the secret).
+>
+> The requested scope is full `drive` access. The narrower `drive.file` only
+> reaches files the app itself created, which can't browse your existing folders
+> or write into one — and choosing an existing folder is the point of the
+> feature.
+>
+> **Getting the redirect URI right.** It has to match what you registered,
+> character for character. By default the server builds it from the origin the
+> request arrived on, honoring `X-Forwarded-Proto` / `X-Forwarded-Host` so a
+> TLS-terminating proxy works. If your proxy sets neither, pin it:
+> `--public-url https://roster.example` (env `COUNTROSTER_PUBLIC_URL`).
+>
+> **What's stored, and where it isn't.** The access and refresh tokens live in
+> the `cloud_backup_settings` row of your SQLite file. They are never returned
+> by the API — the settings endpoint is redacted — and they are deliberately
+> **excluded from the backup bundle**, so an exported `.countroster.zip` is
+> never also a credential file, and restoring one taken on another machine
+> can't repoint this server at that machine's cloud account. Treat the SQLite
+> file itself as secret-bearing, and remember there's still no auth in front of
+> the API: anyone who can reach the server can trigger a backup or disconnect
+> the account.
+>
+> **Failures are visible, not silent.** A run that fails records the provider's
+> own message on the settings row; the Data page shows it, and the server logs
+> one line per run. The schedule keeps its interval rather than retrying
+> tightly — the usual causes (revoked access, a deleted folder) need a human.
 >
 > ### Quick start on Linux (Ubuntu / Debian / Raspberry Pi) — systemd
 >

@@ -244,3 +244,46 @@ export interface CategoryRule {
 // NOTE: the `reminders` table still exists in the schema (migrations are
 // append-only and old backups must round-trip), but the feature was removed —
 // no service reads or writes it anymore.
+
+/** Cloud destinations the automatic backup can upload to (migration 009). */
+export type CloudProvider = 'dropbox' | 'google_drive';
+
+/** How often the server exports a bundle to the connected cloud folder. */
+export type CloudBackupFrequency =
+  | 'off'
+  | 'hourly'
+  | 'daily'
+  | 'weekly'
+  | 'monthly';
+
+/**
+ * The single `cloud_backup_settings` row (`id = 'singleton'`): which cloud
+ * account the server may write to, the folder chosen inside it, the schedule,
+ * and the outcome of the last run.
+ *
+ * Written only by the Go server, which owns the OAuth exchange and the
+ * uploads — the TS core carries the type (and migration 009) so both
+ * implementations produce identical databases. The row is **not** part of the
+ * backup bundle: it holds credentials, and a restore must not repoint a
+ * server at some other machine's cloud account.
+ */
+export interface CloudBackupSettings {
+  id: 'singleton';
+  provider: CloudProvider | null;
+  /** Display name of the connected account, e.g. an email address. */
+  account_label: string | null;
+  access_token: string | null;
+  refresh_token: string | null;
+  token_expires_at: string | null;
+  /** Provider-native folder handle: a Drive file id, a Dropbox path. */
+  folder_id: string | null;
+  /** Human-readable path of that folder, for the UI. */
+  folder_path: string | null;
+  frequency: CloudBackupFrequency;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_status: 'ok' | 'error' | null;
+  last_error: string | null;
+  last_file_name: string | null;
+  updated_at: string | null;
+}

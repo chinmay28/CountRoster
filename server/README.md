@@ -38,6 +38,11 @@ falls back to the env var, then the built-in default (**flag > env > default**).
 | `--host` | `HOST` | `0.0.0.0` | bind address |
 | `--db` | `COUNTROSTER_DB` | `./data/countroster.sqlite` | SQLite file (`:memory:` honored as the SQLite sentinel) |
 | `--web-dist` | `WEB_DIST` | — | serve the PWA from this directory (overrides embedded assets) |
+| `--dropbox-client-id` | `COUNTROSTER_DROPBOX_CLIENT_ID` | — | Dropbox OAuth app key; enables cloud backup to Dropbox |
+| `--dropbox-client-secret` | `COUNTROSTER_DROPBOX_CLIENT_SECRET` | — | Dropbox app secret (omit for a PKCE-only app) |
+| `--google-client-id` | `COUNTROSTER_GOOGLE_CLIENT_ID` | — | Google OAuth client id; enables cloud backup to Google Drive |
+| `--google-client-secret` | `COUNTROSTER_GOOGLE_CLIENT_SECRET` | — | Google OAuth client secret |
+| `--public-url` | `COUNTROSTER_PUBLIC_URL` | request origin | origin the OAuth redirect URI is built from |
 
 `countroster serve -h` lists the flags; `--version` (or the `version`
 subcommand) prints the version and exits.
@@ -95,11 +100,41 @@ internal/api/        the REST layer — route-for-route port of the old Express 
 internal/core/       domain services (trackers, entries, notes, groups, stats), validation, periods
 internal/migrate/    append-only schema migrations 001–004 + runner (SQL copied verbatim from the TS core)
 internal/backup/     .countroster.zip export/import (manifest, all.json, CSVs) + golden fixtures
+internal/cloud/      automatic cloud backup: OAuth to Dropbox / Google Drive, the schedule, the uploader
 internal/jsjson/     JSON serializer byte-identical to JavaScript's JSON.stringify (see below)
 internal/storage/    the 4-method SQLite Storage contract (Exec/Query/Transaction/Close)
 internal/ids/        UUIDv7 (time-sortable, monotonic within a millisecond)
 internal/timeutil/   injected Clock; ISO 8601 local-offset timestamps
 ```
+
+## Automatic cloud backup
+
+`internal/cloud` uploads the same `.countroster.zip` the download button
+produces to a folder the user picked in their Dropbox or Google Drive, on an
+hourly / daily / weekly / monthly schedule. The whole configuration is one
+row (`cloud_backup_settings`, migration 009) and a goroutine that polls it
+once a minute; `next_run_at` lives in the database, so a server that was off
+over its deadline finds the run overdue when it comes back.
+
+**Each deployment registers its own OAuth app.** CountRoster is self-hosted,
+so there is no shipped application identity to borrow — pass the client id (and
+secret, where the provider requires one) with the flags above, and register
+`<your origin>/api/cloud/backup/callback` as the app's redirect URI.
+Unconfigured providers are still listed in the UI, greyed out with a note
+saying what's missing. See DEPLOYMENT.md §0.1 for the walkthrough.
+
+The package splits three ways so only one part knows about a third party:
+`Provider` (the OAuth dance, browsing folders, uploading bytes — one
+implementation per service), `Service` (the settings row, token refresh, when
+the next run is due), and `Scheduler` (the ticking goroutine). Tests run the
+providers against `httptest` servers speaking each service's real dialect.
+
+**Tokens never leave the server.** They are stored in the settings row, kept
+out of every API response (`cloud.PublicSettings` is redacted), and
+deliberately excluded from the backup bundle — an export is the documented
+egress point and must not double as a credential file, and restoring a bundle
+taken on another machine must not repoint this server at that machine's cloud
+account.
 
 ## Contracts that must not drift
 

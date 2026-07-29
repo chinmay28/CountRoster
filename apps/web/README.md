@@ -20,6 +20,13 @@ the server, so every device that points at the same server sees the same data.
   detail, keeping the home screen's first paint light.
 - **No local database.** The old sqlite-wasm/OPFS adapter is gone; the only state
   here is UI state.
+- **Cloud backup settings** (`src/api/cloud.ts`, `src/components/CloudBackupSettings.tsx`):
+  the Data page can connect a Dropbox / Google Drive account, browse it for a
+  destination folder, and set a backup frequency. These endpoints sit *outside*
+  `createApiClient` on purpose — `ApiCore` mirrors the domain service interfaces
+  so an in-memory core can stand in during component tests, and cloud backup has
+  no domain half. On a server built without cloud support the routes 404 and the
+  section renders nothing.
 
 ## Commands
 

@@ -617,6 +617,57 @@ Scheduled backups:
 
 Manual "back up now" is always available.
 
+> **Superseded by the client-server model — see 8.5.** The table above assumes
+> the browser (or the phone) owns the file and the destination. It doesn't
+> anymore: the server holds the data and can write to a cloud folder on its
+> own clock, which is what makes a genuinely automatic schedule possible. The
+> constraint recorded above — "truly automatic web backups aren't possible
+> without a user gesture" — was a *browser* limitation, and the browser is no
+> longer the thing taking the backup.
+
+### 8.5 Automatic cloud backup (client-server)
+
+The server exports a bundle on a schedule the user chooses — **hourly, daily,
+weekly or monthly** — and uploads it to a folder they picked in their
+**Dropbox** or **Google Drive**. It is configured in the Data page's export
+settings, next to the manual download, because it is the same artifact: the
+identical `.countroster.zip`, restorable through the same Restore box.
+
+**Shape.** One settings row (`cloud_backup_settings`, migration 009) holds the
+connected account, its OAuth tokens, the destination folder, the frequency and
+`next_run_at`; a goroutine polls it once a minute and runs whatever is overdue.
+Putting the deadline in the database rather than in a timer is what makes a
+server that was switched off over its deadline simply find the run overdue when
+it comes back — no catch-up bookkeeping, and no timer to rebuild when the user
+changes the frequency. Intervals run from the last attempt rather than snapping
+to a wall-clock boundary: the promise is "a backup at least this often".
+
+**Layering.** `internal/cloud` splits into `Provider` (everything
+account-specific: the OAuth dance, browsing folders, uploading bytes — one
+implementation per service), `Service` (the settings row, token refresh, when
+the next run is due) and `Scheduler` (the goroutine). Only the providers know a
+third party exists; the domain layer in `internal/core` stays pure SQL, and
+adding a destination is one new `Provider`.
+
+**Credentials.** Each deployment registers its own OAuth app and passes the
+client id at startup — a self-hosted app has no shipped identity to borrow, and
+one baked in would be a secret shared by every install. Authorization is the
+PKCE authorization-code flow, with the verifier held in memory (an
+authorization that doesn't finish before a restart is simply retried) and an
+offline grant requested so the refresh token outlives the access token.
+
+**Tokens are not part of the backup.** `cloud_backup_settings` is excluded from
+the bundle's table list. A backup is the documented egress point and must not
+double as a credential file; and restoring a bundle taken on another machine
+must not repoint this server at that machine's cloud account. The API redacts
+them too — the settings endpoint never returns a token.
+
+**Failure is a first-class state.** A failed run stores the provider's own
+message on the settings row, which is what the UI renders, and reschedules on
+the same interval rather than retrying tightly: the usual causes (revoked
+access, a deleted folder) need a human, and hammering the provider wouldn't
+help.
+
 ## 9. Platform Implementation Notes
 
 ### 9.1 Mobile (Expo)

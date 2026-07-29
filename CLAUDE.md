@@ -96,7 +96,35 @@ Over the wire an `Entry` grows a `fields` array (always present, `[]` when there
 
 `server/internal/migrate` holds the numbered migrations (SQL copied **verbatim** from the TS core — both implementations must produce identical databases) and the runner (reads `schema_version` from `app_meta`, applies pending migrations in one transaction, idempotent).
 
-**Never edit a shipped migration — add a new one.** When you change the schema, update in lockstep: the migration SQL, the row structs in `internal/core/types.go`, the validators in `internal/core/validate.go`, the backup table list in `internal/backup/tables.go`, **and** the TS mirrors (`packages/core/src/schema/{tables,validators}.ts` + a matching TS migration) so the web test double stays faithful.
+**Never edit a shipped migration — add a new one.** When you change the schema, update in lockstep: the migration SQL, the row structs in `internal/core/types.go`, the validators in `internal/core/validate.go`, the backup table list in `internal/backup/tables.go`, **and** the TS mirrors (`packages/core/src/schema/{tables,validators}.ts` + a matching TS migration) so the web test double stays faithful. (`cloud_backup_settings`, migration 009, is the one table deliberately left out of the backup list — it holds OAuth tokens. See below.)
+
+### Automatic cloud backup lives in `internal/cloud`
+
+`server/internal/cloud` uploads the bundle to a Dropbox / Google Drive folder
+on a schedule (`off|hourly|daily|weekly|monthly`), configured from the Data
+page. Three layers, and only one of them knows a third party exists:
+`Provider` (OAuth + browse + upload, one per service), `Service` (the
+`cloud_backup_settings` singleton row, token refresh, when the next run is
+due), `Scheduler` (a goroutine polling once a minute). Provider base URLs are
+struct fields so tests point them at `httptest` servers.
+
+Three rules to preserve:
+
+- **The settings row is not in the backup bundle** (`internal/backup/tables.go`
+  deliberately omits it) and **never leaves over the API** (`cloud.PublicSettings`
+  is redacted). It holds OAuth tokens; an export is the documented egress point
+  and must not double as a credential file, and a restore must not repoint a
+  server at another machine's cloud account.
+- **No shipped OAuth identity.** Each deployment registers its own app and
+  passes `--dropbox-client-id` / `--google-client-id`; an unconfigured provider
+  is still listed in the UI, greyed out with the reason.
+- **`next_run_at` lives in the database**, not in a timer — that's what lets a
+  server that was off over its deadline pick the run up on the next tick.
+
+The cloud routes add two statuses to `api.handleErr`: `cloud.ConfigError`→400
+(a setup gap the caller can close) and `cloud.ProviderError`→502 (the failure
+came from Dropbox/Google). `api.New` takes the service as its fourth argument
+and skips the routes when it's nil.
 
 ### Backup format is cross-implementation
 
