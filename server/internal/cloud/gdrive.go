@@ -62,7 +62,28 @@ func NewGoogleDrive(creds Credentials, client *http.Client, now func() time.Time
 func (g *GoogleDrive) ID() string   { return ProviderGoogleDrive }
 func (g *GoogleDrive) Name() string { return "Google Drive" }
 
-func (g *GoogleDrive) Configured() bool { return g.Creds.ClientID != "" }
+func (g *GoogleDrive) Configured() bool { return g.Creds.Set() }
+
+// WithCredentials returns a copy bound to a different OAuth client.
+func (g *GoogleDrive) WithCredentials(creds Credentials) Provider {
+	next := *g
+	next.Creds = creds
+	return &next
+}
+
+// RequiresSecret is true: Google's Web application clients — the type whose
+// redirect URI can be a real https origin, which is what this server needs —
+// must present a client secret at the token endpoint.
+func (g *GoogleDrive) RequiresSecret() bool { return true }
+
+func (g *GoogleDrive) SetupURL() string {
+	return "https://console.cloud.google.com/apis/credentials"
+}
+
+// SupportsCodePaste is false: Google withdrew the out-of-band redirect
+// (`urn:ietf:wg:oauth:2.0:oob`) in 2022, so Drive needs a real registered
+// https redirect URI and has no paste-a-code alternative.
+func (g *GoogleDrive) SupportsCodePaste() bool { return false }
 
 // AuthorizeURL requests offline access with a forced consent prompt: Google
 // returns a refresh token only on the *first* consent for a given client, and

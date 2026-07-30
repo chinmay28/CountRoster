@@ -24,6 +24,7 @@ var Migrations = []Migration{
 	{Version: 7, Name: "007_tracker_fields", Up: m007TrackerFields},
 	{Version: 8, Name: "008_section_order", Up: m008SectionOrder},
 	{Version: 9, Name: "009_cloud_backup", Up: m009CloudBackup},
+	{Version: 10, Name: "010_cloud_provider_credentials", Up: m010CloudProviderCredentials},
 }
 
 // LatestVersion is the highest schema version known to this build.
@@ -292,4 +293,23 @@ const m009CloudBackup = `
 
     INSERT OR IGNORE INTO cloud_backup_settings (id, frequency)
       VALUES ('singleton', 'off');
+  `
+
+// m010CloudProviderCredentials stores the OAuth client each deployment
+// registered with a provider, so it can be entered from the Data page instead
+// of only as a startup flag. A phone can reach the provider's developer
+// console; it can't reach the server's command line.
+//
+// One row per provider rather than columns on cloud_backup_settings: both
+// providers can be set up at once, while only one account is ever connected.
+// Like that table, this one is deliberately absent from the backup bundle —
+// the client secret is a credential, and an export must not carry it.
+const m010CloudProviderCredentials = `
+    CREATE TABLE IF NOT EXISTS cloud_provider_credentials (
+      provider      TEXT PRIMARY KEY
+                    CHECK (provider IN ('dropbox','google_drive')),
+      client_id     TEXT NOT NULL,
+      client_secret TEXT,
+      updated_at    TEXT
+    );
   `

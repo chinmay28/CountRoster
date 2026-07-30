@@ -116,12 +116,28 @@ row (`cloud_backup_settings`, migration 009) and a goroutine that polls it
 once a minute; `next_run_at` lives in the database, so a server that was off
 over its deadline finds the run overdue when it comes back.
 
-**Each deployment registers its own OAuth app.** CountRoster is self-hosted,
-so there is no shipped application identity to borrow — pass the client id (and
-secret, where the provider requires one) with the flags above, and register
-`<your origin>/api/cloud/backup/callback` as the app's redirect URI.
-Unconfigured providers are still listed in the UI, greyed out with a note
-saying what's missing. See DEPLOYMENT.md §0.1 for the walkthrough.
+**Each deployment registers its own OAuth app.** A self-hosted server sits at
+an address nobody can predict, and providers require every redirect URI to be
+registered in advance — so there is no shipped identity that could cover every
+install the way a store app's fixed `com.app://` scheme covers its own. The
+client id is entered in the Data page (stored in `cloud_provider_credentials`,
+migration 010) and the page shows `<origin>/api/cloud/backup/callback` to
+register, with a Copy button. The `--dropbox-client-id` / `--google-client-id`
+flags remain as the fallback for automated deployments; the settings row wins
+when both exist. A provider with neither is listed with a **Set up** button
+rather than a disabled one. See DEPLOYMENT.md §0.1.
+
+**Two ways back from the consent screen.** The ordinary one is a redirect to
+`CallbackPath`. The other — `mode: "paste"` on `/connect` — asks for **no
+redirect URI at all**: the provider displays a code the user pastes back
+through `/complete`. That exists because the redirect flow needs a
+pre-registered *https* origin, which a LAN-hosted server generally doesn't
+have; the paste flow needs nothing registered and still carries PKCE and
+offline access. `Provider.SupportsCodePaste` gates it (Dropbox yes, Google no
+since it dropped OOB in 2022), and `Service.RedirectSupported` tells the UI
+which to lead with. The rule the flow turns on: a code issued without a
+redirect URI must be redeemed without one, so the pending record carries an
+empty redirect URI through to the exchange.
 
 The package splits three ways so only one part knows about a third party:
 `Provider` (the OAuth dance, browsing folders, uploading bytes — one
@@ -129,7 +145,7 @@ implementation per service), `Service` (the settings row, token refresh, when
 the next run is due), and `Scheduler` (the ticking goroutine). Tests run the
 providers against `httptest` servers speaking each service's real dialect.
 
-**Tokens never leave the server.** They are stored in the settings row, kept
+**Credentials never leave the server.** Tokens and client secrets are kept
 out of every API response (`cloud.PublicSettings` is redacted), and
 deliberately excluded from the backup bundle — an export is the documented
 egress point and must not double as a credential file, and restoring a bundle

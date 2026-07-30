@@ -83,18 +83,170 @@ func (s *Service) Now() time.Time {
 // Settings reads the current configuration.
 func (s *Service) Settings() (*Settings, error) { return loadSettings(s.St) }
 
-// PublicProviders lists the destinations this build offers, with whether the
-// operator has registered an OAuth client for each.
+// PublicProviders lists the destinations this build offers, with the state of
+// each one's OAuth client — enough for the settings screen to render both the
+// Connect buttons and the setup form without a second request.
 func (s *Service) PublicProviders() []PublicProvider {
+	stored, err := loadCredentials(s.St)
+	if err != nil {
+		// A read failure here shouldn't blank the whole screen; fall back to
+		// whatever the startup flags carry.
+		stored = map[string]Credentials{}
+	}
 	out := make([]PublicProvider, 0, len(s.Registry))
 	for _, p := range s.Registry {
-		configured := 0
-		if p.Configured() {
-			configured = 1
+		creds, source := resolveCredentials(p, stored)
+		entry := PublicProvider{
+			ID:       p.ID(),
+			Name:     p.Name(),
+			ClientID: creds.ClientID,
+			Source:   source,
+			SetupURL: p.SetupURL(),
 		}
-		out = append(out, PublicProvider{ID: p.ID(), Name: p.Name(), Configured: configured})
+		if creds.Set() {
+			entry.Configured = 1
+		}
+		if creds.ClientSecret != "" {
+			entry.HasSecret = 1
+		}
+		if p.RequiresSecret() {
+			entry.SecretRequired = 1
+		}
+		if p.SupportsCodePaste() {
+			entry.SupportsCodePaste = 1
+		}
+		out = append(out, entry)
 	}
 	return out
+}
+
+// resolveCredentials picks the OAuth client to use: what was entered on the
+// Data page wins over what a startup flag carries. The settings row is the
+// more specific, more recent statement of intent, and it's the one the user
+// is looking at — an operator who wants the flag to win can leave the form
+// empty. Returns the source so the UI can say where the active pair came from.
+func resolveCredentials(p Provider, stored map[string]Credentials) (Credentials, string) {
+	if creds, ok := stored[p.ID()]; ok && creds.Set() {
+		return creds, SourceSettings
+	}
+	if built := builtinCredentials(p); built.Set() {
+		return built, SourceServer
+	}
+	return Credentials{}, ""
+}
+
+// builtinCredentials reads back whatever the registry entry was constructed
+// with — the --dropbox-client-id / --google-client-id fallback.
+func builtinCredentials(p Provider) Credentials {
+	switch t := p.(type) {
+	case *Dropbox:
+		return t.Creds
+	case *GoogleDrive:
+		return t.Creds
+	}
+	// A provider outside this package (a test double) reports only whether it
+	// considers itself configured; that's enough to keep it usable.
+	if p.Configured() {
+		return Credentials{ClientID: "configured"}
+	}
+	return Credentials{}
+}
+
+// providerFor resolves a provider id to an instance bound to the credentials
+// this deployment actually has, or a ConfigError explaining what's missing.
+func (s *Service) providerFor(id string) (Provider, error) {
+	base := s.Registry.Get(id)
+	if base == nil {
+		return nil, &ConfigError{Message: `Unknown cloud provider "` + id + `"`}
+	}
+	stored, err := loadCredentials(s.St)
+	if err != nil {
+		return nil, err
+	}
+	creds, _ := resolveCredentials(base, stored)
+	if !creds.Set() {
+		return nil, &ConfigError{Message: base.Name() +
+			" is not set up yet: add the client id from an OAuth app you registered with " +
+			base.Name() + ", under Provider setup on this page."}
+	}
+	return base.WithCredentials(creds), nil
+}
+
+// SetCredentials stores the OAuth client for one provider, as entered on the
+// Data page.
+func (s *Service) SetCredentials(providerID, clientID, clientSecret string) error {
+	base := s.Registry.Get(providerID)
+	if base == nil {
+		return &ConfigError{Message: `Unknown cloud provider "` + providerID + `"`}
+	}
+	creds, err := validateCredentials(base, clientID, clientSecret)
+	if err != nil {
+		return err
+	}
+	return s.replaceCredentials(providerID, func() error {
+		return saveCredentials(s.St, providerID, creds, s.Clock.NowISO())
+	})
+}
+
+// ClearCredentials forgets a provider's stored OAuth client, falling back to
+// the startup flag if the server has one.
+func (s *Service) ClearCredentials(providerID string) error {
+	if s.Registry.Get(providerID) == nil {
+		return &ConfigError{Message: `Unknown cloud provider "` + providerID + `"`}
+	}
+	return s.replaceCredentials(providerID, func() error {
+		return deleteCredentials(s.St, providerID)
+	})
+}
+
+// replaceCredentials runs a credential write and drops the connection if it
+// changed which OAuth client is in effect.
+//
+// Tokens belong to the client that minted them: a Dropbox refresh token issued
+// to app key A is worthless to app key B. Keeping the connection across a
+// client id change would leave something that looks connected on screen and
+// fails at the next refresh — hours later, in the scheduler, where nobody is
+// watching. Better to say "reconnect" now. Re-saving the same id (to correct a
+// secret, say) is not a change and keeps the account.
+func (s *Service) replaceCredentials(providerID string, write func() error) error {
+	before, err := s.effectiveClientID(providerID)
+	if err != nil {
+		return err
+	}
+	if err := write(); err != nil {
+		return err
+	}
+	after, err := s.effectiveClientID(providerID)
+	if err != nil {
+		return err
+	}
+	if before == after {
+		return nil
+	}
+	set, err := s.Settings()
+	if err != nil {
+		return err
+	}
+	if set.Connected() && set.Provider != nil && *set.Provider == providerID {
+		_, err = s.Disconnect()
+		return err
+	}
+	return nil
+}
+
+// effectiveClientID is the client id a connection would currently be made
+// with — the stored one, else the startup flag, else empty.
+func (s *Service) effectiveClientID(providerID string) (string, error) {
+	base := s.Registry.Get(providerID)
+	if base == nil {
+		return "", nil
+	}
+	stored, err := loadCredentials(s.St)
+	if err != nil {
+		return "", err
+	}
+	creds, _ := resolveCredentials(base, stored)
+	return creds.ClientID, nil
 }
 
 // Update applies a settings patch: the schedule and the destination folder,
@@ -135,34 +287,98 @@ func (s *Service) Update(frequency *string, folderID, folderPath *string) (*Sett
 	return s.Settings()
 }
 
-// StartConnect begins an OAuth authorization and returns the URL the browser
-// should visit. The PKCE verifier and the exact redirect URI are remembered
-// against the returned `state` — the token exchange has to repeat both.
-func (s *Service) StartConnect(providerID, requestOrigin string) (string, error) {
-	provider := s.Registry.Get(providerID)
-	if provider == nil {
-		return "", &ConfigError{Message: `Unknown cloud provider "` + providerID + `"`}
-	}
-	if !provider.Configured() {
-		return "", &ConfigError{Message: provider.Name() +
-			" is not set up on this server: the operator needs to register an OAuth app and start the server with its client id."}
-	}
-	state, err := randomURLSafe(24)
+// Connect modes. "redirect" is the ordinary flow: the provider sends the
+// browser back to this server. "paste" asks for no redirect at all — the
+// provider shows the user a code, which they bring back themselves.
+const (
+	ModeRedirect = "redirect"
+	ModePaste    = "paste"
+)
+
+// ConnectStart is what the client needs to carry an authorization through.
+type ConnectStart struct {
+	// AuthorizeURL is where the user grants access.
+	AuthorizeURL string
+	// Mode is ModeRedirect or ModePaste.
+	Mode string
+	// PendingID identifies this in-flight authorization. In paste mode the
+	// client holds it and sends it back with the code; in redirect mode it
+	// travels as the OAuth `state` and the callback carries it.
+	PendingID string
+}
+
+// StartConnect begins an OAuth authorization and returns where to send the
+// user. The PKCE verifier and the exact redirect URI are remembered against
+// the returned PendingID — the token exchange has to repeat both.
+//
+// `paste` selects the no-redirect flow, for the case a self-hosted server is
+// most likely to hit: providers require a pre-registered https redirect URI,
+// and this server's origin may be plain http, or a LAN address that can't be
+// registered at all. Then there is nothing to redirect to, and a code the user
+// carries back by hand is the only way through. Not every provider offers it
+// (see Provider.SupportsCodePaste).
+func (s *Service) StartConnect(providerID, requestOrigin string, paste bool) (*ConnectStart, error) {
+	provider, err := s.providerFor(providerID)
 	if err != nil {
-		return "", err
+		return nil, err
+	}
+	if paste && !provider.SupportsCodePaste() {
+		return nil, &ConfigError{Message: provider.Name() +
+			" has no paste-a-code sign-in; it needs a registered https redirect URI."}
+	}
+	pendingID, err := randomURLSafe(24)
+	if err != nil {
+		return nil, err
 	}
 	// RFC 7636 wants 43–128 characters; 48 random bytes lands at 64.
 	verifier, err := randomURLSafe(48)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	redirectURI := s.redirectURI(requestOrigin)
-	s.pending.put(state, pending{
+
+	mode, redirectURI, state := ModeRedirect, s.redirectURI(requestOrigin), pendingID
+	if paste {
+		// No redirect URI, and therefore no `state`: it exists to bind a
+		// redirect to the request that started it, and there is no redirect.
+		mode, redirectURI, state = ModePaste, "", ""
+	}
+	s.pending.put(pendingID, pending{
 		provider:    provider.ID(),
 		verifier:    verifier,
 		redirectURI: redirectURI,
 	})
-	return provider.AuthorizeURL(redirectURI, state, codeChallenge(verifier)), nil
+	return &ConnectStart{
+		AuthorizeURL: provider.AuthorizeURL(redirectURI, state, codeChallenge(verifier)),
+		Mode:         mode,
+		PendingID:    pendingID,
+	}, nil
+}
+
+// RedirectSupported reports whether an authorization could come back to this
+// origin at all. Both providers require https for a registered redirect URI —
+// localhost being the documented exception — so a server reached over plain
+// http on a LAN address can only use the paste flow, and the UI should lead
+// with it rather than offering a button that cannot work.
+func (s *Service) RedirectSupported(requestOrigin string) bool {
+	origin := s.PublicURL
+	if origin == "" {
+		origin = requestOrigin
+	}
+	if strings.HasPrefix(origin, "https://") {
+		return true
+	}
+	rest, ok := strings.CutPrefix(origin, "http://")
+	if !ok {
+		return false
+	}
+	host, _, _ := strings.Cut(rest, ":")
+	return host == "localhost" || host == "127.0.0.1" || host == "[::1]"
+}
+
+// RedirectURI is where the provider sends the browser back — the string the
+// user has to register with the provider, so the setup form shows it verbatim.
+func (s *Service) RedirectURI(requestOrigin string) string {
+	return s.redirectURI(requestOrigin)
 }
 
 // redirectURI is where the provider sends the browser back. An explicitly
@@ -178,15 +394,16 @@ func (s *Service) redirectURI(requestOrigin string) string {
 
 // CompleteConnect finishes the authorization: trade the code for a token,
 // remember whose account it is, and leave the schedule off until the user
-// picks a folder.
-func (s *Service) CompleteConnect(ctx context.Context, state, code string) (*Settings, error) {
-	p, ok := s.pending.take(state)
+// picks a folder. `pendingID` is the OAuth `state` in redirect mode and the
+// handle the client kept in paste mode; the code is the same either way.
+func (s *Service) CompleteConnect(ctx context.Context, pendingID, code string) (*Settings, error) {
+	p, ok := s.pending.take(pendingID)
 	if !ok {
 		return nil, &ConfigError{Message: ErrUnknownState.Error()}
 	}
-	provider := s.Registry.Get(p.provider)
-	if provider == nil {
-		return nil, &ConfigError{Message: `Unknown cloud provider "` + p.provider + `"`}
+	provider, err := s.providerFor(p.provider)
+	if err != nil {
+		return nil, err
 	}
 	token, account, err := provider.Exchange(ctx, code, p.verifier, p.redirectURI)
 	if err != nil {
@@ -265,13 +482,9 @@ func (s *Service) authorize(ctx context.Context) (Provider, string, error) {
 	if !set.Connected() {
 		return nil, "", &ConfigError{Message: "No cloud account is connected."}
 	}
-	provider := s.Registry.Get(*set.Provider)
-	if provider == nil {
-		return nil, "", &ConfigError{Message: `This server has no "` + *set.Provider + `" provider.`}
-	}
-	if !provider.Configured() {
-		return nil, "", &ConfigError{Message: provider.Name() +
-			" is no longer set up on this server: its client id is missing, so the stored connection can't be used."}
+	provider, err := s.providerFor(*set.Provider)
+	if err != nil {
+		return nil, "", err
 	}
 
 	if !s.tokenExpiring(set) {

@@ -59,13 +59,37 @@ type Provider interface {
 	ID() string
 	// Name is the human label ("Dropbox", "Google Drive").
 	Name() string
-	// Configured reports whether the operator supplied client credentials.
+	// Configured reports whether this instance carries client credentials.
 	// An unconfigured provider is advertised but can't be connected.
 	Configured() bool
-	// AuthorizeURL is where the browser is sent to grant access.
+	// WithCredentials returns a copy bound to different credentials. The
+	// credentials a deployment registered are resolved per request (settings
+	// row first, startup flags second), so they can't be baked in at
+	// construction — this is how the resolved pair reaches the provider.
+	WithCredentials(Credentials) Provider
+	// RequiresSecret reports whether the provider rejects a public
+	// (PKCE-only) client, so the setup form can mark the secret required.
+	RequiresSecret() bool
+	// SetupURL is the provider's developer console — where a user registers
+	// the OAuth app whose id they're about to paste in.
+	SetupURL() string
+	// SupportsCodePaste reports whether the provider will authorize with no
+	// redirect URI at all, showing the user a code to copy back instead.
+	//
+	// That mode is worth having because it sidesteps the one thing a
+	// self-hosted server can't satisfy: providers demand a pre-registered,
+	// https redirect URI, and this server's origin is neither predictable nor
+	// necessarily https. Dropbox supports it; Google withdrew its equivalent
+	// (`urn:ietf:wg:oauth:2.0:oob`) in 2022.
+	SupportsCodePaste() bool
+	// AuthorizeURL is where the browser is sent to grant access. An empty
+	// redirectURI selects the paste-a-code mode (see SupportsCodePaste), and
+	// an empty state omits the parameter — there is no redirect to protect.
 	AuthorizeURL(redirectURI, state, codeChallenge string) string
-	// Exchange trades the callback's code for a token, and reports whose
-	// account it belongs to.
+	// Exchange trades the code for a token, and reports whose account it
+	// belongs to. redirectURI must be exactly what AuthorizeURL was given,
+	// empty included: a code issued without a redirect URI must be redeemed
+	// without one.
 	Exchange(ctx context.Context, code, codeVerifier, redirectURI string) (Token, Account, error)
 	// Refresh renews an expired access token. The returned token keeps the
 	// refresh token when the provider doesn't issue a new one.
@@ -79,20 +103,26 @@ type Provider interface {
 
 // Credentials are the OAuth client the operator registered with a provider.
 // CountRoster is self-hosted, so there is no shipped application identity to
-// borrow: each deployment registers its own app and passes the id (and, where
-// the provider demands one, the secret) at startup.
+// borrow: each deployment registers its own app and gives CountRoster the id
+// (and, where the provider demands one, the secret) — from the Data page, or
+// as a startup flag.
 type Credentials struct {
 	ClientID     string
 	ClientSecret string
 }
 
+// Set reports whether these credentials can be used at all.
+func (c Credentials) Set() bool { return c.ClientID != "" }
+
 // Registry is the set of providers this build knows about, in the order the
 // UI should offer them.
 type Registry []Provider
 
-// NewRegistry builds the standard registry. Providers with no client id are
-// still listed — the UI shows them as needing setup rather than pretending
-// they don't exist.
+// NewRegistry builds the standard registry. The credentials passed here are
+// the startup-flag fallback; whatever was entered in the Data page wins at
+// request time. Providers with no credentials from either source are still
+// listed — the UI shows them as needing setup rather than pretending they
+// don't exist.
 //
 // `now` is the clock token expiries are resolved against; it comes from the
 // service's Clock so a test can pin it.

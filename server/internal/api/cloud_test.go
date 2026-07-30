@@ -38,11 +38,25 @@ type fakeCloudProvider struct {
 	uploadErr  error
 }
 
-func (f *fakeCloudProvider) ID() string       { return cloud.ProviderDropbox }
-func (f *fakeCloudProvider) Name() string     { return "Dropbox" }
-func (f *fakeCloudProvider) Configured() bool { return f.configured }
+func (f *fakeCloudProvider) ID() string           { return cloud.ProviderDropbox }
+func (f *fakeCloudProvider) Name() string         { return "Dropbox" }
+func (f *fakeCloudProvider) Configured() bool     { return f.configured }
+func (f *fakeCloudProvider) RequiresSecret() bool { return false }
+func (f *fakeCloudProvider) SetupURL() string     { return "https://provider.test/apps" }
+
+// SupportsCodePaste mirrors Dropbox, the provider this double stands in for.
+func (f *fakeCloudProvider) SupportsCodePaste() bool { return true }
+
+// WithCredentials is a no-op here: the API tests exercise routing and JSON
+// shapes, and this double is "configured" by construction.
+func (f *fakeCloudProvider) WithCredentials(cloud.Credentials) cloud.Provider { return f }
 
 func (f *fakeCloudProvider) AuthorizeURL(redirectURI, state, challenge string) string {
+	// Mirrors the real providers: no redirect URI means the paste flow, and
+	// then there is no state either.
+	if redirectURI == "" {
+		return "https://provider.test/authorize?no_redirect=1"
+	}
 	return "https://provider.test/authorize?state=" + url.QueryEscape(state) +
 		"&redirect_uri=" + url.QueryEscape(redirectURI)
 }
@@ -102,17 +116,14 @@ func (f *cloudFixture) connect(t *testing.T) {
 	if code := c.postJSON("/api/cloud/backup/connect", m{"provider": "dropbox"}, &out); code != 200 {
 		t.Fatalf("connect status = %d", code)
 	}
-	u, err := url.Parse(out["authorize_url"].(string))
-	if err != nil {
-		t.Fatal(err)
-	}
 	// Follow the callback the way the browser would, without chasing the
-	// redirect it answers with.
+	// redirect it answers with. In redirect mode the pending id *is* the
+	// OAuth state the provider echoes back.
 	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}}
 	res, err := noRedirect.Get(f.srv.URL + cloud.CallbackPath +
-		"?code=abc&state=" + url.QueryEscape(u.Query().Get("state")))
+		"?code=abc&state=" + url.QueryEscape(out["pending_id"].(string)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,5 +378,184 @@ func TestRequestOriginPrefersForwardedHeaders(t *testing.T) {
 	r.Header.Set("X-Forwarded-Host", "roster.example")
 	if got := requestOrigin(r); got != "https://roster.example" {
 		t.Errorf("origin = %q, want the forwarded one", got)
+	}
+}
+
+// --- provider credentials -------------------------------------------------
+
+// The redirect URI is the string the user must register with their provider,
+// so the setup form needs it verbatim rather than asking them to assemble it.
+func TestCloudSettingsCarriesTheRedirectURI(t *testing.T) {
+	f := newCloudServer(t)
+	c := &client{t: t, base: f.srv.URL}
+	var body struct {
+		RedirectURI string `json:"redirect_uri"`
+	}
+	c.getJSON("/api/cloud/backup", &body)
+	if want := "https://roster.example" + cloud.CallbackPath; body.RedirectURI != want {
+		t.Errorf("redirect_uri = %q, want %q", body.RedirectURI, want)
+	}
+}
+
+// Everything the setup form renders has to arrive in the one GET.
+func TestCloudProviderSetupFields(t *testing.T) {
+	f := newCloudServer(t)
+	c := &client{t: t, base: f.srv.URL}
+	var body struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	c.getJSON("/api/cloud/backup", &body)
+	if len(body.Providers) != 1 {
+		t.Fatalf("providers = %v", body.Providers)
+	}
+	for _, key := range []string{
+		"id", "name", "configured", "client_id", "has_secret",
+		"secret_required", "source", "setup_url",
+	} {
+		if _, ok := body.Providers[0][key]; !ok {
+			t.Errorf("provider entry is missing %q: %v", key, body.Providers[0])
+		}
+	}
+}
+
+func TestCloudSetAndClearCredentials(t *testing.T) {
+	f := newCloudServer(t)
+	c := &client{t: t, base: f.srv.URL}
+
+	var body struct {
+		Providers []map[string]any `json:"providers"`
+	}
+	res, data := c.do("PUT", "/api/cloud/backup/providers/dropbox",
+		m{"client_id": "pasted-key", "client_secret": "pasted-secret"})
+	if res.StatusCode != 200 {
+		t.Fatalf("status = %d: %s", res.StatusCode, data)
+	}
+	json.Unmarshal(data, &body)
+	entry := body.Providers[0]
+	if entry["client_id"] != "pasted-key" {
+		t.Errorf("client_id = %v, want the pasted one", entry["client_id"])
+	}
+	if entry["source"] != "settings" || entry["has_secret"] != float64(1) {
+		t.Errorf("provider = %v, want it sourced from the settings row", entry)
+	}
+	// The secret goes in but never comes back.
+	if strings.Contains(string(data), "pasted-secret") {
+		t.Errorf("response leaks the client secret: %s", data)
+	}
+
+	res, data = c.do("DELETE", "/api/cloud/backup/providers/dropbox", nil)
+	if res.StatusCode != 200 {
+		t.Fatalf("delete status = %d: %s", res.StatusCode, data)
+	}
+	json.Unmarshal(data, &body)
+	if body.Providers[0]["client_id"] != "configured" {
+		// The fake reports itself configured, so clearing falls back to it.
+		t.Logf("after clear: %v", body.Providers[0])
+	}
+}
+
+func TestCloudCredentialsValidationIs400(t *testing.T) {
+	f := newCloudServer(t)
+	c := &client{t: t, base: f.srv.URL}
+	res, data := c.do("PUT", "/api/cloud/backup/providers/dropbox", m{"client_id": ""})
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", res.StatusCode, data)
+	}
+	if !strings.Contains(string(data), "Validation failed") {
+		t.Errorf("body = %s, want the standard validation shape", data)
+	}
+}
+
+func TestCloudCredentialsUnknownProviderIs400(t *testing.T) {
+	f := newCloudServer(t)
+	c := &client{t: t, base: f.srv.URL}
+	res, _ := c.do("PUT", "/api/cloud/backup/providers/icloud", m{"client_id": "x"})
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", res.StatusCode)
+	}
+}
+
+// --- the paste-a-code flow ------------------------------------------------
+
+func TestCloudConnectPasteMode(t *testing.T) {
+	f := newCloudServer(t)
+	cl := &client{t: t, base: f.srv.URL}
+
+	var start map[string]any
+	if code := cl.postJSON("/api/cloud/backup/connect",
+		m{"provider": "dropbox", "mode": "paste"}, &start); code != 200 {
+		t.Fatalf("connect status = %d", code)
+	}
+	if start["mode"] != "paste" {
+		t.Errorf("mode = %v, want paste", start["mode"])
+	}
+	if start["pending_id"] == "" || start["pending_id"] == nil {
+		t.Fatal("paste mode must return a pending_id for the client to hold")
+	}
+	if strings.Contains(start["authorize_url"].(string), "redirect_uri") {
+		t.Errorf("authorize_url carries a redirect: %v", start["authorize_url"])
+	}
+
+	var body struct {
+		Settings map[string]any `json:"settings"`
+	}
+	if code := cl.postJSON("/api/cloud/backup/complete",
+		m{"pending_id": start["pending_id"], "code": "pasted-code"}, &body); code != 200 {
+		t.Fatalf("complete status = %d", code)
+	}
+	if body.Settings["connected"] != float64(1) {
+		t.Errorf("connected = %v, want 1 after pasting the code", body.Settings["connected"])
+	}
+}
+
+// People select the code out of a box on the provider's page, so surrounding
+// whitespace is normal input, not a malformed request.
+func TestCloudCompleteTrimsThePastedCode(t *testing.T) {
+	f := newCloudServer(t)
+	c := &client{t: t, base: f.srv.URL}
+	var start map[string]any
+	c.postJSON("/api/cloud/backup/connect", m{"provider": "dropbox", "mode": "paste"}, &start)
+
+	if code := c.postJSON("/api/cloud/backup/complete",
+		m{"pending_id": start["pending_id"], "code": "  pasted-code\n"}, nil); code != 200 {
+		t.Errorf("status = %d, want the padded code accepted", code)
+	}
+}
+
+func TestCloudCompleteRejectsAnEmptyCode(t *testing.T) {
+	f := newCloudServer(t)
+	c := &client{t: t, base: f.srv.URL}
+	var start map[string]any
+	c.postJSON("/api/cloud/backup/connect", m{"provider": "dropbox", "mode": "paste"}, &start)
+
+	res, data := c.do("POST", "/api/cloud/backup/complete",
+		m{"pending_id": start["pending_id"], "code": "   "})
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400: %s", res.StatusCode, data)
+	}
+}
+
+func TestCloudCompleteRejectsAnUnknownPendingID(t *testing.T) {
+	f := newCloudServer(t)
+	c := &client{t: t, base: f.srv.URL}
+	res, _ := c.do("POST", "/api/cloud/backup/complete",
+		m{"pending_id": "never-issued", "code": "x"})
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", res.StatusCode)
+	}
+}
+
+// The client needs to know whether a redirect could work here before it
+// decides which flow to lead with.
+func TestCloudSettingsReportsRedirectSupport(t *testing.T) {
+	f := newCloudServer(t)
+	c := &client{t: t, base: f.srv.URL}
+	var body struct {
+		RedirectSupported int `json:"redirect_supported"`
+	}
+	c.getJSON("/api/cloud/backup", &body)
+	// The fixture pins an https public URL.
+	if body.RedirectSupported != 1 {
+		t.Errorf("redirect_supported = %d, want 1 for an https origin", body.RedirectSupported)
 	}
 }

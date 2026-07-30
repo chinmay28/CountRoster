@@ -51,7 +51,26 @@ func NewDropbox(creds Credentials, client *http.Client, now func() time.Time) *D
 func (d *Dropbox) ID() string   { return ProviderDropbox }
 func (d *Dropbox) Name() string { return "Dropbox" }
 
-func (d *Dropbox) Configured() bool { return d.Creds.ClientID != "" }
+func (d *Dropbox) Configured() bool { return d.Creds.Set() }
+
+// WithCredentials returns a copy bound to a different OAuth client. Dropbox
+// app keys are interchangeable at this level, so a shallow copy is enough.
+func (d *Dropbox) WithCredentials(creds Credentials) Provider {
+	next := *d
+	next.Creds = creds
+	return &next
+}
+
+// RequiresSecret is false: a Dropbox app can be registered as a public client
+// and authorized with PKCE alone.
+func (d *Dropbox) RequiresSecret() bool { return false }
+
+func (d *Dropbox) SetupURL() string { return "https://www.dropbox.com/developers/apps" }
+
+// SupportsCodePaste is true: Dropbox authorizes with no redirect URI at all,
+// showing the user a code to copy back. That's the escape hatch for a server
+// whose origin can't be pre-registered — or isn't https.
+func (d *Dropbox) SupportsCodePaste() bool { return true }
 
 // AuthorizeURL asks for an offline grant — without `token_access_type=offline`
 // Dropbox issues a 4-hour token and no refresh token, which would make a
@@ -60,12 +79,19 @@ func (d *Dropbox) AuthorizeURL(redirectURI, state, codeChallenge string) string 
 	q := url.Values{
 		"client_id":             {d.Creds.ClientID},
 		"response_type":         {"code"},
-		"redirect_uri":          {redirectURI},
-		"state":                 {state},
 		"token_access_type":     {"offline"},
 		"scope":                 {dropboxScopes},
 		"code_challenge":        {codeChallenge},
 		"code_challenge_method": {"S256"},
+	}
+	// No redirect URI means the paste-a-code flow: Dropbox renders the code
+	// on screen instead of redirecting. `state` guards a redirect against
+	// CSRF, so with no redirect there is nothing for it to guard.
+	if redirectURI != "" {
+		q.Set("redirect_uri", redirectURI)
+		if state != "" {
+			q.Set("state", state)
+		}
 	}
 	return d.AuthBase + "/oauth2/authorize?" + q.Encode()
 }
@@ -77,9 +103,13 @@ func (d *Dropbox) Exchange(ctx context.Context, code, verifier, redirectURI stri
 	form := url.Values{
 		"code":          {code},
 		"grant_type":    {"authorization_code"},
-		"redirect_uri":  {redirectURI},
 		"client_id":     {d.Creds.ClientID},
 		"code_verifier": {verifier},
+	}
+	// A code issued without a redirect URI must be redeemed without one —
+	// Dropbox rejects the exchange otherwise.
+	if redirectURI != "" {
+		form.Set("redirect_uri", redirectURI)
 	}
 	// A Dropbox app may be registered as a public (PKCE-only) or a
 	// confidential client; send the secret only when the operator has one.
