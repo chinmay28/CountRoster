@@ -130,6 +130,20 @@
 > or write into one — and choosing an existing folder is the point of the
 > feature.
 >
+> **No https? Use the paste-a-code sign-in (Dropbox).** Both providers require
+> an https redirect URI — `localhost` is the only exception — so a server
+> reached at `http://192.168.1.7:8787` has nowhere for a redirect to land.
+> Dropbox can authorize with **no redirect URI at all**: it shows you a code,
+> you paste it back into the Data page, done. Nothing to register, and the
+> flow keeps PKCE and offline access, so scheduled backups still work. The
+> page picks this automatically when the origin can't host a redirect, and
+> offers it as an alternative when it can.
+>
+> Google Drive has no equivalent — it withdrew out-of-band authorization
+> (`urn:ietf:wg:oauth:2.0:oob`) in 2022 — so Drive needs a real https origin.
+> The page says so on the Drive row rather than letting you bounce off
+> Google's error page.
+>
 > **Getting the redirect URI right.** It has to match what you registered,
 > character for character — which is why the setup form shows the exact string
 > to copy rather than making you assemble it. The server builds it from the

@@ -120,6 +120,9 @@ type PublicProvider struct {
 	Source string `json:"source"`
 	// SetupURL is the provider's developer console, linked from the form.
 	SetupURL string `json:"setup_url"`
+	// SupportsCodePaste is 1 for providers that can authorize with no redirect
+	// URI, showing the user a code to copy back.
+	SupportsCodePaste int `json:"supports_code_paste"`
 }
 
 // loadSettings reads the singleton row. The migration seeds it, but a

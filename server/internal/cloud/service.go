@@ -112,6 +112,9 @@ func (s *Service) PublicProviders() []PublicProvider {
 		if p.RequiresSecret() {
 			entry.SecretRequired = 1
 		}
+		if p.SupportsCodePaste() {
+			entry.SupportsCodePaste = 1
+		}
 		out = append(out, entry)
 	}
 	return out
@@ -284,30 +287,92 @@ func (s *Service) Update(frequency *string, folderID, folderPath *string) (*Sett
 	return s.Settings()
 }
 
-// StartConnect begins an OAuth authorization and returns the URL the browser
-// should visit. The PKCE verifier and the exact redirect URI are remembered
-// against the returned `state` — the token exchange has to repeat both.
-func (s *Service) StartConnect(providerID, requestOrigin string) (string, error) {
+// Connect modes. "redirect" is the ordinary flow: the provider sends the
+// browser back to this server. "paste" asks for no redirect at all — the
+// provider shows the user a code, which they bring back themselves.
+const (
+	ModeRedirect = "redirect"
+	ModePaste    = "paste"
+)
+
+// ConnectStart is what the client needs to carry an authorization through.
+type ConnectStart struct {
+	// AuthorizeURL is where the user grants access.
+	AuthorizeURL string
+	// Mode is ModeRedirect or ModePaste.
+	Mode string
+	// PendingID identifies this in-flight authorization. In paste mode the
+	// client holds it and sends it back with the code; in redirect mode it
+	// travels as the OAuth `state` and the callback carries it.
+	PendingID string
+}
+
+// StartConnect begins an OAuth authorization and returns where to send the
+// user. The PKCE verifier and the exact redirect URI are remembered against
+// the returned PendingID — the token exchange has to repeat both.
+//
+// `paste` selects the no-redirect flow, for the case a self-hosted server is
+// most likely to hit: providers require a pre-registered https redirect URI,
+// and this server's origin may be plain http, or a LAN address that can't be
+// registered at all. Then there is nothing to redirect to, and a code the user
+// carries back by hand is the only way through. Not every provider offers it
+// (see Provider.SupportsCodePaste).
+func (s *Service) StartConnect(providerID, requestOrigin string, paste bool) (*ConnectStart, error) {
 	provider, err := s.providerFor(providerID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	state, err := randomURLSafe(24)
+	if paste && !provider.SupportsCodePaste() {
+		return nil, &ConfigError{Message: provider.Name() +
+			" has no paste-a-code sign-in; it needs a registered https redirect URI."}
+	}
+	pendingID, err := randomURLSafe(24)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	// RFC 7636 wants 43–128 characters; 48 random bytes lands at 64.
 	verifier, err := randomURLSafe(48)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	redirectURI := s.redirectURI(requestOrigin)
-	s.pending.put(state, pending{
+
+	mode, redirectURI, state := ModeRedirect, s.redirectURI(requestOrigin), pendingID
+	if paste {
+		// No redirect URI, and therefore no `state`: it exists to bind a
+		// redirect to the request that started it, and there is no redirect.
+		mode, redirectURI, state = ModePaste, "", ""
+	}
+	s.pending.put(pendingID, pending{
 		provider:    provider.ID(),
 		verifier:    verifier,
 		redirectURI: redirectURI,
 	})
-	return provider.AuthorizeURL(redirectURI, state, codeChallenge(verifier)), nil
+	return &ConnectStart{
+		AuthorizeURL: provider.AuthorizeURL(redirectURI, state, codeChallenge(verifier)),
+		Mode:         mode,
+		PendingID:    pendingID,
+	}, nil
+}
+
+// RedirectSupported reports whether an authorization could come back to this
+// origin at all. Both providers require https for a registered redirect URI —
+// localhost being the documented exception — so a server reached over plain
+// http on a LAN address can only use the paste flow, and the UI should lead
+// with it rather than offering a button that cannot work.
+func (s *Service) RedirectSupported(requestOrigin string) bool {
+	origin := s.PublicURL
+	if origin == "" {
+		origin = requestOrigin
+	}
+	if strings.HasPrefix(origin, "https://") {
+		return true
+	}
+	rest, ok := strings.CutPrefix(origin, "http://")
+	if !ok {
+		return false
+	}
+	host, _, _ := strings.Cut(rest, ":")
+	return host == "localhost" || host == "127.0.0.1" || host == "[::1]"
 }
 
 // RedirectURI is where the provider sends the browser back — the string the
@@ -329,9 +394,10 @@ func (s *Service) redirectURI(requestOrigin string) string {
 
 // CompleteConnect finishes the authorization: trade the code for a token,
 // remember whose account it is, and leave the schedule off until the user
-// picks a folder.
-func (s *Service) CompleteConnect(ctx context.Context, state, code string) (*Settings, error) {
-	p, ok := s.pending.take(state)
+// picks a folder. `pendingID` is the OAuth `state` in redirect mode and the
+// handle the client kept in paste mode; the code is the same either way.
+func (s *Service) CompleteConnect(ctx context.Context, pendingID, code string) (*Settings, error) {
+	p, ok := s.pending.take(pendingID)
 	if !ok {
 		return nil, &ConfigError{Message: ErrUnknownState.Error()}
 	}

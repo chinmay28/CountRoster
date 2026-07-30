@@ -73,10 +73,23 @@ type Provider interface {
 	// SetupURL is the provider's developer console — where a user registers
 	// the OAuth app whose id they're about to paste in.
 	SetupURL() string
-	// AuthorizeURL is where the browser is sent to grant access.
+	// SupportsCodePaste reports whether the provider will authorize with no
+	// redirect URI at all, showing the user a code to copy back instead.
+	//
+	// That mode is worth having because it sidesteps the one thing a
+	// self-hosted server can't satisfy: providers demand a pre-registered,
+	// https redirect URI, and this server's origin is neither predictable nor
+	// necessarily https. Dropbox supports it; Google withdrew its equivalent
+	// (`urn:ietf:wg:oauth:2.0:oob`) in 2022.
+	SupportsCodePaste() bool
+	// AuthorizeURL is where the browser is sent to grant access. An empty
+	// redirectURI selects the paste-a-code mode (see SupportsCodePaste), and
+	// an empty state omits the parameter — there is no redirect to protect.
 	AuthorizeURL(redirectURI, state, codeChallenge string) string
-	// Exchange trades the callback's code for a token, and reports whose
-	// account it belongs to.
+	// Exchange trades the code for a token, and reports whose account it
+	// belongs to. redirectURI must be exactly what AuthorizeURL was given,
+	// empty included: a code issued without a redirect URI must be redeemed
+	// without one.
 	Exchange(ctx context.Context, code, codeVerifier, redirectURI string) (Token, Account, error)
 	// Refresh renews an expired access token. The returned token keeps the
 	// refresh token when the provider doesn't issue a new one.

@@ -1051,8 +1051,37 @@ a {
   margin-left: auto;
   flex: none;
 }
-.cloud__provider-edit {
-  justify-self: start;
+.cloud__provider-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.cloud__provider-note {
+  margin: 0;
+  font-size: 0.85rem;
+}
+/* The paste flow shares the setup panel's look — both are "do this once,
+   here's how" rather than everyday controls. */
+.cloud__paste {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border);
+}
+.cloud__paste .field input {
+  font: inherit;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+/* An anchor styled as a button still needs the button's box. */
+.cloud__paste-open {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  margin-top: 0.25rem;
 }
 .cloud__setup {
   display: grid;

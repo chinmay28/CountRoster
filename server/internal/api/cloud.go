@@ -30,6 +30,10 @@ type cloudSettingsBody struct {
 	// setup form can show what to paste rather than asking them to assemble
 	// it from a hostname and a path.
 	RedirectURI string `json:"redirect_uri"`
+	// RedirectSupported is 0 when this origin can't be a registered redirect
+	// URI at all (plain http on something other than localhost). The UI then
+	// leads with the paste flow instead of a button that cannot work.
+	RedirectSupported int `json:"redirect_supported"`
 }
 
 func (s *server) writeCloudSettings(w http.ResponseWriter, r *http.Request, status int) {
@@ -38,10 +42,15 @@ func (s *server) writeCloudSettings(w http.ResponseWriter, r *http.Request, stat
 		handleErr(w, err)
 		return
 	}
+	redirectSupported := 0
+	if s.cloud.RedirectSupported(requestOrigin(r)) {
+		redirectSupported = 1
+	}
 	writeJSON(w, status, cloudSettingsBody{
-		Settings:    set.Public(),
-		Providers:   s.cloud.PublicProviders(),
-		RedirectURI: s.cloud.RedirectURI(requestOrigin(r)),
+		Settings:          set.Public(),
+		Providers:         s.cloud.PublicProviders(),
+		RedirectURI:       s.cloud.RedirectURI(requestOrigin(r)),
+		RedirectSupported: redirectSupported,
 	})
 }
 
@@ -108,18 +117,53 @@ func (s *server) cloudBackupUpdate(w http.ResponseWriter, r *http.Request) {
 // the browser. The client navigates there itself rather than being redirected
 // — it's a cross-origin hop out of a single-page app, and a fetch that
 // followed a 302 would land the consent page in an XHR.
+//
+// `mode: "paste"` asks for the no-redirect flow, where the provider shows the
+// user a code instead of redirecting. The response then carries a pending_id
+// the client holds until it posts the code back to /complete.
 func (s *server) cloudBackupConnect(w http.ResponseWriter, r *http.Request) {
 	body, ok := decodeBody(w, r)
 	if !ok {
 		return
 	}
 	provider, _ := bodyField(body, "provider").(string)
-	authorizeURL, err := s.cloud.StartConnect(provider, requestOrigin(r))
+	mode, _ := bodyField(body, "mode").(string)
+	start, err := s.cloud.StartConnect(provider, requestOrigin(r), mode == cloud.ModePaste)
 	if err != nil {
 		handleErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"authorize_url": authorizeURL})
+	writeJSON(w, http.StatusOK, map[string]string{
+		"authorize_url": start.AuthorizeURL,
+		"mode":          start.Mode,
+		"pending_id":    start.PendingID,
+	})
+}
+
+// cloudBackupComplete finishes a paste-mode authorization: the code the
+// provider displayed, plus the pending_id from /connect. (Redirect mode
+// finishes at the callback instead, which is a browser navigation.)
+func (s *server) cloudBackupComplete(w http.ResponseWriter, r *http.Request) {
+	body, ok := decodeBody(w, r)
+	if !ok {
+		return
+	}
+	pendingID, _ := bodyField(body, "pending_id").(string)
+	code, _ := bodyField(body, "code").(string)
+	// Dropbox renders the code in a box people select by hand, so a stray
+	// space or newline on the way back is ordinary, not a malformed request.
+	code = strings.TrimSpace(code)
+	if code == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Paste the code the provider showed you.",
+		})
+		return
+	}
+	if _, err := s.cloud.CompleteConnect(r.Context(), pendingID, code); err != nil {
+		handleErr(w, err)
+		return
+	}
+	s.writeCloudSettings(w, r, http.StatusOK)
 }
 
 // cloudBackupCallback is where the provider returns the browser. It is a

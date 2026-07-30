@@ -80,6 +80,11 @@ func (g *GoogleDrive) SetupURL() string {
 	return "https://console.cloud.google.com/apis/credentials"
 }
 
+// SupportsCodePaste is false: Google withdrew the out-of-band redirect
+// (`urn:ietf:wg:oauth:2.0:oob`) in 2022, so Drive needs a real registered
+// https redirect URI and has no paste-a-code alternative.
+func (g *GoogleDrive) SupportsCodePaste() bool { return false }
+
 // AuthorizeURL requests offline access with a forced consent prompt: Google
 // returns a refresh token only on the *first* consent for a given client, and
 // a re-connect after a disconnect would otherwise come back without one,

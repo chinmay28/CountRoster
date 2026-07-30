@@ -127,6 +127,18 @@ flags remain as the fallback for automated deployments; the settings row wins
 when both exist. A provider with neither is listed with a **Set up** button
 rather than a disabled one. See DEPLOYMENT.md §0.1.
 
+**Two ways back from the consent screen.** The ordinary one is a redirect to
+`CallbackPath`. The other — `mode: "paste"` on `/connect` — asks for **no
+redirect URI at all**: the provider displays a code the user pastes back
+through `/complete`. That exists because the redirect flow needs a
+pre-registered *https* origin, which a LAN-hosted server generally doesn't
+have; the paste flow needs nothing registered and still carries PKCE and
+offline access. `Provider.SupportsCodePaste` gates it (Dropbox yes, Google no
+since it dropped OOB in 2022), and `Service.RedirectSupported` tells the UI
+which to lead with. The rule the flow turns on: a code issued without a
+redirect URI must be redeemed without one, so the pending record carries an
+empty redirect URI through to the exchange.
+
 The package splits three ways so only one part knows about a third party:
 `Provider` (the OAuth dance, browsing folders, uploading bytes — one
 implementation per service), `Service` (the settings row, token refresh, when

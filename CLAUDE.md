@@ -125,6 +125,13 @@ Three rules to preserve:
   disconnects the account: tokens belong to the client that minted them.
 - **`next_run_at` lives in the database**, not in a timer — that's what lets a
   server that was off over its deadline pick the run up on the next tick.
+- **Two connect modes.** Redirect (provider → `cloud.CallbackPath`) and paste
+  (`mode: "paste"` → no redirect URI at all; the provider shows a code the user
+  pastes back via `/complete`). Paste exists because the redirect flow needs a
+  pre-registered https origin a LAN server doesn't have. A code issued without
+  a redirect URI **must be redeemed without one** — that's why the pending
+  record threads an empty redirect URI through to `Exchange`. Gated by
+  `Provider.SupportsCodePaste`; `Service.RedirectSupported` picks the default.
 
 The cloud routes add two statuses to `api.handleErr`: `cloud.ConfigError`→400
 (a setup gap the caller can close) and `cloud.ProviderError`→502 (the failure

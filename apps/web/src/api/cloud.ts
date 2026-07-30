@@ -25,6 +25,13 @@ export interface CloudProviderInfo {
   source: 'settings' | 'server' | '';
   /** The provider's developer console, where the OAuth app is registered. */
   setup_url: string;
+  /**
+   * 1 when the provider will authorize with no redirect URI, showing the user
+   * a code to copy back instead. It's the escape hatch for a server whose
+   * origin can't be registered — or isn't https. Dropbox has it; Google
+   * withdrew its equivalent in 2022.
+   */
+  supports_code_paste: 0 | 1;
 }
 
 /** The server's cloud backup configuration, with every token redacted. */
@@ -70,6 +77,12 @@ export interface CloudBackupState {
    * something copy-pasteable instead of asking the user to assemble it.
    */
   redirect_uri: string;
+  /**
+   * 0 when this origin can't be a registered redirect URI at all (plain http
+   * on something other than localhost — both providers require https). The UI
+   * then leads with the paste flow rather than a button that cannot work.
+   */
+  redirect_supported: 0 | 1;
 }
 
 /** One folder in the connected account. */
@@ -142,17 +155,45 @@ export function updateCloudBackup(
   return request('PATCH', '/backup', patch, baseUrl);
 }
 
+/** How the user will come back from the provider's consent screen. */
+export type CloudConnectMode = 'redirect' | 'paste';
+
+export interface CloudConnectStart {
+  authorize_url: string;
+  mode: CloudConnectMode;
+  /**
+   * Handle for this in-flight authorization. In paste mode the client holds it
+   * and sends it back with the code; in redirect mode the callback carries it.
+   */
+  pending_id: string;
+}
+
 /**
  * Begin connecting an account. The server returns the provider's consent URL
  * rather than redirecting: this is a cross-origin hop, and a `fetch` that
  * followed the redirect would pull the consent page into an XHR instead of
  * putting it in front of the user.
+ *
+ * `mode: 'paste'` asks for the no-redirect flow — the provider shows a code
+ * the user brings back by hand. That's the only route when the server's origin
+ * can't be a registered redirect URI, which is the common case for a LAN or
+ * plain-http deployment.
  */
 export function startCloudConnect(
   provider: string,
+  mode: CloudConnectMode = 'redirect',
   baseUrl = API_BASE,
-): Promise<{ authorize_url: string }> {
-  return request('POST', '/backup/connect', { provider }, baseUrl);
+): Promise<CloudConnectStart> {
+  return request('POST', '/backup/connect', { provider, mode }, baseUrl);
+}
+
+/** Finish a paste-mode authorization with the code the provider displayed. */
+export function completeCloudConnect(
+  pendingId: string,
+  code: string,
+  baseUrl = API_BASE,
+): Promise<CloudBackupState> {
+  return request('POST', '/backup/complete', { pending_id: pendingId, code }, baseUrl);
 }
 
 export function disconnectCloudBackup(

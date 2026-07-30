@@ -155,16 +155,12 @@ func newHarness(t *testing.T) *harness {
 // through the callback.
 func (h *harness) connect(t *testing.T) {
 	t.Helper()
-	authorizeURL, err := h.svc.StartConnect(ProviderDropbox, "http://countroster.test")
+	start, err := h.svc.StartConnect(ProviderDropbox, "http://countroster.test", false)
 	if err != nil {
 		t.Fatalf("StartConnect: %v", err)
 	}
-	u, err := url.Parse(authorizeURL)
-	if err != nil {
-		t.Fatal(err)
-	}
 	if _, err := h.svc.CompleteConnect(context.Background(),
-		u.Query().Get("state"), "auth-code"); err != nil {
+		start.PendingID, "auth-code"); err != nil {
 		t.Fatalf("CompleteConnect: %v", err)
 	}
 }
@@ -343,14 +339,14 @@ func TestConnectStoresTheGrantAndNamesTheAccount(t *testing.T) {
 
 func TestAuthorizeURLCarriesPKCEAndOfflineAccess(t *testing.T) {
 	h := newHarness(t)
-	raw, err := h.svc.StartConnect(ProviderDropbox, "http://ignored.test")
+	start, err := h.svc.StartConnect(ProviderDropbox, "http://ignored.test", false)
 	if err != nil {
 		t.Fatalf("StartConnect: %v", err)
 	}
-	u, _ := url.Parse(raw)
+	u, _ := url.Parse(start.AuthorizeURL)
 	q := u.Query()
 	if q.Get("code_challenge") == "" || q.Get("code_challenge_method") != "S256" {
-		t.Errorf("authorize URL is missing an S256 PKCE challenge: %s", raw)
+		t.Errorf("authorize URL is missing an S256 PKCE challenge: %s", start.AuthorizeURL)
 	}
 	if q.Get("token_access_type") != "offline" {
 		t.Error("Dropbox must be asked for offline access or the schedule dies in 4 hours")
@@ -365,12 +361,12 @@ func TestAuthorizeURLCarriesPKCEAndOfflineAccess(t *testing.T) {
 // the consent screen — that's the whole point of PKCE.
 func TestExchangeSendsTheMatchingVerifier(t *testing.T) {
 	h := newHarness(t)
-	raw, _ := h.svc.StartConnect(ProviderDropbox, "http://countroster.test")
-	u, _ := url.Parse(raw)
+	start, _ := h.svc.StartConnect(ProviderDropbox, "http://countroster.test", false)
+	u, _ := url.Parse(start.AuthorizeURL)
 	challenge := u.Query().Get("code_challenge")
 
 	if _, err := h.svc.CompleteConnect(context.Background(),
-		u.Query().Get("state"), "auth-code"); err != nil {
+		start.PendingID, "auth-code"); err != nil {
 		t.Fatalf("CompleteConnect: %v", err)
 	}
 	if len(h.dbx.exchanges) != 1 {
@@ -388,9 +384,8 @@ func TestExchangeSendsTheMatchingVerifier(t *testing.T) {
 // A state is single-use: a replayed callback finds nothing to exchange.
 func TestCallbackStateIsSingleUse(t *testing.T) {
 	h := newHarness(t)
-	raw, _ := h.svc.StartConnect(ProviderDropbox, "http://countroster.test")
-	u, _ := url.Parse(raw)
-	state := u.Query().Get("state")
+	start, _ := h.svc.StartConnect(ProviderDropbox, "http://countroster.test", false)
+	state := start.PendingID
 
 	if _, err := h.svc.CompleteConnect(context.Background(), state, "code"); err != nil {
 		t.Fatalf("first callback: %v", err)
@@ -404,7 +399,7 @@ func TestCallbackStateIsSingleUse(t *testing.T) {
 func TestConnectRejectsAnUnconfiguredProvider(t *testing.T) {
 	h := newHarness(t)
 	h.svc.Registry = Registry{NewDropbox(Credentials{}, nil, time.Now)}
-	_, err := h.svc.StartConnect(ProviderDropbox, "http://countroster.test")
+	_, err := h.svc.StartConnect(ProviderDropbox, "http://countroster.test", false)
 	if !IsConfigError(err) {
 		t.Fatalf("error = %v, want a ConfigError about setup", err)
 	}
@@ -725,7 +720,7 @@ func TestCredentialsEnteredInSettingsMakeAProviderUsable(t *testing.T) {
 	if got := h.svc.PublicProviders()[0].Configured; got != 0 {
 		t.Fatalf("configured = %d, want 0 before setup", got)
 	}
-	if _, err := h.svc.StartConnect(ProviderDropbox, "http://countroster.test"); !IsConfigError(err) {
+	if _, err := h.svc.StartConnect(ProviderDropbox, "http://countroster.test", false); !IsConfigError(err) {
 		t.Fatalf("StartConnect error = %v, want a ConfigError", err)
 	}
 
@@ -741,11 +736,11 @@ func TestCredentialsEnteredInSettingsMakeAProviderUsable(t *testing.T) {
 	}
 
 	// And the authorize URL is now built with the id that was pasted.
-	raw, err := h.svc.StartConnect(ProviderDropbox, "http://countroster.test")
+	start, err := h.svc.StartConnect(ProviderDropbox, "http://countroster.test", false)
 	if err != nil {
 		t.Fatalf("StartConnect after setup: %v", err)
 	}
-	u, _ := url.Parse(raw)
+	u, _ := url.Parse(start.AuthorizeURL)
 	if got := u.Query().Get("client_id"); got != "pasted-app-key" {
 		t.Errorf("client_id = %q, want the pasted one", got)
 	}
@@ -872,5 +867,126 @@ func TestCredentialsAreNotInTheBackupBundle(t *testing.T) {
 	}
 	if bytes.Contains(data, []byte("top-secret-value")) {
 		t.Error("the exported bundle carries the client secret")
+	}
+}
+
+// --- the paste-a-code flow ------------------------------------------------
+
+// The whole point: no redirect URI anywhere in the authorize URL, so nothing
+// has to be pre-registered and the origin needn't be https. PKCE and offline
+// access still have to survive — without them the flow would be either
+// insecure or useless for a schedule.
+func TestPasteModeAuthorizeURLHasNoRedirect(t *testing.T) {
+	h := newHarness(t)
+	start, err := h.svc.StartConnect(ProviderDropbox, "http://192.168.1.7:8787", true)
+	if err != nil {
+		t.Fatalf("StartConnect: %v", err)
+	}
+	if start.Mode != ModePaste {
+		t.Errorf("mode = %q, want %q", start.Mode, ModePaste)
+	}
+	u, _ := url.Parse(start.AuthorizeURL)
+	q := u.Query()
+	if _, present := q["redirect_uri"]; present {
+		t.Errorf("paste mode must send no redirect_uri: %s", start.AuthorizeURL)
+	}
+	// `state` binds a redirect to the request that started it; with no
+	// redirect there is nothing for it to bind.
+	if _, present := q["state"]; present {
+		t.Errorf("paste mode should omit state: %s", start.AuthorizeURL)
+	}
+	if q.Get("code_challenge") == "" || q.Get("code_challenge_method") != "S256" {
+		t.Errorf("paste mode still needs PKCE: %s", start.AuthorizeURL)
+	}
+	if q.Get("token_access_type") != "offline" {
+		t.Errorf("paste mode still needs offline access: %s", start.AuthorizeURL)
+	}
+}
+
+// Dropbox rejects the exchange if a code issued without a redirect URI is
+// redeemed with one. This is the rule the whole flow turns on.
+func TestPasteModeExchangeSendsNoRedirect(t *testing.T) {
+	h := newHarness(t)
+	start, err := h.svc.StartConnect(ProviderDropbox, "http://192.168.1.7:8787", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.svc.CompleteConnect(context.Background(), start.PendingID, "pasted-code"); err != nil {
+		t.Fatalf("CompleteConnect: %v", err)
+	}
+	if len(h.dbx.exchanges) != 1 {
+		t.Fatalf("exchanges = %d, want 1", len(h.dbx.exchanges))
+	}
+	form := h.dbx.exchanges[0]
+	if _, present := form["redirect_uri"]; present {
+		t.Errorf("exchange sent redirect_uri = %q; a code issued without one must be redeemed without one",
+			form.Get("redirect_uri"))
+	}
+	if form.Get("code") != "pasted-code" {
+		t.Errorf("code = %q, want the pasted one", form.Get("code"))
+	}
+	// PKCE still binds the exchange to the authorize request.
+	u, _ := url.Parse(start.AuthorizeURL)
+	if got := codeChallenge(form.Get("code_verifier")); got != u.Query().Get("code_challenge") {
+		t.Error("the exchanged verifier doesn't match the advertised challenge")
+	}
+	if !h.settings(t).Connected() {
+		t.Error("a pasted code should leave the account connected")
+	}
+}
+
+// A provider with no paste flow says so rather than producing an authorize URL
+// that would fail at the far end.
+func TestPasteModeRefusedWhereUnsupported(t *testing.T) {
+	h := newHarness(t)
+	h.svc.Registry = append(h.svc.Registry,
+		NewGoogleDrive(Credentials{ClientID: "g", ClientSecret: "s"}, nil, time.Now))
+	_, err := h.svc.StartConnect(ProviderGoogleDrive, "http://countroster.test", true)
+	if !IsConfigError(err) {
+		t.Fatalf("error = %v, want a ConfigError", err)
+	}
+	if !strings.Contains(err.Error(), "paste-a-code") {
+		t.Errorf("error = %v, want it to name the missing capability", err)
+	}
+}
+
+// Which origins can host a registered redirect URI at all. Both providers
+// require https, localhost excepted — so a LAN address over plain http has to
+// use the paste flow, and the UI needs to know that before offering a button.
+func TestRedirectSupportedByOrigin(t *testing.T) {
+	h := newHarness(t)
+	h.svc.PublicURL = ""
+	cases := []struct {
+		origin string
+		want   bool
+	}{
+		{"https://roster.example", true},
+		{"https://pi.tail1234.ts.net", true},
+		{"http://localhost:8787", true},
+		{"http://127.0.0.1:8787", true},
+		{"http://192.168.1.7:8787", false},
+		{"http://countroster.local", false},
+	}
+	for _, c := range cases {
+		if got := h.svc.RedirectSupported(c.origin); got != c.want {
+			t.Errorf("RedirectSupported(%q) = %v, want %v", c.origin, got, c.want)
+		}
+	}
+	// A configured public URL is the answer regardless of how the request came in.
+	h.svc.PublicURL = "https://roster.example"
+	if !h.svc.RedirectSupported("http://192.168.1.7:8787") {
+		t.Error("an https public URL should make redirects supported")
+	}
+}
+
+// Paste-mode handles are single-use too — the same state store backs both.
+func TestPasteModePendingIDIsSingleUse(t *testing.T) {
+	h := newHarness(t)
+	start, _ := h.svc.StartConnect(ProviderDropbox, "http://192.168.1.7:8787", true)
+	if _, err := h.svc.CompleteConnect(context.Background(), start.PendingID, "code"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.svc.CompleteConnect(context.Background(), start.PendingID, "code"); !IsConfigError(err) {
+		t.Errorf("error = %v, want a ConfigError on reuse", err)
 	}
 }

@@ -52,6 +52,7 @@ const PROVIDERS: CloudProviderInfo[] = [
     secret_required: 0,
     source: 'settings',
     setup_url: 'https://www.dropbox.com/developers/apps',
+    supports_code_paste: 1,
   },
   {
     id: 'google_drive',
@@ -62,14 +63,24 @@ const PROVIDERS: CloudProviderInfo[] = [
     secret_required: 1,
     source: '',
     setup_url: 'https://console.cloud.google.com/apis/credentials',
+    supports_code_paste: 0,
   },
 ];
 
 const REDIRECT_URI = 'https://roster.example/api/cloud/backup/callback';
 
 /** The GET payload, with the fields every render reads. */
-function state(settings: Settings, providers: CloudProviderInfo[] = PROVIDERS) {
-  return { settings, providers, redirect_uri: REDIRECT_URI };
+function state(
+  settings: Settings,
+  providers: CloudProviderInfo[] = PROVIDERS,
+  redirectSupported: 0 | 1 = 1,
+) {
+  return {
+    settings,
+    providers,
+    redirect_uri: REDIRECT_URI,
+    redirect_supported: redirectSupported,
+  };
 }
 
 /** One recorded request, so a test can assert on what was actually sent. */
@@ -423,5 +434,149 @@ describe('CloudBackupSettings', () => {
     });
     render(<CloudBackupSettings />);
     expect(await screen.findByText('Set up on the server')).toBeInTheDocument();
+  });
+  // The paste flow exists for the case a self-hosted server hits most often:
+  // plain http on a LAN address, which no provider will redirect back to.
+  // There, pasting is the only route, so it gets the primary button.
+  it('leads with the paste flow when a redirect cannot reach this origin', async () => {
+    const calls = stubFetch({
+      'GET /api/cloud/backup': state(DISCONNECTED, PROVIDERS, 0),
+      'POST /api/cloud/backup/connect': {
+        authorize_url: 'https://www.dropbox.com/oauth2/authorize?no_redirect=1',
+        mode: 'paste',
+        pending_id: 'pending-1',
+      },
+    });
+    render(<CloudBackupSettings />);
+
+    // The reason is stated, not left for the user to deduce from a failure.
+    expect(
+      await screen.findByText(/isn’t on https, so Dropbox can’t redirect back/),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await waitFor(() =>
+      expect(calls.at(-1)).toMatchObject({
+        method: 'POST',
+        body: { provider: 'dropbox', mode: 'paste' },
+      }),
+    );
+    // A link, not a navigation: this page holds the pending authorization, so
+    // losing it would lose the handle.
+    const open = await screen.findByRole('link', { name: /Open Dropbox/ });
+    expect(open).toHaveAttribute('target', '_blank');
+    expect(open).toHaveAttribute(
+      'href',
+      'https://www.dropbox.com/oauth2/authorize?no_redirect=1',
+    );
+  });
+
+  it('connects with a pasted code', async () => {
+    const calls = stubFetch({
+      'GET /api/cloud/backup': state(DISCONNECTED, PROVIDERS, 0),
+      'POST /api/cloud/backup/connect': {
+        authorize_url: 'https://www.dropbox.com/oauth2/authorize?no_redirect=1',
+        mode: 'paste',
+        pending_id: 'pending-1',
+      },
+      'POST /api/cloud/backup/complete': state(CONNECTED, PROVIDERS, 0),
+    });
+    render(<CloudBackupSettings />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+
+    const field = await screen.findByLabelText('Authorization code');
+    const submit = screen.getByRole('button', { name: 'Connect with this code' });
+    // Nothing to submit until there's a code.
+    expect(submit).toBeDisabled();
+
+    await userEvent.type(field, 'dropbox-shown-code');
+    await userEvent.click(submit);
+
+    await waitFor(() =>
+      expect(calls.at(-1)).toMatchObject({
+        method: 'POST',
+        body: { pending_id: 'pending-1', code: 'dropbox-shown-code' },
+      }),
+    );
+    expect(await screen.findByText('hedy@example.com')).toBeInTheDocument();
+  });
+
+  // On an https origin the redirect flow is the smoother one, but a registered
+  // redirect URI can still be wrong — so pasting stays reachable.
+  it('offers pasting as an alternative on an https origin', async () => {
+    stubFetch({ 'GET /api/cloud/backup': state(DISCONNECTED) });
+    render(<CloudBackupSettings />);
+    expect(await screen.findByRole('button', { name: 'Connect' })).toBeEnabled();
+    expect(
+      screen.getByRole('button', { name: 'Paste a code instead' }),
+    ).toBeEnabled();
+  });
+
+  // Google withdrew its out-of-band flow, so it must not be offered there.
+  // Plain http plus a provider with no paste flow is a genuine dead end. Say
+  // so where the button is, rather than letting the user bounce off Google's
+  // error page to find out.
+  it('explains why a redirect-only provider cannot be connected over http', async () => {
+    const googleReady: CloudProviderInfo = {
+      ...PROVIDERS[1]!,
+      configured: 1,
+      client_id: 'g-id',
+      has_secret: 1,
+      source: 'settings',
+    };
+    stubFetch({
+      'GET /api/cloud/backup': state(DISCONNECTED, [googleReady], 0),
+    });
+    render(<CloudBackupSettings />);
+
+    expect(
+      await screen.findByText(/needs an https redirect URI and has no/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect' })).toBeDisabled();
+  });
+
+  it('does not offer pasting for a provider without that flow', async () => {
+    const googleReady: CloudProviderInfo = {
+      ...PROVIDERS[1]!,
+      configured: 1,
+      client_id: 'g-id',
+      has_secret: 1,
+      source: 'settings',
+    };
+    stubFetch({
+      'GET /api/cloud/backup': state(DISCONNECTED, [googleReady], 0),
+    });
+    render(<CloudBackupSettings />);
+    await screen.findByText('Google Drive');
+    expect(
+      screen.queryByRole('button', { name: 'Paste a code instead' }),
+    ).not.toBeInTheDocument();
+    // And no "can't redirect" note either — pasting isn't the answer here.
+    expect(screen.queryByText(/paste a code instead — nothing/)).not.toBeInTheDocument();
+  });
+
+  it('surfaces a rejected code', async () => {
+    stubFetch({
+      'GET /api/cloud/backup': state(DISCONNECTED, PROVIDERS, 0),
+      'POST /api/cloud/backup/connect': {
+        authorize_url: 'https://www.dropbox.com/oauth2/authorize?no_redirect=1',
+        mode: 'paste',
+        pending_id: 'pending-1',
+      },
+      'POST /api/cloud/backup/complete': {
+        status: 502,
+        payload: { error: 'Dropbox: invalid_grant' },
+      },
+    });
+    render(<CloudBackupSettings />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+    await userEvent.type(
+      await screen.findByLabelText('Authorization code'),
+      'stale-code',
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Connect with this code' }),
+    );
+    expect(await screen.findByText('Dropbox: invalid_grant')).toBeInTheDocument();
   });
 });
