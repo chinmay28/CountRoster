@@ -165,6 +165,65 @@ export function windowStats(
   });
 }
 
+/** What the same stretch of the previous reset period had added up to. */
+export interface PriorPeriodStat {
+  /** How the previous period reads relative to now, e.g. "yesterday". */
+  label: string;
+  /** The total logged in it up to the same point it is now. */
+  value: number;
+}
+
+/** The name the previous bucket of a period goes by, relative to the current. */
+const PRIOR_PERIOD_LABEL: Record<BucketPeriod, string> = {
+  day: 'yesterday',
+  week: 'last week',
+  month: 'last month',
+  year: 'last year',
+};
+
+/**
+ * The pace comparison for a tracker's running total: what the *previous* reset
+ * period had accumulated by the same point that `now` sits at in the current
+ * one. A day-resetting tracker at 5 PM answers "how much by 5 PM yesterday",
+ * a weekly one "by this hour of last week", and so on.
+ *
+ * It's the number that makes a partial period mean something: 205 ml at
+ * lunchtime is only high or low against where the same clock stood yesterday.
+ *
+ * Returns `null` when there is nothing to compare — a tracker that never
+ * resets has no previous period, and one whose first entry landed inside the
+ * current period would only ever compare against a zero it has never left.
+ * Elapsed distance is measured in real time and clamped to the previous
+ * period's own end, since months and years differ in length.
+ */
+export function priorPeriodToDate(
+  entries: readonly ValuedEntry[],
+  resetPeriod: ResetPeriod,
+  window: PeriodWindow = {},
+  now: Date = new Date(),
+): PriorPeriodStat | null {
+  if (resetPeriod === 'never') return null;
+  const period = RESET_TO_BUCKET[resetPeriod];
+  const start = bucketStart(now, period, window);
+  if (!entries.some((e) => new Date(e.occurred_at).getTime() < start.getTime())) {
+    return null;
+  }
+  // Step into the previous bucket, then normalize to its start.
+  const priorStart = bucketStart(new Date(start.getTime() - 1), period, window);
+  const priorEnd = bucketEnd(priorStart, period, window);
+  const cutoff = Math.min(
+    priorStart.getTime() + (now.getTime() - start.getTime()),
+    priorEnd.getTime(),
+  );
+  return {
+    label: PRIOR_PERIOD_LABEL[period],
+    value: sumInRange(entries, {
+      start: toLocalISO(priorStart),
+      end: toLocalISO(new Date(cutoff)),
+    }),
+  };
+}
+
 /**
  * The current value of a snapshot tracker: its most recent reading. Entries
  * arrive from the core ordered by occurred_at ascending, so that's the last

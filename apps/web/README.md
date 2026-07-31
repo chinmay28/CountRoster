@@ -118,9 +118,14 @@ Visualizations & organization:
   get an on-screen keypad, and snapshot stats get a stepper that starts from the
   last reading.
   Nothing asks for confirmation — a five-second undo bar takes the entry (and any
-  note logged with it) back. A "Now" chip opens a picker for backdating the feed
-  you're logging an hour late; a chosen time sticks until it's cleared, and the
-  undo bar names it so a backdate can't apply silently to the next entry. Adding one to the Home Screen gives an icon named
+  note logged with it) back. A "Now" chip *becomes* a picker for backdating the
+  feed you're logging an hour late — in place, since a row opening above the
+  keypad would push the log button out from under the thumb reaching for it; a
+  chosen time sticks until ✕ hands the field back to now, and the
+  undo bar names it so a backdate can't apply silently to the next entry.
+  Under the progress bar sits what the previous period had reached by this same
+  hour ("180 ml by now yesterday"), because a part-finished day is only high or
+  low against the one before it. Adding one to the Home Screen gives an icon named
   after the tracker that launches straight onto its log button: the page swaps in
   a per-tracker web app manifest (`GET /trackers/:id/app.webmanifest`, generated
   by the server from the tracker's name and color) whose `start_url` is the quick

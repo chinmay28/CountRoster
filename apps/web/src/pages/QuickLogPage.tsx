@@ -12,6 +12,7 @@ import { readableInk } from '../lib/color.ts';
 import { emptyAnswers, hasAnyAnswer, type FieldAnswers } from '../lib/fields.ts';
 import {
   latestValue,
+  priorPeriodToDate,
   resetPeriodRange,
   sumInRange,
   sumValues,
@@ -230,6 +231,13 @@ export function QuickLogPage() {
         : total;
   const headlineLabel =
     tracker.is_snapshot === 1 ? 'current' : RESET_PERIOD_LABEL[tracker.reset_period];
+  // Where the same clock stood in the period before this one. A part-finished
+  // period doesn't say much on its own — 205 ml is only high or low against
+  // what the day (or week, or month) before it had reached by this hour.
+  const pace =
+    tracker.is_snapshot === 1
+      ? null
+      : priorPeriodToDate(entries, tracker.reset_period, tracker);
 
   const panelProps = { tracker, entries, busy, onLog: log };
 
@@ -270,6 +278,15 @@ export function QuickLogPage() {
               style={{ width: `${Math.max(0, Math.min(100, (headline / tracker.target) * 100))}%` }}
             />
           </div>
+        )}
+        {/* Under the bar rather than on the label line above it: "today" and
+            "target" name the number, this compares it, and three clauses in a
+            row read as one long sentence on a phone. It also lands where the
+            eye already is when it's judging pace. */}
+        {pace && (
+          <span className="quick__pace">
+            {formatValue(tracker, pace.value)} by now {pace.label}
+          </span>
         )}
       </div>
 
