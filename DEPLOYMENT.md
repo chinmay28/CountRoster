@@ -182,11 +182,36 @@
 > curl -fsSL https://raw.githubusercontent.com/chinmay28/countroster/main/scripts/quickstart.sh | sudo bash
 > ```
 >
+> Or install the **prebuilt binary from the latest release** instead of building
+> from source — no Node, no Go, no clone, seconds instead of minutes on a Pi:
+>
+> ```bash
+> curl -fsSL …/scripts/quickstart.sh | sudo COUNTROSTER_INSTALL=release bash
+> ```
+>
+> | | `COUNTROSTER_INSTALL=source` (default) | `COUNTROSTER_INSTALL=release` |
+> |---|---|---|
+> | Where the binary comes from | cloned to `/opt/countroster/src` and compiled there | downloaded to `/opt/countroster/bin/countroster` from a GitHub release |
+> | Build-time prerequisites | Node 22 + Go (installed automatically) | none — `curl` and `sha256sum` |
+> | Architectures | any Go can target | only what the release publishes (**`linux/arm64`** today) |
+> | Which version | `COUNTROSTER_REF` (branch/tag/commit, default `main`) | `COUNTROSTER_RELEASE` (`latest` or a tag such as `v1.1.98`) |
+> | Integrity check | the source you cloned | the release's `.sha256`, verified before the swap; a mismatch aborts |
+> | Rollback if unhealthy | previous commit, rebuilt | previous binary, kept as `countroster.prev` |
+>
+> Both produce the same artifact — one static binary with the PWA embedded, run
+> by the same hardened unit against the same data directory — so re-running with
+> the other `COUNTROSTER_INSTALL` switches between them. The release assets are
+> built and published by
+> [`.github/workflows/release.yml`](./.github/workflows/release.yml) when a `v*`
+> tag (or a `release/v*` branch) is pushed; the release body comes from
+> [`CHANGELOG.md`](./CHANGELOG.md).
+>
 > What it does (idempotent — re-run to upgrade):
 >
 > - Installs Node 22 (via NodeSource) and Go (from go.dev) if suitable ones
 >   aren't already present, plus `git`/`curl`. Both are **build-time only** —
->   the running service is a single static binary.
+>   the running service is a single static binary. (Release mode skips all of
+>   this: there is nothing to build.)
 > - Creates a dedicated unprivileged `countroster` system user (no login shell).
 >   - Clones to `/opt/countroster/src`, builds core → web → static Go binary
 >   (with the PWA embedded), and installs the unit at
@@ -204,16 +229,21 @@
 > | Data lives apart from code | DB at `/var/lib/countroster/countroster.sqlite`; the source tree at `/opt/countroster/src` can be rebuilt/replaced freely. |
 > | Consistent backup | On upgrade it **stops the service first**, then snapshots the DB (`+ -wal/-shm`) to `…/backups/countroster-<timestamp>.sqlite` (keeps the newest `BACKUP_KEEP`, default 10). |
 > | No downtime on a bad build | The new version is compiled while the old one keeps serving; a build failure never touches the running service. |
-> | Self-healing bad release | After restart it polls `/api/health`; if unhealthy it **rolls back** to the previous commit, **restores the pre-upgrade snapshot**, and restarts — even across the Node→Go implementation boundary. |
+> | Self-healing bad release | After restart it polls `/api/health`; if unhealthy it **rolls back** — to the previous commit (source) or the previous binary (release) — **restores the pre-upgrade snapshot**, and restarts — even across the Node→Go implementation boundary. |
 > | Schema changes | Applied by the server's append-only, idempotent migration runner on startup (additive; older data stays readable — see §8). The Go server opens the **same SQLite file** the TypeScript server wrote; no data migration is involved. |
 >
-> Override defaults with env vars: `PORT`, `HOST`, `COUNTROSTER_REF`,
+> Override defaults with env vars: `PORT`, `HOST`, `COUNTROSTER_INSTALL`
+> (`source`/`release`), `COUNTROSTER_REF`, `COUNTROSTER_RELEASE`,
 > `COUNTROSTER_REPO`, `COUNTROSTER_DATA_DIR`, `COUNTROSTER_PREFIX`,
 > `COUNTROSTER_USER`, `INSTALL_NODE` (`auto`/`never`), `INSTALL_GO`
 > (`auto`/`never`), `BACKUP_KEEP`. E.g. pin a tag on port 9090:
 >
 > ```bash
 > curl -fsSL …/scripts/quickstart.sh | sudo PORT=9090 COUNTROSTER_REF=v0.2.0 bash
+>
+> # or the prebuilt binary from a specific release:
+> curl -fsSL …/scripts/quickstart.sh \
+>   | sudo PORT=9090 COUNTROSTER_INSTALL=release COUNTROSTER_RELEASE=v1.1.98 bash
 > ```
 >
 > Manage it with the usual systemd verbs:
