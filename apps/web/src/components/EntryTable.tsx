@@ -189,6 +189,11 @@ export function EntryTable({
  * now), back at the window holding the first entry (everything before it is
  * empty by definition, so paging into it would only ever show the same
  * nothing).
+ *
+ * The latest window is on the *left*, the way the table above reads: newest
+ * row first, older ones below. So ‹ moves toward today and › into the past —
+ * the arrows point the same way the data runs, rather than borrowing a
+ * calendar's left-is-earlier convention that would contradict it.
  */
 function WindowNav({ nav, period }: { nav: EntryTableNav; period: BucketPeriod }) {
   const noun = PERIOD_NOUN[period];
@@ -197,10 +202,10 @@ function WindowNav({ nav, period }: { nav: EntryTableNav; period: BucketPeriod }
       <button
         type="button"
         className="btn btn--small periods__nav-step"
-        onClick={nav.onPrevious}
-        disabled={!nav.canGoPrevious}
-        aria-label={`Previous ${noun}`}
-        title={`Previous ${noun}`}
+        onClick={nav.onNext}
+        disabled={!nav.canGoNext}
+        aria-label={`Next ${noun}`}
+        title={`Next ${noun}`}
       >
         <span aria-hidden="true">‹</span>
       </button>
@@ -208,10 +213,10 @@ function WindowNav({ nav, period }: { nav: EntryTableNav; period: BucketPeriod }
       <button
         type="button"
         className="btn btn--small periods__nav-step"
-        onClick={nav.onNext}
-        disabled={!nav.canGoNext}
-        aria-label={`Next ${noun}`}
-        title={`Next ${noun}`}
+        onClick={nav.onPrevious}
+        disabled={!nav.canGoPrevious}
+        aria-label={`Previous ${noun}`}
+        title={`Previous ${noun}`}
       >
         <span aria-hidden="true">›</span>
       </button>
