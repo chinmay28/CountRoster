@@ -12,6 +12,7 @@ import { readableInk } from '../lib/color.ts';
 import { emptyAnswers, hasAnyAnswer, type FieldAnswers } from '../lib/fields.ts';
 import {
   latestValue,
+  priorPeriodToDate,
   resetPeriodRange,
   sumInRange,
   sumValues,
@@ -230,6 +231,13 @@ export function QuickLogPage() {
         : total;
   const headlineLabel =
     tracker.is_snapshot === 1 ? 'current' : RESET_PERIOD_LABEL[tracker.reset_period];
+  // Where the same clock stood in the period before this one. A part-finished
+  // period doesn't say much on its own — 205 ml is only high or low against
+  // what the day (or week, or month) before it had reached by this hour.
+  const pace =
+    tracker.is_snapshot === 1
+      ? null
+      : priorPeriodToDate(entries, tracker.reset_period, tracker);
 
   const panelProps = { tracker, entries, busy, onLog: log };
 
@@ -263,6 +271,7 @@ export function QuickLogPage() {
             ? `${entries.length} reading${entries.length === 1 ? '' : 's'}`
             : headlineLabel}
           {tracker.target != null ? ` · target ${formatValue(tracker, tracker.target)}` : ''}
+          {pace ? ` · ${formatValue(tracker, pace.value)} by now ${pace.label}` : ''}
         </span>
         {tracker.target != null && tracker.is_snapshot === 0 && (
           <div className="quick__track">

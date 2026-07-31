@@ -5,6 +5,7 @@ import {
   sumInRange,
   resetPeriodRange,
   resetPeriodOptions,
+  priorPeriodToDate,
   windowStats,
   periodRowLabel,
   lastNBuckets,
@@ -120,6 +121,78 @@ describe('sumInRange', () => {
       end: '2026-05-21T00:00:00-07:00',
     });
     expect(sum).toBe(6);
+  });
+});
+
+describe('priorPeriodToDate', () => {
+  const now = new Date('2026-05-20T14:00:00'); // a Wednesday, 2 PM
+
+  function entry(value: number, occurred_at: string) {
+    return { value, occurred_at };
+  }
+
+  const days = [
+    entry(3, '2026-05-19T09:00:00'), // yesterday, before 2 PM
+    entry(5, '2026-05-19T18:00:00'), // yesterday, after 2 PM
+    entry(7, '2026-05-20T10:00:00'), // today
+  ];
+
+  it('counts only what the previous day had reached by this hour', () => {
+    expect(priorPeriodToDate(days, 'daily', MONDAY, now)).toEqual({
+      label: 'yesterday',
+      value: 3,
+    });
+  });
+
+  it('measures the same distance into the previous week', () => {
+    // This week started Monday May 18, so 2 PM Wednesday is 2 days 14 hours
+    // in — last week's window is Mon May 11 through 2 PM Wed May 13.
+    const stat = priorPeriodToDate(
+      [
+        entry(3, '2026-05-13T09:00:00'), // inside
+        entry(5, '2026-05-13T16:00:00'), // past the same point
+        entry(9, '2026-05-11T08:00:00'), // inside
+      ],
+      'weekly',
+      MONDAY,
+      now,
+    );
+    expect(stat).toEqual({ label: 'last week', value: 12 });
+  });
+
+  it('names the previous month and year', () => {
+    const older = [...days, entry(1, '2026-04-02T09:00:00'), entry(1, '2025-04-02T09:00:00')];
+    expect(priorPeriodToDate(older, 'monthly', MONDAY, now)?.label).toBe('last month');
+    expect(priorPeriodToDate(older, 'yearly', MONDAY, now)?.label).toBe('last year');
+  });
+
+  it('clamps to the previous period when it is the shorter one', () => {
+    // March 31 is 30 days into March; February has no such day, so the window
+    // stops at the end of February rather than spilling into March.
+    const stat = priorPeriodToDate(
+      [entry(4, '2026-02-27T09:00:00'), entry(6, '2026-03-02T09:00:00')],
+      'monthly',
+      MONDAY,
+      new Date('2026-03-31T23:00:00'),
+    );
+    expect(stat).toEqual({ label: 'last month', value: 4 });
+  });
+
+  it('has nothing to compare for a tracker that never resets', () => {
+    expect(priorPeriodToDate(days, 'never', MONDAY, now)).toBeNull();
+  });
+
+  it('has nothing to compare before the first period is behind you', () => {
+    expect(priorPeriodToDate([], 'daily', MONDAY, now)).toBeNull();
+    // Everything logged so far is inside the current period: comparing it
+    // against a zero the tracker has never left says nothing.
+    expect(priorPeriodToDate([entry(7, '2026-05-20T10:00:00')], 'daily', MONDAY, now)).toBeNull();
+  });
+
+  it('still reports a zero once an earlier period exists', () => {
+    expect(
+      priorPeriodToDate([entry(7, '2026-05-18T10:00:00')], 'daily', MONDAY, now),
+    ).toEqual({ label: 'yesterday', value: 0 });
   });
 });
 

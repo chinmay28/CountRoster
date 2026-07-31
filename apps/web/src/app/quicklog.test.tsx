@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
@@ -6,6 +6,7 @@ import { CoreValueProvider } from './CoreContext.tsx';
 import { AppLayout } from './AppLayout.tsx';
 import { TrackerDetailPage } from '../pages/TrackerDetailPage.tsx';
 import { QuickLogPage } from '../pages/QuickLogPage.tsx';
+import { datetimeInputLabel, fromDatetimeLocalValue } from '../lib/format.ts';
 import { makeTestCore, type TestCore } from '../test/makeTestCore.ts';
 
 /**
@@ -64,6 +65,71 @@ describe('quick log — one tap (count)', () => {
     expect(await screen.findByText('Water')).toBeInTheDocument();
     expect(await screen.findByText('3')).toBeInTheDocument();
     expect(screen.getByText(/today/)).toBeInTheDocument();
+  });
+
+  /**
+   * The pace comparison is read against the host wall clock, so these pin it.
+   * Only `Date` is faked — the timers the page and userEvent rely on stay
+   * real.
+   */
+  async function atFixedTime(local: string, body: (test: TestCore) => Promise<void>) {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(local));
+    try {
+      await body(await makeTestCore());
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  it('sets the running total against the same point of the period before', async () => {
+    await atFixedTime('2026-07-30T17:52:00', async (fixed) => {
+      const t = await fixed.createTracker({
+        name: 'Feeds',
+        kind: 'number',
+        unit: 'ml',
+        reset_period: 'daily',
+        target: 434,
+      });
+      const log = (value: number, when: string) =>
+        fixed.core.entries.log(t.id, {
+          value,
+          occurred_at: fromDatetimeLocalValue(when),
+        });
+      // Yesterday had two feeds, one on either side of this hour: only the
+      // earlier counts, because that's all yesterday had reached by now.
+      await log(120, '2026-07-29T09:00');
+      await log(500, '2026-07-29T20:00');
+      await log(205, '2026-07-30T08:00');
+
+      renderQuick(fixed, `/trackers/${t.id}/quick`);
+
+      expect(await screen.findByText('205 ml')).toBeInTheDocument();
+      expect(
+        screen.getByText(/today · target 434 ml · 120 ml by now yesterday/),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('leaves the comparison off until there is a period to compare with', async () => {
+    await atFixedTime('2026-07-30T17:52:00', async (fixed) => {
+      const t = await fixed.createTracker({
+        name: 'Feeds',
+        kind: 'number',
+        unit: 'ml',
+        reset_period: 'daily',
+      });
+      await fixed.core.entries.log(t.id, {
+        value: 205,
+        occurred_at: fromDatetimeLocalValue('2026-07-30T08:00'),
+      });
+      renderQuick(fixed, `/trackers/${t.id}/quick`);
+
+      await screen.findByText('Feeds');
+      // A tracker whose first entry is today has never left zero; "0 ml by
+      // now yesterday" would be noise dressed as a stat.
+      expect(screen.queryByText(/by now yesterday/)).not.toBeInTheDocument();
+    });
   });
 
   it('puts Details on the left and Home on the right', async () => {
@@ -298,14 +364,19 @@ describe('quick log — backdating', () => {
 
   it('names the time in the undo bar, so a backdate can’t apply silently', async () => {
     const user = userEvent.setup();
+    const when = hoursAgo(2);
     const t = await test.createTracker({ name: 'Feeds', kind: 'number' });
     renderQuick(test, `/trackers/${t.id}/quick`);
 
-    await pickWhen(user, hoursAgo(2));
+    await pickWhen(user, when);
     await user.click(screen.getByRole('button', { name: '5' }));
     await user.click(screen.getByRole('button', { name: 'Log entry' }));
 
-    expect(await screen.findByText(/Logged 5 · Today,/)).toBeInTheDocument();
+    // Named the same way the field would name it — two hours ago is only
+    // "Today" for a suite that doesn't run in the small hours.
+    expect(
+      await screen.findByText(`Logged 5 · ${datetimeInputLabel(when)}`),
+    ).toBeInTheDocument();
   });
 
   it('backdates a one-tap count without opening the drawer', async () => {
@@ -362,7 +433,7 @@ describe('quick log — backdating', () => {
 
     // The refresh after a log must not remount the panel — that would drop
     // the chosen time (and a half-typed note) on the floor.
-    expect(screen.getByRole('button', { name: /^Logging at Today,/ })).toBeInTheDocument();
+    expect(screen.getByLabelText('When')).toHaveValue(when);
 
     await user.click(screen.getByRole('button', { name: '3' }));
     await user.click(screen.getByRole('button', { name: '0' }));
@@ -376,17 +447,35 @@ describe('quick log — backdating', () => {
     });
   });
 
+  it('opens the picker in place of the chip, without growing a second row', async () => {
+    const user = userEvent.setup();
+    const t = await test.createTracker({ name: 'Feeds', kind: 'number' });
+    renderQuick(test, `/trackers/${t.id}/quick`);
+
+    await user.click(await screen.findByRole('button', { name: 'Logging now' }));
+
+    // The chip is gone rather than sitting above the picker: a row appearing
+    // here would push the log button down, out from under the thumb.
+    expect(screen.queryByRole('button', { name: 'Logging now' })).not.toBeInTheDocument();
+    const row = screen.getByLabelText('When').parentElement!;
+    expect(row.children).toHaveLength(2); // the picker and its ✕
+    expect(row.querySelector('.quick__when-input')).toBe(screen.getByLabelText('When'));
+  });
+
   it('goes back to now on request', async () => {
     const user = userEvent.setup();
+    const when = hoursAgo(2);
     const t = await test.createTracker({ name: 'Water', kind: 'count' });
     renderQuick(test, `/trackers/${t.id}/quick`);
 
-    await pickWhen(user, hoursAgo(2));
-    // The chip now shows the chosen time rather than "Now".
-    expect(screen.getByRole('button', { name: /^Logging at Today,/ })).toBeInTheDocument();
+    await pickWhen(user, when);
+    // The picker holds the chosen time, and shows it's no longer "now".
+    expect(screen.getByLabelText('When')).toHaveValue(when);
+    expect(screen.getByLabelText('When')).toHaveClass('quick__when-input--accent');
 
     await user.click(screen.getByRole('button', { name: 'Back to now' }));
     expect(screen.getByRole('button', { name: 'Logging now' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('When')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Log 1' }));
     await waitFor(async () => {

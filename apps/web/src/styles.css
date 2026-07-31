@@ -2131,7 +2131,9 @@ input.txn__name:focus {
   filter: brightness(0.94);
 }
 
-/* "When": a chip that reads "Now" until it's tapped, then the picker. */
+/* "When": a chip that reads "Now" until it's tapped, and *becomes* the picker
+   when it is — one line either way, so opening it can't push the control that
+   follows down the screen. */
 .quick__when {
   display: flex;
   flex-direction: column;
@@ -2141,21 +2143,48 @@ input.txn__name:focus {
 .quick__when-row {
   display: flex;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
+  /* No wrapping: the picker and its ✕ share the chip's single row. */
+  max-width: 100%;
 }
 .quick__when-input {
   font: inherit;
   /* 16px keeps iOS Safari from zooming the page when the picker opens. */
   font-size: 16px;
-  padding: 0.5rem 0.7rem;
+  /* Matches the chip it replaces, so the swap doesn't shift the row. */
+  min-height: 2.5rem;
+  padding: 0.35rem 0.7rem;
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
+  min-width: 0;
+}
+.quick__when-input--accent {
+  border-color: var(--quick-accent);
+  color: var(--quick-accent);
+  background: color-mix(in srgb, var(--quick-accent) 12%, transparent);
 }
 .quick--painted .quick__when-input {
   border-color: transparent;
+}
+.quick--painted .quick__when-input--accent {
+  background: color-mix(in srgb, var(--quick-ink) 14%, transparent);
+  color: inherit;
+}
+/* Square chip for a single glyph, so the row stays inside a phone's width. */
+.quick__chip--icon {
+  padding: 0.5rem;
+  min-width: 2.5rem;
+  line-height: 1;
+  flex: none;
+}
+/* The tap screen sets the when field beside "Custom value"; give it its own
+   line so opening the picker — wider than the chip it replaces — can't rewrap
+   that row and nudge the tap button. */
+.quick__control--tap .quick__when {
+  flex-basis: 100%;
 }
 
 .quick__drawer {
