@@ -115,10 +115,65 @@ export function currentPeriodRange(
   window: PeriodWindow = {},
   now: Date = new Date(),
 ): Required<TimeRange> {
+  return offsetPeriodRange(period, window, 0, now);
+}
+
+/**
+ * The [start, end) range covering a bucket `offset` steps *before* the current
+ * one — `0` is the window in progress, `1` the one before it, and so on. Used
+ * by the current-window entry table to step back a day / week / month / year
+ * at a time without leaving the tab.
+ *
+ * Each step lands one millisecond before the bucket it is leaving and then
+ * re-normalizes, so windows of uneven length (months, years, a day whose
+ * `day_start_minute` shifts across a DST change) stay aligned with the same
+ * boundaries the core buckets on.
+ */
+export function offsetPeriodRange(
+  period: BucketPeriod,
+  window: PeriodWindow = {},
+  offset = 0,
+  now: Date = new Date(),
+): Required<TimeRange> {
+  let start = bucketStart(now, period, window);
+  for (let i = 0; i < offset; i++) {
+    start = bucketStart(new Date(start.getTime() - 1), period, window);
+  }
   return {
-    start: toLocalISO(bucketStart(now, period, window)),
-    end: toLocalISO(bucketEnd(now, period, window)),
+    start: toLocalISO(start),
+    end: toLocalISO(bucketEnd(start, period, window)),
   };
+}
+
+/** The noun for one bucket of a period — "day", "week"… — for button labels. */
+export const PERIOD_NOUN: Record<BucketPeriod, string> = {
+  day: 'day',
+  week: 'week',
+  month: 'month',
+  year: 'year',
+};
+
+/**
+ * How a window reads inside a sentence: "today", "yesterday", "on May 18",
+ * "this month", "in Apr 2026". The two most recent buckets keep their relative
+ * names (that's how anyone would say them); older ones get a preposition, so
+ * "205 ml of the 434 ml target" can be followed by either kind.
+ */
+export function windowProseLabel(
+  start: string,
+  period: BucketPeriod,
+  window: PeriodWindow = {},
+  now: Date = new Date(),
+): string {
+  const label = periodRowLabel(start, period, window, now);
+  const [current, previous] = RELATIVE_LABELS[period];
+  if (label === current || label === previous) return label.toLowerCase();
+  if (label === '') return '';
+  if (period === 'day') return `on ${label}`;
+  // "Week of May 11" → "in the week of May 11": only the leading word is a
+  // common noun, so lowercasing the whole label would eat the month's capital.
+  if (period === 'week') return `in the ${label[0]!.toLowerCase()}${label.slice(1)}`;
+  return `in ${label}`;
 }
 
 /** One windowed total in the summary breakdown. */

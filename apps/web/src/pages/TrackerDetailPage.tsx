@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCore } from '../app/CoreContext.tsx';
 import { useHiddenMode } from '../app/HiddenMode.tsx';
@@ -24,8 +24,10 @@ import {
   sumInRange,
   filterInRange,
   resetPeriodRange,
-  currentPeriodRange,
+  offsetPeriodRange,
   currentPeriodLabel,
+  periodRowLabel,
+  windowProseLabel,
   periodForReset,
   windowStats,
   snapshotStats,
@@ -104,6 +106,12 @@ export function TrackerDetailPage() {
   const [entryTab, setEntryTab] = useState<'current' | 'periods' | 'entries' | null>(
     null,
   );
+  // How many reset windows back the current-window tab is looking: 0 is the
+  // window in progress, 1 the one before it. Reset when the page changes
+  // trackers — "three days ago" is about the tracker you were reading, not
+  // the next one.
+  const [windowsBack, setWindowsBack] = useState(0);
+  useEffect(() => setWindowsBack(0), [id]);
   // Whether the section-order editor is open.
   const [arranging, setArranging] = useState(false);
   // Surfaces failures from header actions like archive (e.g. a tracker still in
@@ -180,9 +188,25 @@ export function TrackerDetailPage() {
   // resets has no window of its own; months are the readable default.
   const activeEntryTab = entryTab ?? 'current';
   const currentPeriod = periodForReset(tracker.reset_period);
-  const currentRange = currentPeriodRange(currentPeriod, tracker);
   const currentLabel = currentPeriodLabel(currentPeriod);
-  const currentEntries = filterInRange(entries, currentRange);
+  // …and from there it steps back a window at a time, so yesterday's day or
+  // last month's month is one tap away rather than a trip through By period.
+  const windowRange = offsetPeriodRange(currentPeriod, tracker, windowsBack);
+  const windowLabel = periodRowLabel(windowRange.start, currentPeriod, tracker);
+  const windowEntries = filterInRange(entries, windowRange);
+  // Forward stops at the window in progress — there is nothing after now.
+  // Back stops at the window holding the first entry: entries arrive
+  // oldest-first, so anything earlier than that one is an empty window.
+  const earliest = entries[0]?.occurred_at;
+  const windowNav = {
+    label: windowLabel,
+    onPrevious: () => setWindowsBack((n) => n + 1),
+    onNext: () => setWindowsBack((n) => Math.max(0, n - 1)),
+    canGoPrevious:
+      earliest !== undefined &&
+      new Date(earliest).getTime() < new Date(windowRange.start).getTime(),
+    canGoNext: windowsBack > 0,
+  };
 
   // Which sections this particular tracker has: a derivation only exists for
   // a derived tracker, and only a directly-logged one can be logged to.
@@ -436,9 +460,21 @@ export function TrackerDetailPage() {
             className={`logtabs__tab${
               activeEntryTab === 'current' ? ' logtabs__tab--active' : ''
             }`}
-            onClick={() => setEntryTab('current')}
+            onClick={() => {
+              setEntryTab('current');
+              // Tapping the tab is also the way home from a window you have
+              // paged back into.
+              setWindowsBack(0);
+            }}
+            // The tab names the window on show, not the window in progress:
+            // it labels the panel beneath it, and once you have stepped back
+            // that panel is yesterday's. Off the current window it doubles as
+            // the way home, which is worth saying out loud.
+            {...(windowsBack > 0
+              ? { title: `Back to ${currentLabel.toLowerCase()}` }
+              : {})}
           >
-            {currentLabel}
+            {windowLabel}
           </button>
           <button
             type="button"
@@ -472,12 +508,13 @@ export function TrackerDetailPage() {
           <div role="tabpanel" id="entrypanel-current" aria-labelledby="entrytab-current">
             <EntryTable
               tracker={tracker}
-              entries={currentEntries}
+              entries={windowEntries}
               fields={fields}
               notesByEntry={notesByEntry}
               readOnlyTracker={isDerived}
-              windowLabel={currentLabel.toLowerCase()}
+              windowLabel={windowProseLabel(windowRange.start, currentPeriod, tracker)}
               windowPeriod={currentPeriod}
+              nav={windowNav}
             />
           </div>
         )}

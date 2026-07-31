@@ -70,6 +70,15 @@ function tableRows(): string[][] {
 }
 
 describe('current-period tab', () => {
+  /**
+   * The current-window panel, named after the window on show — the tab that
+   * labels it is renamed as the view steps back, so "Today" becomes
+   * "Yesterday" becomes a date.
+   */
+  function windowPanel(label: string): HTMLElement {
+    return screen.getByRole('tabpanel', { name: label });
+  }
+
   /** The entry table's body rows, as arrays of cell text. */
   function windowRows(label: string): string[][] {
     const table = within(screen.getByRole('tabpanel', { name: label })).getByRole('table');
@@ -231,6 +240,134 @@ describe('current-period tab', () => {
     ).toEqual(['Time', 'Value', 'Notes', 'Change']);
     const cell = within(table).getByText('+Multivitamin').closest('td')!;
     expect(within(cell).getByText('✓ Wet diaper')).toBeInTheDocument();
+  });
+
+  it('steps a window at a time, stopping at now and at the first entry', async () => {
+    const tracker = await seedDaily(test); // 3 today, 4 yesterday, none before
+    const user = userEvent.setup();
+    renderApp(test, `/trackers/${tracker.id}`);
+
+    await screen.findByRole('tab', { name: 'Today' });
+    // The tab renames itself as the window moves, so the panel it labels is
+    // addressed by the window on show.
+    const next = (label: string) =>
+      within(windowPanel(label)).getByRole('button', { name: 'Next day' });
+    const previous = (label: string) =>
+      within(windowPanel(label)).getByRole('button', { name: 'Previous day' });
+
+    // Today is the window in progress: there is no day after it to show.
+    expect(next('Today')).toBeDisabled();
+    expect(previous('Today')).toBeEnabled();
+    expect(windowRows('Today').at(-1)!.slice(0, 2)).toEqual(['2 entries', '3 glasses']);
+
+    await user.click(previous('Today'));
+    // Yesterday's own entry, and yesterday's own total.
+    expect(windowRows('Yesterday').at(-1)!.slice(0, 2)).toEqual(['1 entry', '4 glasses']);
+    expect(windowPanel('Yesterday')).toHaveTextContent('Everything logged yesterday.');
+    expect(next('Yesterday')).toBeEnabled();
+    // Nothing was logged before yesterday, so back is the end of the road.
+    expect(previous('Yesterday')).toBeDisabled();
+
+    await user.click(next('Yesterday'));
+    expect(windowRows('Today').at(-1)!.slice(0, 2)).toEqual(['2 entries', '3 glasses']);
+    expect(next('Today')).toBeDisabled();
+  });
+
+  it('renames the tab after the window on show', async () => {
+    const tracker = await seedDaily(test);
+    const user = userEvent.setup();
+    renderApp(test, `/trackers/${tracker.id}`);
+
+    const tab = await screen.findByRole('tab', { name: 'Today' });
+    await user.click(
+      within(windowPanel('Today')).getByRole('button', { name: 'Previous day' }),
+    );
+    // Same tab, renamed — the panel under it is yesterday's, so saying
+    // "Today" would label it wrong.
+    expect(tab).toHaveAccessibleName('Yesterday');
+    expect(tab).toHaveAttribute('aria-selected', 'true');
+    expect(windowPanel('Yesterday')).toHaveAccessibleName('Yesterday');
+    // The other two tabs are untouched by where the window sits.
+    for (const other of ['By period', 'All entries']) {
+      expect(screen.getByRole('tab', { name: other })).toBeInTheDocument();
+    }
+
+    // Off the current window, the tab is the way home — and says so.
+    expect(tab).toHaveAttribute('title', 'Back to today');
+    await user.click(tab);
+    expect(tab).toHaveAccessibleName('Today');
+    expect(tab).not.toHaveAttribute('title');
+  });
+
+  it('names the window it stepped into, and says a past one is over', async () => {
+    const tracker = await test.createTracker({
+      name: 'Water',
+      kind: 'count',
+      reset_period: 'daily',
+      unit: 'glasses',
+    });
+    // A gap: today and four days ago, nothing between.
+    await test.core.entries.log(tracker.id, { value: 2, occurred_at: daysAgo(0, 9) });
+    await test.core.entries.log(tracker.id, { value: 5, occurred_at: daysAgo(4, 9) });
+    const user = userEvent.setup();
+    renderApp(test, `/trackers/${tracker.id}`);
+
+    await screen.findByRole('tab', { name: 'Today' });
+    const stepBack = (from: string) =>
+      user.click(within(windowPanel(from)).getByRole('button', { name: 'Previous day' }));
+
+    await stepBack('Today');
+    // An empty day that has already ended logged nothing — not "nothing yet".
+    const yesterday = windowPanel('Yesterday');
+    expect(yesterday).toHaveTextContent('Nothing logged yesterday.');
+    expect(yesterday).not.toHaveTextContent('yesterday yet');
+    // …and the controls survive the empty window, or there'd be no way back.
+    expect(within(yesterday).getByRole('button', { name: 'Next day' })).toBeEnabled();
+
+    await stepBack('Yesterday');
+    // Past the two relative names, a window goes by its date.
+    const twoDaysAgo = new Date();
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+    const dated = twoDaysAgo.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    });
+    expect(within(windowPanel(dated)).getByText(dated)).toBeInTheDocument();
+
+    // The tab is also the way home from wherever the stepping ended up — by
+    // then it is carrying the date it walked to.
+    await user.click(screen.getByRole('tab', { name: dated }));
+    expect(
+      within(windowPanel('Today')).getByRole('button', { name: 'Next day' }),
+    ).toBeDisabled();
+  });
+
+  it('steps in the unit the tracker resets in', async () => {
+    const tracker = await test.createTracker({
+      name: 'Spend',
+      kind: 'number',
+      reset_period: 'monthly',
+      unit: '$',
+    });
+    await test.core.entries.log(tracker.id, { value: 12, occurred_at: daysAgo(0, 9) });
+    const user = userEvent.setup();
+    renderApp(test, `/trackers/${tracker.id}`);
+
+    await screen.findByRole('tab', { name: 'This month' });
+    const panel = () => screen.getByRole('tabpanel', { name: 'This month' });
+    expect(within(panel()).getByRole('button', { name: 'Previous month' })).toBeInTheDocument();
+    expect(within(panel()).queryByRole('button', { name: 'Previous day' })).toBeNull();
+    // The only entry is in this month, so there is no earlier month to reach.
+    expect(within(panel()).getByRole('button', { name: 'Previous month' })).toBeDisabled();
+
+    await user.click(screen.getByRole('tab', { name: 'All entries' }));
+    // Stepping is the current-window tab's affordance; the raw timeline and
+    // the per-period table each already show every window at once.
+    expect(
+      within(screen.getByRole('tabpanel', { name: 'All entries' })).queryByRole('button', {
+        name: 'Previous month',
+      }),
+    ).toBeNull();
   });
 
   it('reads but never writes — editing belongs to the All entries tab', async () => {
