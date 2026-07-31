@@ -2010,6 +2010,17 @@ input.txn__name:focus {
   color: inherit;
   opacity: 0.78;
 }
+/* The pace comparison: a step quieter than the label line, since it's context
+   for the total rather than a reading of it. */
+.quick__pace {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 0.45rem;
+}
+.quick--painted .quick__pace {
+  color: inherit;
+  opacity: 0.7;
+}
 .quick__track {
   width: min(60%, 14rem);
   height: 0.35rem;

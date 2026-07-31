@@ -105,9 +105,10 @@ describe('quick log — one tap (count)', () => {
       renderQuick(fixed, `/trackers/${t.id}/quick`);
 
       expect(await screen.findByText('205 ml')).toBeInTheDocument();
-      expect(
-        screen.getByText(/today · target 434 ml · 120 ml by now yesterday/),
-      ).toBeInTheDocument();
+      // The label line names the total; the comparison sits on its own line
+      // under the bar rather than trailing a third clause off the edge.
+      expect(screen.getByText('today · target 434 ml')).toBeInTheDocument();
+      expect(screen.getByText('120 ml by now yesterday')).toBeInTheDocument();
     });
   });
 

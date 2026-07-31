@@ -271,7 +271,6 @@ export function QuickLogPage() {
             ? `${entries.length} reading${entries.length === 1 ? '' : 's'}`
             : headlineLabel}
           {tracker.target != null ? ` · target ${formatValue(tracker, tracker.target)}` : ''}
-          {pace ? ` · ${formatValue(tracker, pace.value)} by now ${pace.label}` : ''}
         </span>
         {tracker.target != null && tracker.is_snapshot === 0 && (
           <div className="quick__track">
@@ -279,6 +278,15 @@ export function QuickLogPage() {
               style={{ width: `${Math.max(0, Math.min(100, (headline / tracker.target) * 100))}%` }}
             />
           </div>
+        )}
+        {/* Under the bar rather than on the label line above it: "today" and
+            "target" name the number, this compares it, and three clauses in a
+            row read as one long sentence on a phone. It also lands where the
+            eye already is when it's judging pace. */}
+        {pace && (
+          <span className="quick__pace">
+            {formatValue(tracker, pace.value)} by now {pace.label}
+          </span>
         )}
       </div>
 

@@ -123,9 +123,9 @@ Visualizations & organization:
   keypad would push the log button out from under the thumb reaching for it; a
   chosen time sticks until ✕ hands the field back to now, and the
   undo bar names it so a backdate can't apply silently to the next entry.
-  Beside the running total sits what the previous period had reached by this
-  same hour ("205 ml · 180 ml by now yesterday"), because a part-finished day
-  is only high or low against the one before it. Adding one to the Home Screen gives an icon named
+  Under the progress bar sits what the previous period had reached by this same
+  hour ("180 ml by now yesterday"), because a part-finished day is only high or
+  low against the one before it. Adding one to the Home Screen gives an icon named
   after the tracker that launches straight onto its log button: the page swaps in
   a per-tracker web app manifest (`GET /trackers/:id/app.webmanifest`, generated
   by the server from the tracker's name and color) whose `start_url` is the quick
