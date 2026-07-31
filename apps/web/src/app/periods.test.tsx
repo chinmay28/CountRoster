@@ -255,6 +255,14 @@ describe('current-period tab', () => {
     const previous = (label: string) =>
       within(windowPanel(label)).getByRole('button', { name: 'Previous day' });
 
+    // The latest window sits on the left, the way the table above it reads:
+    // newest first, older below. ‹ walks toward today, › into the past.
+    expect(
+      within(windowPanel('Today'))
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['Next day', 'Previous day']);
+
     // Today is the window in progress: there is no day after it to show.
     expect(next('Today')).toBeDisabled();
     expect(previous('Today')).toBeEnabled();
