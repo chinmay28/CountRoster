@@ -155,8 +155,20 @@ assert the literal version string in a test** — it changes with every commit.
 
 The count needs the full commit graph: a `--depth 1` clone answers it with `1`,
 silently. `version.mjs` refuses a shallow repo (reports 0 instead of the fake
-count) and `quickstart.sh` clones with `--filter=blob:none` — keep both, and
-don't reintroduce `--depth 1` anywhere that feeds a build.
+count), `quickstart.sh` clones with `--filter=blob:none`, and the release
+workflow checks out with `fetch-depth: 0` — keep all three, and don't
+reintroduce `--depth 1` anywhere that feeds a build.
+
+Pushing a `v*` tag — or a `release/v*` branch, for a checkout that can't push
+tags; the release then creates the tag — runs
+`.github/workflows/release.yml`: it builds the static
+`linux/<arch>` binaries (`GOARCHES` in that file — `arm64` today) with the PWA
+embedded, publishes them with a `.sha256` beside each, and takes the release
+body from the matching `## <tag>` section of `CHANGELOG.md`. It refuses to
+publish if the tag isn't the version that commit builds, so tag the commit whose
+count matches. `quickstart.sh` consumes exactly those assets when run with
+`COUNTROSTER_INSTALL=release` — the asset names are the contract between the
+two, so rename one and you must rename the other.
 
 ### Aggregations
 

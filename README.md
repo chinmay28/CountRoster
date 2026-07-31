@@ -70,6 +70,23 @@ It installs Node 22 and Go if needed (both build-time only), creates a dedicated
 `countroster` system user, compiles the PWA and the static server binary, and runs
 it under systemd serving the API + PWA on `http://<host>:8787`.
 
+**Or skip the build entirely** and install the prebuilt binary from the latest
+[release](https://github.com/chinmay28/countroster/releases) — no Node, no Go,
+no source tree, seconds instead of minutes on a Raspberry Pi:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chinmay28/countroster/main/scripts/quickstart.sh \
+  | sudo COUNTROSTER_INSTALL=release bash
+```
+
+The download's checksum is verified before anything is swapped in, and
+`COUNTROSTER_RELEASE=v1.1.98` pins a specific release instead of the latest.
+Releases publish **`linux/arm64`** today; other architectures build from source
+(the default), which works everywhere. Both modes install the same thing — one
+static binary with the PWA embedded, under the same unit and the same data
+directory — so you can switch between them by re-running with a different
+`COUNTROSTER_INSTALL`.
+
 **Re-run it any time to upgrade — installs and upgrades are non-disruptive and
 never lose data:**
 
@@ -79,11 +96,13 @@ never lose data:**
   timestamped backup, then swaps code in. The new build compiles while the old
   version keeps serving, so a failed build leaves the running app untouched.
 - After restart it polls `/api/health`; if the new version is unhealthy it **rolls
-  back** to the previous commit and **restores the pre-upgrade snapshot**.
+  back** — to the previous commit when it built from source, to the previous
+  binary when it installed a release — and **restores the pre-upgrade snapshot**.
 - Schema changes run through the server's append-only, idempotent migration runner.
 
-Override defaults with env vars (`PORT`, `HOST`, `COUNTROSTER_REF`,
-`COUNTROSTER_DATA_DIR`, `COUNTROSTER_PREFIX`, `COUNTROSTER_USER`, …). The generated
+Override defaults with env vars (`PORT`, `HOST`, `COUNTROSTER_INSTALL`,
+`COUNTROSTER_REF`, `COUNTROSTER_RELEASE`, `COUNTROSTER_DATA_DIR`,
+`COUNTROSTER_PREFIX`, `COUNTROSTER_USER`, …). The generated
 unit is documented at [`deploy/countroster.service`](./deploy/countroster.service).
 Manage it with `systemctl status countroster` and `journalctl -u countroster -f`.
 
