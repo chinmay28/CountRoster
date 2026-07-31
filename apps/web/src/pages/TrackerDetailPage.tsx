@@ -466,9 +466,15 @@ export function TrackerDetailPage() {
               // paged back into.
               setWindowsBack(0);
             }}
-            title={`Back to ${currentLabel.toLowerCase()}`}
+            // The tab names the window on show, not the window in progress:
+            // it labels the panel beneath it, and once you have stepped back
+            // that panel is yesterday's. Off the current window it doubles as
+            // the way home, which is worth saying out loud.
+            {...(windowsBack > 0
+              ? { title: `Back to ${currentLabel.toLowerCase()}` }
+              : {})}
           >
-            {currentLabel}
+            {windowLabel}
           </button>
           <button
             type="button"
