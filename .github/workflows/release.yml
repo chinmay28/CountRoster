@@ -1,0 +1,158 @@
+name: Release
+
+# Publishes a GitHub release when a `v*` tag is pushed.
+#
+# The artifact is the deployable unit described in README.md: a single static
+# Go binary (CGO_ENABLED=0) with the built PWA embedded, so a target host needs
+# no Node, no Go, and no source tree. `scripts/quickstart.sh` consumes exactly
+# these assets when run with COUNTROSTER_INSTALL=release.
+#
+# The release body is the matching section of CHANGELOG.md (see that file's
+# header), with GitHub's auto-generated commit list appended under it.
+#
+# NOTE the version is `vMAJOR.MINOR.<commit count>` (scripts/version.mjs), so
+# this workflow needs `fetch-depth: 0` — a shallow checkout reports patch 0 —
+# and it refuses to publish if the tag doesn't equal the version the build
+# stamps into the binary.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Manual re-run for an existing tag (available once this file is on the
+  # default branch). Builds and publishes exactly the tagged commit.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and release (e.g. v1.1.98)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    env:
+      # Space-separated GOARCH list. Cross-compiling is free here because the
+      # SQLite driver is pure Go — add `amd64` to publish that too.
+      GOARCHES: arm64
+      TAG: ${{ inputs.tag || github.ref_name }}
+
+    steps:
+      - name: Check out ${{ inputs.tag || github.ref_name }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0 # the version's patch number is the commit count
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Verify the tag matches the built version
+        run: |
+          set -euo pipefail
+          version="$(node scripts/version.mjs)"
+          echo "tag=$TAG version=$version"
+          if [ "$version" != "$TAG" ]; then
+            echo "::error::tag $TAG does not match the version this commit builds ($version)."
+            echo "The patch number is the commit count — tag the commit whose count matches."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the web client
+        run: |
+          set -euo pipefail
+          npm run build --workspace @countroster/core   # the web client imports its types
+          npm run build --workspace @countroster/web
+
+      - name: Embed the PWA into the server
+        run: |
+          set -euo pipefail
+          find server/cmd/countroster/webdist -mindepth 1 ! -name README.txt -delete
+          cp -r apps/web/dist/. server/cmd/countroster/webdist/
+
+      - name: Build static binaries
+        run: |
+          set -euo pipefail
+          patch="$(node scripts/version.mjs --patch)"
+          mkdir -p dist
+          for arch in $GOARCHES; do
+            out="dist/countroster-linux-$arch"
+            echo "==> building $out ($TAG)"
+            # CGO_ENABLED=0 → a fully static binary; keep it that way.
+            (cd server && CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build \
+              -trimpath \
+              -ldflags "-s -w -X github.com/chinmay28/countroster/server/internal/version.Patch=$patch" \
+              -o "../$out" ./cmd/countroster)
+            file "$out"
+          done
+          (cd dist && for f in countroster-linux-*; do sha256sum "$f" > "$f.sha256"; done)
+          ls -lh dist
+
+      - name: Assemble the release notes from CHANGELOG.md
+        id: notes
+        run: |
+          set -euo pipefail
+          # The section for this tag, from its `## <tag>` heading to the next one.
+          awk -v tag="$TAG" '
+            $0 ~ "^## " tag "([^0-9.]|$)" { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+
+          heading="$(grep -m1 -E "^## $TAG([^0-9.]|\$)" CHANGELOG.md || true)"
+          # Strip "## <tag>" and the dash that separates it from the title. Done
+          # with parameter expansion, not a bracket expression, so the em dash
+          # matches byte-wise regardless of the runner's locale.
+          title="${heading#\#\# }"; title="${title#"$TAG"}"
+          title="${title# }"; title="${title#—}"; title="${title#-}"; title="${title# }"
+
+          if [ -s release-notes.md ]; then
+            echo "title=$TAG — ${title:-$TAG}" >> "$GITHUB_OUTPUT"
+            # GitHub only auto-links a full changelog when it generates the
+            # notes itself, so add the compare link to the curated body.
+            prev="$(git tag --list 'v*' --sort=-version:refname | grep -vFx "$TAG" | head -n 1 || true)"
+            if [ -n "$prev" ]; then
+              printf '\n**Full Changelog**: %s/compare/%s...%s\n' \
+                "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "$prev" "$TAG" >> release-notes.md
+            fi
+          else
+            echo "::warning::no '## $TAG' section in CHANGELOG.md — publishing with generated notes instead."
+            echo "title=$TAG" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ steps.notes.outputs.title }}
+        run: |
+          set -euo pipefail
+          if [ -s release-notes.md ]; then
+            notes_args=(--notes-file release-notes.md)
+          else
+            notes_args=(--generate-notes)
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "==> release $TAG already exists; updating notes and assets"
+            # `gh release edit` has no --generate-notes, so only rewrite the
+            # body when there is a curated one to write.
+            if [ -s release-notes.md ]; then
+              gh release edit "$TAG" --title "$TITLE" --notes-file release-notes.md
+            fi
+            gh release upload "$TAG" dist/countroster-linux-* --clobber
+          else
+            gh release create "$TAG" --title "$TITLE" "${notes_args[@]}" dist/countroster-linux-*
+          fi
+          gh release view "$TAG" --json tagName,assets --jq '{tag: .tagName, assets: [.assets[].name]}'
