@@ -6,7 +6,7 @@ import type {
   TrackerField,
 } from '@countroster/core';
 import { formatValue, formatNumber, formatWithin } from '../lib/format.ts';
-import { sumValues, latestValue } from '../lib/range.ts';
+import { sumValues, latestValue, PERIOD_NOUN } from '../lib/range.ts';
 import { entryChips } from '../lib/fields.ts';
 
 interface EntryTableProps {
@@ -26,6 +26,25 @@ interface EntryTableProps {
   windowLabel: string;
   /** The window's period, which scales how each row's time is written. */
   windowPeriod: BucketPeriod;
+  /**
+   * Stepping between windows. Omitted (or partly omitted) when the table isn't
+   * navigable — the nav row appears only when there's somewhere to go.
+   */
+  nav?: EntryTableNav;
+}
+
+/** The controls for walking back and forth a window at a time. */
+export interface EntryTableNav {
+  /** The window on show, as a heading: "Today", "Yesterday", "May 18". */
+  label: string;
+  /** Step one window back. */
+  onPrevious: () => void;
+  /** Step one window forward. */
+  onNext: () => void;
+  /** Whether any entry predates the window on show. */
+  canGoPrevious: boolean;
+  /** Whether the view is behind the window in progress. */
+  canGoNext: boolean;
 }
 
 /**
@@ -47,11 +66,26 @@ export function EntryTable({
   readOnlyTracker = false,
   windowLabel,
   windowPeriod,
+  nav,
 }: EntryTableProps) {
   const isSnapshot = tracker.is_snapshot === 1;
+  // The nav row belongs *outside* the empty branch: a window you can step into
+  // may well be empty, and a table that dropped its controls when it found
+  // nothing would strand the reader on the quiet day they just walked into.
+  const navRow = nav ? <WindowNav nav={nav} period={windowPeriod} /> : null;
 
   if (entries.length === 0) {
-    return <p className="muted">Nothing logged {windowLabel} yet.</p>;
+    return (
+      <div className="periods">
+        {/* "Yet" only makes sense while the window is still running; a day
+            already over logged nothing, full stop. */}
+        <p className="muted">
+          Nothing logged {windowLabel}
+          {nav?.canGoNext ? '' : ' yet'}.
+        </p>
+        {navRow}
+      </div>
+    );
   }
 
   // Each row against the one before it, then flipped: the table reads newest
@@ -129,6 +163,8 @@ export function EntryTable({
         </table>
       </div>
 
+      {navRow}
+
       <p className="muted periods__note">
         {isSnapshot
           ? `Levels don’t add up: the total is the latest reading ${windowLabel}.`
@@ -142,6 +178,43 @@ export function EntryTable({
             lives, or the buttons look like they went missing. */}
         {!readOnlyTracker && ' Edit or delete on the All entries tab.'}
       </p>
+    </div>
+  );
+}
+
+/**
+ * Step a window at a time, in whichever unit the tracker resets in: a daily
+ * tracker walks days, a monthly one months. Both ends stop where the data
+ * does — forward at the window in progress (there is nothing logged past
+ * now), back at the window holding the first entry (everything before it is
+ * empty by definition, so paging into it would only ever show the same
+ * nothing).
+ */
+function WindowNav({ nav, period }: { nav: EntryTableNav; period: BucketPeriod }) {
+  const noun = PERIOD_NOUN[period];
+  return (
+    <div className="periods__nav">
+      <button
+        type="button"
+        className="btn btn--small periods__nav-step"
+        onClick={nav.onPrevious}
+        disabled={!nav.canGoPrevious}
+        aria-label={`Previous ${noun}`}
+        title={`Previous ${noun}`}
+      >
+        <span aria-hidden="true">‹</span>
+      </button>
+      <span className="periods__nav-label">{nav.label}</span>
+      <button
+        type="button"
+        className="btn btn--small periods__nav-step"
+        onClick={nav.onNext}
+        disabled={!nav.canGoNext}
+        aria-label={`Next ${noun}`}
+        title={`Next ${noun}`}
+      >
+        <span aria-hidden="true">›</span>
+      </button>
     </div>
   );
 }

@@ -8,6 +8,8 @@ import {
   priorPeriodToDate,
   windowStats,
   periodRowLabel,
+  offsetPeriodRange,
+  windowProseLabel,
   lastNBuckets,
   RESET_PERIOD_LABEL,
 } from './range.ts';
@@ -307,6 +309,62 @@ describe('period windows', () => {
     const calendar = windowStats(entries, {}, now);
     expect(calendar.find((s) => s.key === 'month')).toBeUndefined();
     expect(calendar.find((s) => s.key === 'all-time')!.value).toBe(7);
+  });
+});
+
+describe('offsetPeriodRange', () => {
+  const now = new Date('2026-05-20T14:00:00'); // a Wednesday
+
+  it('zero steps is the window in progress', () => {
+    const r = offsetPeriodRange('day', MONDAY, 0, now);
+    expect(r.start).toMatch(/^2026-05-20T00:00:00/);
+    expect(r.end).toMatch(/^2026-05-21T00:00:00/);
+  });
+
+  it('steps back one bucket at a time', () => {
+    expect(offsetPeriodRange('day', MONDAY, 3, now).start).toMatch(/^2026-05-17T00:00:00/);
+    expect(offsetPeriodRange('week', MONDAY, 1, now).start).toMatch(/^2026-05-11T00:00:00/);
+    expect(offsetPeriodRange('year', MONDAY, 2, now).start).toMatch(/^2024-01-01T00:00:00/);
+  });
+
+  it('re-normalizes each step, so uneven months stay whole', () => {
+    // Feb is short and Mar is long: stepping by a fixed span would drift.
+    const feb = offsetPeriodRange('month', MONDAY, 3, now);
+    expect(feb.start).toMatch(/^2026-02-01T00:00:00/);
+    expect(feb.end).toMatch(/^2026-03-01T00:00:00/);
+  });
+
+  it('honors the tracker’s own day boundary', () => {
+    // A day that runs 7:00 AM → 6:59 AM: at 2 PM, "yesterday" started at 7 AM
+    // the previous morning.
+    const r = offsetPeriodRange('day', { day_start_minute: 420 }, 1, now);
+    expect(r.start).toMatch(/^2026-05-19T07:00:00/);
+    expect(r.end).toMatch(/^2026-05-20T07:00:00/);
+  });
+});
+
+describe('windowProseLabel', () => {
+  const now = new Date('2026-05-20T14:00:00'); // a Wednesday
+  const at = (period: 'day' | 'week' | 'month' | 'year', back: number) =>
+    windowProseLabel(offsetPeriodRange(period, MONDAY, back, now).start, period, MONDAY, now);
+
+  it('keeps the relative names of the two most recent buckets', () => {
+    expect(at('day', 0)).toBe('today');
+    expect(at('day', 1)).toBe('yesterday');
+    expect(at('month', 0)).toBe('this month');
+    expect(at('year', 1)).toBe('last year');
+  });
+
+  it('gives an older bucket a preposition so it still reads as a sentence', () => {
+    expect(at('day', 2)).toBe('on May 18');
+    expect(at('month', 3)).toBe('in Feb 2026');
+    expect(at('year', 2)).toBe('in 2024');
+    // Only the leading word is a common noun — the month keeps its capital.
+    expect(at('week', 2)).toBe('in the week of May 4');
+  });
+
+  it('is empty for an unparseable instant', () => {
+    expect(windowProseLabel('not-a-date', 'day', MONDAY, now)).toBe('');
   });
 });
 
