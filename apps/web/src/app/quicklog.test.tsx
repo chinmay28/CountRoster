@@ -249,9 +249,9 @@ describe('quick log — keypad (number)', () => {
   });
 });
 
-describe('quick log — stepper (snapshot)', () => {
-  it('starts from the last reading and steps by the default value', async () => {
-    const user = userEvent.setup();
+describe('quick log — keypad (snapshot)', () => {
+  /** A weight tracker with one reading already on the books. */
+  async function seedWeight() {
     const t = await test.createTracker({
       name: 'Weight',
       kind: 'number',
@@ -260,37 +260,76 @@ describe('quick log — stepper (snapshot)', () => {
       default_value: 0.2,
     });
     await test.core.entries.log(t.id, { value: 179.2 });
+    return t;
+  }
+
+  /** Type a reading on the keypad, digit by digit. */
+  async function type(user: ReturnType<typeof userEvent.setup>, digits: string) {
+    for (const key of digits) {
+      await user.click(
+        screen.getByRole('button', { name: key === '.' ? 'Decimal point' : key }),
+      );
+    }
+  }
+
+  it('starts blank rather than seeded with the last reading', async () => {
+    const t = await seedWeight();
     renderQuick(test, `/trackers/${t.id}/quick`);
 
-    expect(await screen.findByRole('button', { name: /Reading 179\.2 lb/ })).toBeInTheDocument();
+    // The headline still reports where the level stands...
+    expect(await screen.findByText('current')).toBeInTheDocument();
+    expect(document.querySelector('.quick__total')!.textContent).toBe('179.2 lb');
+    // ...but the keypad itself is empty, so a stray tap can't re-log the
+    // reading that's already on the books.
+    const amount = document.querySelector('.quick-keypad__amount')!;
+    expect(amount.textContent).toBe('0 lb');
+    expect(amount).toHaveClass('quick-keypad__amount--empty');
+    expect(screen.getByRole('button', { name: 'Log reading' })).toBeDisabled();
+  });
 
-    await user.click(screen.getByRole('button', { name: 'Decrease by 0.2' }));
+  it('types a whole reading on the keypad and logs it', async () => {
+    const user = userEvent.setup();
+    const t = await seedWeight();
+    renderQuick(test, `/trackers/${t.id}/quick`);
+
+    await screen.findByText('current');
+    await type(user, '176.4');
+
+    // The move away from the last reading, at the readings' own precision:
+    // plain subtraction gives -2.8000000000000114.
+    expect(screen.getByText('last 179.2 lb · −2.8')).toBeInTheDocument();
+
     await user.click(screen.getByRole('button', { name: 'Log reading' }));
-
     await waitFor(async () => {
       const entries = await test.core.entries.forTracker(t.id);
       expect(entries).toHaveLength(2);
-      // 179.2 - 0.2 in plain floating point is 178.99999999999997.
-      expect(entries[1]!.value).toBe(179);
+      expect(entries[1]!.value).toBe(176.4);
     });
   });
 
-  it('accepts a typed reading', async () => {
-    const user = userEvent.setup();
-    const t = await test.createTracker({ name: 'Weight', is_snapshot: 1, default_value: 0.2 });
-    await test.core.entries.log(t.id, { value: 179.2 });
+  it('lists the readings before this one', async () => {
+    const t = await seedWeight();
+    await test.core.entries.log(t.id, { value: 178.6 });
     renderQuick(test, `/trackers/${t.id}/quick`);
 
-    await user.click(await screen.findByRole('button', { name: /Reading/ }));
-    const input = screen.getByLabelText('Reading');
-    await user.clear(input);
-    await user.type(input, '176.4');
-    await user.click(screen.getByRole('button', { name: 'Log reading' }));
-
-    await waitFor(async () => {
-      const entries = await test.core.entries.forTracker(t.id);
-      expect(entries[entries.length - 1]!.value).toBe(176.4);
+    const history = await waitFor(() => {
+      const list = document.querySelector('.quick-keypad__history');
+      expect(list).not.toBeNull();
+      return list as HTMLElement;
     });
+    // Newest first.
+    expect(
+      [...history.querySelectorAll('li span:first-child')].map((s) => s.textContent),
+    ).toEqual(['178.6 lb', '179.2 lb']);
+  });
+
+  it('has no history or comparison on an ordinary tracker', async () => {
+    const t = await test.createTracker({ name: 'Spending', kind: 'number' });
+    await test.core.entries.log(t.id, { value: 12 });
+    renderQuick(test, `/trackers/${t.id}/quick`);
+
+    expect(await screen.findByRole('button', { name: 'Log entry' })).toBeInTheDocument();
+    expect(document.querySelector('.quick-keypad__history')).toBeNull();
   });
 });
 
@@ -495,6 +534,9 @@ describe('quick log — backdating', () => {
     renderQuick(test, `/trackers/${t.id}/quick`);
 
     await pickWhen(user, when);
+    for (const key of ['1', '7', '6']) {
+      await user.click(screen.getByRole('button', { name: key }));
+    }
     await user.click(screen.getByRole('button', { name: 'Log reading' }));
 
     await waitFor(async () => {

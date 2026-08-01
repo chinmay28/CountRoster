@@ -114,9 +114,12 @@ Visualizations & organization:
   elsewhere pointing at `GET /trackers/:id/app.webmanifest`, whose `start_url` is
   the quick screen. The
   control follows the tracker's kind: counts and yes/no habits get a single big
-  tap target that logs the default value, amounts that vary (money, durations)
-  get an on-screen keypad, and snapshot stats get a stepper that starts from the
-  last reading.
+  tap target that logs the default value, while everything typed — amounts that
+  vary (money, durations) and snapshot readings alike — gets the on-screen
+  keypad. A snapshot starts blank like any other value (a reading is measured,
+  not nudged off the last one) with the readings before it listed underneath,
+  and once a number is typed the keypad names the move away from the last one
+  ("last 179.2 lb · −2.8").
   Nothing asks for confirmation — a five-second undo bar takes the entry (and any
   note logged with it) back. A "Now" chip *becomes* a picker for backdating the
   feed you're logging an hour late — in place, since a row opening above the
