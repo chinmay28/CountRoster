@@ -18,7 +18,7 @@ import "strconv"
 // Major and minor version. Bump these by hand.
 const (
 	Major = 1
-	Minor = 1
+	Minor = 2
 )
 
 // Patch is the repository's commit count, stamped at link time (see the
