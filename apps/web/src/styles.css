@@ -1926,8 +1926,8 @@ input.txn__name:focus {
    owns the full viewport and its own safe-area padding. `--quick-accent` is
    the tracker's color, `--quick-ink` readable ink for text on top of it; a
    "painted" screen (the one-tap control) floods the accent edge to edge,
-   while the keypad and stepper keep a neutral ground and use the accent for
-   their controls only.
+   while the keypad keeps a neutral ground and uses the accent for its
+   controls only.
 --------------------------------------------------------------------------- */
 .quick {
   min-height: 100vh;
@@ -2345,103 +2345,16 @@ input.txn__name:focus {
 .quick-keypad__actions .quick__chip {
   flex: 0 0 auto;
 }
-
-/* --- Stepper (snapshot stats) --- */
-.quick-stepper__dial {
-  display: grid;
-  place-items: center;
-  position: relative;
-  min-height: 12rem;
-  width: 100%;
-}
-.quick-stepper__ring {
-  width: min(58vw, 14rem);
-  height: min(58vw, 14rem);
-  transform: rotate(-90deg);
-}
-.quick-stepper__ring-track {
-  fill: none;
-  stroke: var(--border);
-  stroke-width: 7;
-}
-.quick-stepper__ring-fill {
-  fill: none;
-  stroke-width: 7;
-  stroke-linecap: round;
-  transition: stroke-dashoffset 0.3s ease;
-}
-/* Bounded so a long reading ("1,284.6 lb") wraps inside the ring instead of
-   running out over the stroke. */
-.quick-stepper__center {
-  position: absolute;
-  display: grid;
-  justify-items: center;
-  gap: 0.1rem;
-  max-width: min(42vw, 9.5rem);
-  text-align: center;
-}
-.quick-stepper__value {
-  font: inherit;
-  font-size: clamp(1.5rem, 8vw, 2rem);
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  cursor: text;
-  line-height: 1.1;
-}
-.quick-stepper__input {
-  font: inherit;
-  font-size: 2rem;
-  width: 7rem;
-  text-align: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
-}
-.quick-stepper__previous {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-.quick-stepper__controls {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  width: 100%;
-}
-.quick-stepper__step {
-  font: inherit;
-  font-size: 1.75rem;
-  line-height: 1;
-  width: 3.5rem;
-  height: 3.5rem;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  /* A held +/- repeats; don't let the OS turn the hold into a selection. */
-  touch-action: manipulation;
-  user-select: none;
-}
-.quick-stepper__step:active {
-  background: var(--border);
-}
-.quick-stepper__commit {
-  flex: 1;
-}
-.quick-stepper__history {
+/* The readings before this one (snapshot stats only) — what a new level is
+   judged against while it's being typed. */
+.quick-keypad__history {
   list-style: none;
   margin: 0;
   padding: 0;
   width: 100%;
   border-top: 1px solid var(--border);
 }
-.quick-stepper__history li {
+.quick-keypad__history li {
   display: flex;
   justify-content: space-between;
   padding: 0.55rem 0;

@@ -4,7 +4,6 @@ import { useCore } from '../app/CoreContext.tsx';
 import { useAsync } from '../app/useAsync.ts';
 import { EntryFieldsInput } from '../components/EntryFieldsInput.tsx';
 import { QuickKeypadPanel } from '../components/QuickKeypadPanel.tsx';
-import { QuickStepperPanel } from '../components/QuickStepperPanel.tsx';
 import { QuickTapPanel } from '../components/QuickTapPanel.tsx';
 import { datetimeInputLabel, formatValue, toDatetimeLocalValue } from '../lib/format.ts';
 import { quickMode } from '../lib/quick.ts';
@@ -217,8 +216,8 @@ export function QuickLogPage() {
   const entries = data?.entries ?? [];
   const fields = data?.fields ?? [];
   const mode = quickMode(tracker);
-  // Painted screens carry the tracker's color edge to edge; the keypad and
-  // stepper need a neutral ground for their controls to read against.
+  // Painted screens carry the tracker's color edge to edge; the keypad needs
+  // a neutral ground for its controls to read against.
   const painted = mode === 'tap';
 
   const total = sumValues(entries);
@@ -259,17 +258,11 @@ export function QuickLogPage() {
 
       <div className="quick__headline">
         <h1 className="quick__name">{tracker.name}</h1>
-        {/* The stepper's dial already *is* the current reading; repeating it
-            up here would put the same number on screen three times. */}
-        {mode !== 'stepper' && (
-          <span className="quick__total" style={painted ? undefined : { color: tracker.color }}>
-            {formatValue(tracker, headline)}
-          </span>
-        )}
+        <span className="quick__total" style={painted ? undefined : { color: tracker.color }}>
+          {formatValue(tracker, headline)}
+        </span>
         <span className="quick__muted">
-          {mode === 'stepper'
-            ? `${entries.length} reading${entries.length === 1 ? '' : 's'}`
-            : headlineLabel}
+          {headlineLabel}
           {tracker.target != null ? ` · target ${formatValue(tracker, tracker.target)}` : ''}
         </span>
         {tracker.target != null && tracker.is_snapshot === 0 && (
@@ -317,8 +310,6 @@ export function QuickLogPage() {
         </div>
       ) : mode === 'keypad' ? (
         <QuickKeypadPanel {...panelProps} />
-      ) : mode === 'stepper' ? (
-        <QuickStepperPanel {...panelProps} />
       ) : (
         <QuickTapPanel {...panelProps} />
       )}

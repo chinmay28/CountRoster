@@ -5,22 +5,24 @@ import type { Entry, Tracker } from '@countroster/core';
  * route (`/trackers/:id/quick`) serves every tracker; the tracker's own shape
  * picks the control, so nothing has to be configured per tracker.
  */
-export type QuickMode = 'tap' | 'keypad' | 'stepper' | 'readonly';
+export type QuickMode = 'tap' | 'keypad' | 'readonly';
 
 /**
  * Pick the quick-log control for a tracker:
  *
  * - `readonly` — derived trackers compute their value and reject logging.
- * - `stepper`  — snapshot stats record a level, so logging starts from the
- *                previous reading and nudges it rather than starting blank.
  * - `tap`      — counts and yes/no habits have one obvious value; the whole
  *                screen becomes the button.
- * - `keypad`   — amounts that vary (money, durations, choice codes) need a
- *                number, entered on a keypad that never shifts under a thumb.
+ * - `keypad`   — every other value is typed: amounts that vary (money,
+ *                durations, choice codes) and snapshot readings alike. A
+ *                reading is a fresh measurement, not a nudge away from the
+ *                last one, so it starts blank on the same keypad — one that
+ *                never shifts under a thumb the way the OS keyboard does.
  */
 export function quickMode(tracker: Tracker): QuickMode {
   if (tracker.is_derived === 1) return 'readonly';
-  if (tracker.is_snapshot === 1) return 'stepper';
+  // A snapshot's kind may be `count`, but a level is still typed, not tapped.
+  if (tracker.is_snapshot === 1) return 'keypad';
   if (tracker.kind === 'count' || tracker.kind === 'boolean') return 'tap';
   return 'keypad';
 }
@@ -41,27 +43,18 @@ export interface QuickPanelProps {
   onLog: (value: number, note?: string, occurredAt?: string) => void;
 }
 
-/**
- * The step the snapshot stepper moves by. The tracker's default value is the
- * user's own statement of "one unit of this" (0.2 lb, 1 point), so honor it;
- * fall back to 1 when it carries no useful step.
- */
-export function stepSize(tracker: Tracker): number {
-  const step = Math.abs(tracker.default_value);
-  return step > 0 ? step : 1;
+/** How many decimal places a number carries when written out. */
+function decimalPlaces(value: number): number {
+  return (String(value).split('.')[1] ?? '').length;
 }
 
 /**
- * Round to the precision `step` itself carries. Without this, stepping 178.4
- * by 0.2 lands on 178.60000000000002 — and that is what gets stored.
+ * How far a new reading moves from the one before it, rounded to the
+ * precision the two readings themselves carry. Without the rounding,
+ * 179 − 179.2 shows as −0.19999999999999996.
  */
-export function roundToStep(value: number, step: number): number {
-  const decimals = (String(step).split('.')[1] ?? '').length;
-  const factor = 10 ** Math.min(decimals, 10);
-  return Math.round(value * factor) / factor;
-}
-
-/** Move `value` one step in `direction`, at the step's own precision. */
-export function applyStep(value: number, step: number, direction: 1 | -1): number {
-  return roundToStep(value + direction * step, step);
+export function readingDelta(next: number, previous: number): number {
+  const places = Math.min(Math.max(decimalPlaces(next), decimalPlaces(previous)), 10);
+  const factor = 10 ** places;
+  return Math.round((next - previous) * factor) / factor;
 }

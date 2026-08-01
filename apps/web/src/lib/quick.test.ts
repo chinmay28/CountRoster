@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Tracker } from '@countroster/core';
-import { applyStep, quickMode, roundToStep, stepSize } from './quick.ts';
+import { quickMode, readingDelta } from './quick.ts';
 
 function tracker(overrides: Partial<Tracker> = {}): Tracker {
   return {
@@ -42,9 +42,10 @@ describe('quickMode', () => {
     expect(quickMode(tracker({ kind: 'choice' }))).toBe('keypad');
   });
 
-  it('gives snapshot stats the stepper, whatever their kind', () => {
-    expect(quickMode(tracker({ kind: 'number', is_snapshot: 1 }))).toBe('stepper');
-    expect(quickMode(tracker({ kind: 'count', is_snapshot: 1 }))).toBe('stepper');
+  it('gives snapshot stats the keypad, whatever their kind', () => {
+    expect(quickMode(tracker({ kind: 'number', is_snapshot: 1 }))).toBe('keypad');
+    // A level is typed even when the tracker's kind would otherwise tap.
+    expect(quickMode(tracker({ kind: 'count', is_snapshot: 1 }))).toBe('keypad');
   });
 
   it('leaves derived trackers with no control at all', () => {
@@ -54,32 +55,16 @@ describe('quickMode', () => {
   });
 });
 
-describe('stepSize', () => {
-  it("uses the tracker's own default value as the step", () => {
-    expect(stepSize(tracker({ default_value: 0.2 }))).toBe(0.2);
+describe('readingDelta', () => {
+  it('rounds to the precision the readings themselves carry', () => {
+    // Plain subtraction gives -0.19999999999999996 here.
+    expect(readingDelta(179, 179.2)).toBe(-0.2);
+    expect(readingDelta(178.6, 179.2)).toBe(-0.6);
+    expect(readingDelta(0.3, 0.1)).toBe(0.2);
   });
 
-  it('falls back to 1 when the default carries no usable step', () => {
-    expect(stepSize(tracker({ default_value: 0 }))).toBe(1);
-    expect(stepSize(tracker({ default_value: -2 }))).toBe(2);
-  });
-});
-
-describe('applyStep', () => {
-  it('steps at the precision of the step itself', () => {
-    // Plain arithmetic gives 178.60000000000002 here.
-    expect(applyStep(178.4, 0.2, 1)).toBe(178.6);
-    expect(applyStep(178.4, 0.2, -1)).toBe(178.2);
-  });
-
-  it('leaves whole-number steps whole', () => {
-    expect(applyStep(9, 1, 1)).toBe(10);
-  });
-});
-
-describe('roundToStep', () => {
-  it('rounds a difference to the step precision', () => {
-    expect(roundToStep(178.6 - 179.2, 0.2)).toBe(-0.6);
-    expect(roundToStep(0.30000000000000004, 0.1)).toBe(0.3);
+  it('keeps whole readings whole', () => {
+    expect(readingDelta(2840, 2785)).toBe(55);
+    expect(readingDelta(2840, 2840)).toBe(0);
   });
 });
