@@ -128,10 +128,13 @@ export function EntryTable({
               <th scope="col" className="periods__num">
                 {isSnapshot ? 'Reading' : 'Value'}
               </th>
-              {showNotes && <th scope="col">Notes</th>}
               <th scope="col" className="periods__num">
                 Change
               </th>
+              {/* Notes sit to the right of the figures: the numbers are what
+                  the eye scans down a column for, and prose in the middle of
+                  them pushes the next one out of line. */}
+              {showNotes && <th scope="col">Notes</th>}
             </tr>
           </thead>
           <tbody>
@@ -154,10 +157,10 @@ export function EntryTable({
                 {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
               </th>
               <td className="periods__num">{formatValue(tracker, total)}</td>
-              {showNotes && <td />}
               <td className="periods__num">
                 {ratio === null ? '' : `${ratio}%`}
               </td>
+              {showNotes && <td />}
             </tr>
           </tfoot>
         </table>
@@ -250,6 +253,13 @@ function EntryTableRow({
       <td className="periods__num" style={{ color: tracker.color }}>
         {formatValue(tracker, entry.value)}
       </td>
+      <td className="periods__num">
+        {change === null ? (
+          <span className="muted">—</span>
+        ) : (
+          <Step tracker={tracker} delta={change} />
+        )}
+      </td>
       {showNotes && (
         <td className="periods__note-cell">
           {chips.length === 0 && !note ? (
@@ -281,13 +291,6 @@ function EntryTableRow({
           )}
         </td>
       )}
-      <td className="periods__num">
-        {change === null ? (
-          <span className="muted">—</span>
-        ) : (
-          <Step tracker={tracker} delta={change} />
-        )}
-      </td>
     </tr>
   );
 }
