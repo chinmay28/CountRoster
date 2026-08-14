@@ -556,6 +556,50 @@ describe('period table', () => {
     expect(within(preHistory).getAllByRole('cell')[0]).not.toHaveTextContent('0 lb');
   });
 
+  it('opens a snapshot period’s range where the period before it closed', async () => {
+    const tracker = await test.createTracker({
+      name: 'Flour',
+      kind: 'number',
+      is_snapshot: 1,
+      unit: 'g',
+    });
+    // Two days back the jar went 100 → 110, yesterday 130 → 140, and today it
+    // was topped up to 150 in a single reading.
+    await test.core.entries.log(tracker.id, { value: 100, occurred_at: daysAgo(2, 9) });
+    await test.core.entries.log(tracker.id, { value: 110, occurred_at: daysAgo(2, 18) });
+    await test.core.entries.log(tracker.id, { value: 130, occurred_at: daysAgo(1, 9) });
+    await test.core.entries.log(tracker.id, { value: 140, occurred_at: daysAgo(1, 18) });
+    await test.core.entries.log(tracker.id, { value: 150, occurred_at: daysAgo(0, 9) });
+    const user = userEvent.setup();
+    renderApp(test, `/trackers/${tracker.id}`);
+
+    await user.click(await screen.findByRole('tab', { name: 'By period' }));
+    await user.click(
+      within(screen.getByRole('group', { name: 'Table period' })).getByRole('button', {
+        name: 'Day',
+      }),
+    );
+
+    const table = await screen.findByRole('table');
+    const range = (label: string) =>
+      within(within(table).getByRole('rowheader', { name: label }).closest('tr')!)
+        .getAllByRole('cell')[1]!;
+
+    // Yesterday's jar didn't start at its own first reading — it started at the
+    // 110 g the day before closed on, and the 110 → 130 climb happened inside
+    // yesterday.
+    expect(range('Yesterday')).toHaveTextContent('110 g–140 g');
+    // A single reading is still a range: today the jar moved 140 → 150.
+    expect(range('Today')).toHaveTextContent('140 g–150 g');
+    // The oldest day on record has nothing behind it to open from, so it spans
+    // only the readings it saw.
+    const rows = tableRows();
+    expect(rows.at(-2)).toContain('100 g–110 g');
+    // The footer covers the rows above it end to end, with no gaps between one
+    // period's range and the next.
+    expect(rows.at(-1)).toContain('100 g–150 g');
+  });
+
   it('shows target progress per period when the tracker has a target', async () => {
     const tracker = await test.createTracker({
       name: 'Water',

@@ -31,8 +31,8 @@ interface PeriodTableProps {
  * it sat against the target.
  *
  * A snapshot tracker gets the same table read as levels instead of amounts:
- * the period's closing reading, the spread it moved through, and how many
- * readings there were.
+ * the period's closing reading, the spread it moved through (counting the
+ * level it opened at — see `snapshotSpan`), and how many readings there were.
  */
 export function PeriodTable({ tracker, earliest, refreshKey }: PeriodTableProps) {
   const core = useCore();
@@ -74,10 +74,18 @@ export function PeriodTable({ tracker, earliest, refreshKey }: PeriodTableProps)
       .slice(0, shown);
   }, [data, shown]);
 
-  const visible = hideEmpty ? rows.filter((r) => r.bucket.count > 0) : rows;
+  // Each row carries the span of levels it covers, which the Range column and
+  // the footer both read — so the two can never disagree about how far back a
+  // period reaches.
+  const visible = (hideEmpty ? rows.filter((r) => r.bucket.count > 0) : rows).map(
+    (row) => ({
+      ...row,
+      span: isSnapshot ? snapshotSpan(row.bucket, row.previous, earliest) : null,
+    }),
+  );
   // The footer describes what's on screen, so hiding the empty periods
   // narrows it too rather than leaving it quoting rows the user can't see.
-  const totals = summarize(visible.map((r) => r.bucket));
+  const totals = summarize(visible);
 
   // A target is per *reset* window ("8 glasses a day"), so it only means
   // anything on the matching period: a week's total against a daily target
@@ -160,7 +168,7 @@ export function PeriodTable({ tracker, earliest, refreshKey }: PeriodTableProps)
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map(({ bucket, previous }) => (
+                  {visible.map(({ bucket, previous, span }) => (
                     <tr
                       key={bucket.label}
                       className={bucket.count === 0 ? 'periods__row--empty' : undefined}
@@ -175,8 +183,8 @@ export function PeriodTable({ tracker, earliest, refreshKey }: PeriodTableProps)
                       </td>
                       <td className="periods__num">
                         {isSnapshot
-                          ? bucket.count > 1
-                            ? `${formatValue(tracker, bucket.min)}–${formatValue(tracker, bucket.max)}`
+                          ? span
+                            ? `${formatValue(tracker, span.lo)}–${formatValue(tracker, span.hi)}`
                             : '—'
                           : bucket.count}
                       </td>
@@ -208,7 +216,7 @@ export function PeriodTable({ tracker, earliest, refreshKey }: PeriodTableProps)
                     </td>
                     <td className="periods__num">
                       {isSnapshot
-                        ? totals.logged > 0
+                        ? totals.spanned > 0
                           ? `${formatValue(tracker, totals.min)}–${formatValue(tracker, totals.max)}`
                           : '—'
                         : totals.count}
@@ -231,7 +239,7 @@ export function PeriodTable({ tracker, earliest, refreshKey }: PeriodTableProps)
                 empty period the table happens to reach back over. */}
             <p className="muted periods__note">
               {isSnapshot
-                ? 'Levels don’t add up: each period shows its closing reading.'
+                ? 'Levels don’t add up: each period shows its closing reading, and the range it covered since the period before.'
                 : `Averaged over the ${totals.logged} period${
                     totals.logged === 1 ? '' : 's'
                   } with entries.`}
@@ -274,6 +282,39 @@ function hasValue(
   );
 }
 
+/**
+ * The span of levels a snapshot period covers — its own readings, plus the
+ * level it opened at.
+ *
+ * A level carries over, so a period doesn't begin at its own first reading: it
+ * begins wherever the period before it closed, and the move from that closing
+ * level to the first reading belongs to this period. Spanning the readings
+ * alone drops that move, and the rows then read as if the level teleported
+ * between periods — each range starting somewhere other than where the range
+ * above it ended. The oldest period on record has nothing behind it to open
+ * from, so it spans only what it saw.
+ *
+ * Null when there is no span to draw: a period with no readings (its level is
+ * simply the one carried in), or one whose level never moved off the value it
+ * opened at.
+ */
+function snapshotSpan(
+  bucket: StatBucket,
+  previous: StatBucket | null,
+  earliest: string | undefined,
+): { lo: number; hi: number } | null {
+  if (bucket.count === 0) return null;
+  let lo = bucket.min;
+  let hi = bucket.max;
+  // The bucket before is only an opening level if it actually holds one —
+  // before the first reading ever, its zero means "no level yet".
+  if (previous !== null && hasValue(previous, true, earliest)) {
+    lo = Math.min(lo, previous.value);
+    hi = Math.max(hi, previous.value);
+  }
+  return lo === hi ? null : { lo, hi };
+}
+
 /** The change against the period before, as an arrow and a magnitude. */
 function Delta({
   tracker,
@@ -298,22 +339,28 @@ function Delta({
 
 /**
  * Footer figures over the visible periods. `logged` counts the periods that
- * saw at least one entry, and `min`/`max` span the individual entry values in
- * them — both ignore empty periods, which carry no reading of their own.
+ * saw at least one entry, ignoring empty ones, which carry no reading of their
+ * own. `min`/`max` are the union of the rows' own spans over `spanned` of
+ * them, so the footer covers exactly the levels the rows above it name — no
+ * wider, and never narrower than a range on screen.
  */
-function summarize(buckets: readonly StatBucket[]) {
+function summarize(
+  rows: readonly { bucket: StatBucket; span: { lo: number; hi: number } | null }[],
+) {
   let total = 0;
   let count = 0;
   let logged = 0;
+  let spanned = 0;
   let min = 0;
   let max = 0;
-  for (const b of buckets) {
-    total += b.value;
-    count += b.count;
-    if (b.count === 0) continue;
-    if (logged === 0 || b.min < min) min = b.min;
-    if (logged === 0 || b.max > max) max = b.max;
-    logged += 1;
+  for (const { bucket, span } of rows) {
+    total += bucket.value;
+    count += bucket.count;
+    if (bucket.count > 0) logged += 1;
+    if (span === null) continue;
+    if (spanned === 0 || span.lo < min) min = span.lo;
+    if (spanned === 0 || span.hi > max) max = span.hi;
+    spanned += 1;
   }
-  return { total, count, logged, min, max };
+  return { total, count, logged, spanned, min, max };
 }
