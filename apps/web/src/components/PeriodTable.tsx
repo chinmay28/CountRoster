@@ -74,13 +74,14 @@ export function PeriodTable({ tracker, earliest, refreshKey }: PeriodTableProps)
       .slice(0, shown);
   }, [data, shown]);
 
-  // Each row carries the span of levels it covers, which the Range column and
-  // the footer both read — so the two can never disagree about how far back a
-  // period reaches.
+  // Each row carries the move it made and the span of levels it covers, which
+  // the columns and the footer both read — so the two can never disagree about
+  // how far back a period reaches.
   const visible = (hideEmpty ? rows.filter((r) => r.bucket.count > 0) : rows).map(
     (row) => ({
       ...row,
       span: isSnapshot ? snapshotSpan(row.bucket, row.previous, earliest) : null,
+      change: periodChange(row.bucket, row.previous, isSnapshot, earliest),
     }),
   );
   // The footer describes what's on screen, so hiding the empty periods
@@ -154,11 +155,16 @@ export function PeriodTable({ tracker, earliest, refreshKey }: PeriodTableProps)
                     <th scope="col" className="periods__num">
                       {isSnapshot ? 'Latest' : 'Total'}
                     </th>
+                    {isSnapshot && (
+                      <th scope="col" className="periods__num">
+                        Range
+                      </th>
+                    )}
                     <th scope="col" className="periods__num">
-                      {isSnapshot ? 'Range' : 'Entries'}
+                      {isSnapshot ? 'Change' : 'vs prev'}
                     </th>
                     <th scope="col" className="periods__num">
-                      {isSnapshot ? 'Readings' : 'vs prev'}
+                      {isSnapshot ? 'Readings' : 'Entries'}
                     </th>
                     {showTarget && (
                       <th scope="col" className="periods__num">
@@ -168,7 +174,7 @@ export function PeriodTable({ tracker, earliest, refreshKey }: PeriodTableProps)
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map(({ bucket, previous, span }) => (
+                  {visible.map(({ bucket, span, change }) => (
                     <tr
                       key={bucket.label}
                       className={bucket.count === 0 ? 'periods__row--empty' : undefined}
@@ -181,20 +187,17 @@ export function PeriodTable({ tracker, earliest, refreshKey }: PeriodTableProps)
                           ? formatValue(tracker, bucket.value)
                           : '—'}
                       </td>
-                      <td className="periods__num">
-                        {isSnapshot
-                          ? span
+                      {isSnapshot && (
+                        <td className="periods__num">
+                          {span
                             ? `${formatValue(tracker, span.lo)}–${formatValue(tracker, span.hi)}`
-                            : '—'
-                          : bucket.count}
-                      </td>
+                            : '—'}
+                        </td>
+                      )}
                       <td className="periods__num">
-                        {isSnapshot ? (
-                          bucket.count
-                        ) : (
-                          <Delta tracker={tracker} bucket={bucket} previous={previous} />
-                        )}
+                        <Delta tracker={tracker} change={change} />
                       </td>
+                      <td className="periods__num">{bucket.count}</td>
                       {showTarget && (
                         <td className="periods__num">
                           {bucket.count === 0
@@ -214,20 +217,25 @@ export function PeriodTable({ tracker, earliest, refreshKey }: PeriodTableProps)
                     <td className="periods__num">
                       {isSnapshot ? '' : formatValue(tracker, totals.total)}
                     </td>
-                    <td className="periods__num">
-                      {isSnapshot
-                        ? totals.spanned > 0
+                    {isSnapshot && (
+                      <td className="periods__num">
+                        {totals.spanned > 0
                           ? `${formatValue(tracker, totals.min)}–${formatValue(tracker, totals.max)}`
-                          : '—'
-                        : totals.count}
-                    </td>
-                    <td className="periods__num">
-                      {isSnapshot
-                        ? totals.count
-                        : totals.logged > 0
-                          ? `avg ${formatValue(tracker, totals.total / totals.logged)}`
                           : '—'}
+                      </td>
+                    )}
+                    <td className="periods__num">
+                      {isSnapshot ? (
+                        // The visible rows' moves add up to the net move across
+                        // them, each row reaching back to where it opened.
+                        <Delta tracker={tracker} change={totals.change} />
+                      ) : totals.logged > 0 ? (
+                        `avg ${formatValue(tracker, totals.total / totals.logged)}`
+                      ) : (
+                        '—'
+                      )}
                     </td>
+                    <td className="periods__num">{totals.count}</td>
                     {showTarget && <td />}
                   </tr>
                 </tfoot>
@@ -315,24 +323,39 @@ function snapshotSpan(
   return lo === hi ? null : { lo, hi };
 }
 
-/** The change against the period before, as an arrow and a magnitude. */
-function Delta({
-  tracker,
-  bucket,
-  previous,
-}: {
-  tracker: Tracker;
-  bucket: StatBucket;
-  previous: StatBucket | null;
-}) {
-  // The oldest row has nothing behind it to compare against — the bucket
-  // before it may simply be outside what was fetched.
-  if (previous === null) return <span className="muted">—</span>;
-  const delta = bucket.value - previous.value;
-  if (delta === 0) return <span className="muted">±0</span>;
+/**
+ * The move from the period before — a difference of totals for a tracker that
+ * sums, and of closing levels for one that snapshots. A snapshot's move is the
+ * one figure the table was missing: with levels, what the period *did* is the
+ * distance travelled, not the reading it happened to stop at.
+ *
+ * Null when there is nothing to subtract: the oldest row's predecessor may
+ * simply be outside what was fetched, and a level that doesn't exist yet
+ * (before the first reading ever) is not a level of zero to fall from.
+ */
+function periodChange(
+  bucket: StatBucket,
+  previous: StatBucket | null,
+  isSnapshot: boolean,
+  earliest: string | undefined,
+): number | null {
+  if (previous === null) return null;
+  if (
+    isSnapshot &&
+    !(hasValue(bucket, true, earliest) && hasValue(previous, true, earliest))
+  ) {
+    return null;
+  }
+  return bucket.value - previous.value;
+}
+
+/** A change against what came before, as an arrow and a magnitude. */
+function Delta({ tracker, change }: { tracker: Tracker; change: number | null }) {
+  if (change === null) return <span className="muted">—</span>;
+  if (change === 0) return <span className="muted">±0</span>;
   return (
-    <span className={delta > 0 ? 'periods__up' : 'periods__down'}>
-      {delta > 0 ? '▲' : '▼'} {formatValue(tracker, Math.abs(delta))}
+    <span className={change > 0 ? 'periods__up' : 'periods__down'}>
+      {change > 0 ? '▲' : '▼'} {formatValue(tracker, Math.abs(change))}
     </span>
   );
 }
@@ -342,10 +365,15 @@ function Delta({
  * saw at least one entry, ignoring empty ones, which carry no reading of their
  * own. `min`/`max` are the union of the rows' own spans over `spanned` of
  * them, so the footer covers exactly the levels the rows above it name — no
- * wider, and never narrower than a range on screen.
+ * wider, and never narrower than a range on screen. `change` adds up the same
+ * rows' moves, which telescopes into the net move across them.
  */
 function summarize(
-  rows: readonly { bucket: StatBucket; span: { lo: number; hi: number } | null }[],
+  rows: readonly {
+    bucket: StatBucket;
+    span: { lo: number; hi: number } | null;
+    change: number | null;
+  }[],
 ) {
   let total = 0;
   let count = 0;
@@ -353,14 +381,16 @@ function summarize(
   let spanned = 0;
   let min = 0;
   let max = 0;
-  for (const { bucket, span } of rows) {
+  let change: number | null = null;
+  for (const { bucket, span, change: moved } of rows) {
     total += bucket.value;
     count += bucket.count;
     if (bucket.count > 0) logged += 1;
+    if (moved !== null) change = (change ?? 0) + moved;
     if (span === null) continue;
     if (spanned === 0 || span.lo < min) min = span.lo;
     if (spanned === 0 || span.hi > max) max = span.hi;
     spanned += 1;
   }
-  return { total, count, logged, spanned, min, max };
+  return { total, count, logged, spanned, min, max, change };
 }

@@ -199,13 +199,14 @@ describe('current-period tab', () => {
     renderApp(test, `/trackers/${tracker.id}`);
 
     await screen.findByRole('tab', { name: 'This month' });
-    expect(windowRows('This month')[0]![2]).toBe('Coffee beans');
+    // Notes read last, to the right of the figures.
+    expect(windowRows('This month')[0]![3]).toBe('Coffee beans');
     // The Notes column only exists because this entry carries one.
     expect(
       within(within(screen.getByRole('tabpanel', { name: 'This month' })).getByRole('table'))
         .getAllByRole('columnheader')
         .map((h) => h.textContent),
-    ).toEqual(['Time', 'Value', 'Notes', 'Change']);
+    ).toEqual(['Time', 'Value', 'Change', 'Notes']);
   });
 
   it('reads an entry’s answers and its note out of one Notes column', async () => {
@@ -237,7 +238,7 @@ describe('current-period tab', () => {
       within(table)
         .getAllByRole('columnheader')
         .map((h) => h.textContent),
-    ).toEqual(['Time', 'Value', 'Notes', 'Change']);
+    ).toEqual(['Time', 'Value', 'Change', 'Notes']);
     const cell = within(table).getByText('+Multivitamin').closest('td')!;
     expect(within(cell).getByText('✓ Wet diaper')).toBeInTheDocument();
   });
@@ -439,15 +440,15 @@ describe('period table', () => {
 
     const table = await screen.findByRole('table');
     const today = within(table).getByRole('rowheader', { name: 'Today' }).closest('tr')!;
-    // Two entries today summing to 3.
+    // Two entries today summing to 3 — the total, then the move, then the count.
     expect(within(today).getAllByRole('cell')[0]).toHaveTextContent('3 glasses');
-    expect(within(today).getAllByRole('cell')[1]).toHaveTextContent('2');
+    expect(within(today).getAllByRole('cell')[2]).toHaveTextContent('2');
     // Yesterday's 4 is one entry, and today is 1 below it.
     const yesterday = within(table)
       .getByRole('rowheader', { name: 'Yesterday' })
       .closest('tr')!;
     expect(within(yesterday).getAllByRole('cell')[0]).toHaveTextContent('4 glasses');
-    expect(within(today).getAllByRole('cell')[2]).toHaveTextContent('▼ 1 glass');
+    expect(within(today).getAllByRole('cell')[1]).toHaveTextContent('▼ 1 glass');
   });
 
   it('hides empty periods until asked to show them', async () => {
@@ -482,7 +483,7 @@ describe('period table', () => {
     const thisMonth = within(table)
       .getByRole('rowheader', { name: 'This month' })
       .closest('tr')!;
-    expect(within(thisMonth).getAllByRole('cell')[1]).toHaveTextContent('3');
+    expect(within(thisMonth).getAllByRole('cell')[2]).toHaveTextContent('3');
   });
 
   it('keeps the raw timeline (and its editing) on the other tab', async () => {
@@ -537,13 +538,17 @@ describe('period table', () => {
     const table = await screen.findByRole('table');
     expect(within(table).getByRole('columnheader', { name: 'Latest' })).toBeInTheDocument();
     expect(within(table).getByRole('columnheader', { name: 'Range' })).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'Change' })).toBeInTheDocument();
     const today = within(table).getByRole('rowheader', { name: 'Today' }).closest('tr')!;
     const cells = within(today).getAllByRole('cell');
-    // The closing reading, the spread it moved through, and the count — the
-    // day's two readings must not add up to 360.
+    // The closing reading, the spread it moved through, the move it made, and
+    // the count — the day's two readings must not add up to 360.
     expect(cells[0]).toHaveTextContent('179 lb');
     expect(cells[1]).toHaveTextContent('179 lb–181 lb');
-    expect(cells[2]).toHaveTextContent('2');
+    // Nothing was logged before today, so there is no earlier level to fall
+    // from — and 179 lb must not read as a 179 lb drop out of nowhere.
+    expect(cells[2]).toHaveTextContent('—');
+    expect(cells[3]).toHaveTextContent('2');
 
     // A level persists, so the day after a reading still shows it — but a day
     // *before* the first reading ever has no level to show, and must not
@@ -598,6 +603,16 @@ describe('period table', () => {
     // The footer covers the rows above it end to end, with no gaps between one
     // period's range and the next.
     expect(rows.at(-1)).toContain('100 g–150 g');
+
+    // The move each period made, off the level it opened at — and the footer
+    // adding those moves up into the net move across all three days.
+    const change = (label: string) =>
+      within(within(table).getByRole('rowheader', { name: label }).closest('tr')!)
+        .getAllByRole('cell')[2]!;
+    expect(change('Yesterday')).toHaveTextContent('▲ 30 g');
+    expect(change('Today')).toHaveTextContent('▲ 10 g');
+    expect(rows.at(-2)).toContain('—'); // nothing behind the oldest day
+    expect(rows.at(-1)!.join(' ')).toContain('▲ 40 g');
   });
 
   it('shows target progress per period when the tracker has a target', async () => {
