@@ -223,3 +223,85 @@ func TestSectionOrderRejectsMalformedLists(t *testing.T) {
 		}
 	}
 }
+
+func TestSecondaryUnitRoundTripsAndClears(t *testing.T) {
+	a := newTestApp(t)
+	tr := mustCreate(t, a, obj(
+		"name", "Papu Weight",
+		"unit", "g",
+		"secondary_unit", "lb+16oz",
+		"secondary_factor", 0.002204622621848776,
+	))
+	if tr.SecondaryUnit == nil || *tr.SecondaryUnit != "lb+16oz" {
+		t.Fatalf("create should persist secondary_unit, got %v", tr.SecondaryUnit)
+	}
+	if tr.SecondaryFactor == nil || *tr.SecondaryFactor != 0.002204622621848776 {
+		t.Fatalf("create should persist secondary_factor, got %v", tr.SecondaryFactor)
+	}
+
+	// An unrelated patch leaves the pair alone…
+	kept, err := a.Trackers.Update(tr.ID, obj("name", "Baby weight"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kept.SecondaryUnit == nil || *kept.SecondaryUnit != "lb+16oz" || kept.SecondaryFactor == nil {
+		t.Fatalf("unrelated patch should keep the secondary unit, got %+v", kept)
+	}
+
+	// …and explicit nulls drop the secondary reading.
+	cleared, err := a.Trackers.Update(tr.ID, obj("secondary_unit", nil, "secondary_factor", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.SecondaryUnit != nil || cleared.SecondaryFactor != nil {
+		t.Fatalf("null should clear the secondary unit, got %+v", cleared)
+	}
+}
+
+func TestSecondaryUnitDefaultsToNull(t *testing.T) {
+	a := newTestApp(t)
+	tr := mustCreate(t, a, obj("name", "Water"))
+	if tr.SecondaryUnit != nil || tr.SecondaryFactor != nil {
+		t.Errorf("secondary unit should default to null, got %+v", tr)
+	}
+}
+
+func TestSecondaryUnitAcceptsWellFormedSpecs(t *testing.T) {
+	a := newTestApp(t)
+	for _, good := range []string{
+		"lb",         // a plain label
+		"fl oz",      // …which may carry a space
+		"$",          // …or be a currency symbol
+		"lb+16oz",    // a subdivision
+		"lb + 16 oz", // …spelled out loosely
+		"ft+12in",
+		"st+14lb+16oz", // the deepest spec allowed
+	} {
+		if _, err := a.Trackers.Create(obj(
+			"name", "W", "secondary_unit", good, "secondary_factor", 1,
+		)); err != nil {
+			t.Errorf("secondary_unit %q should be accepted, got %v", good, err)
+		}
+	}
+}
+
+func TestSecondaryUnitRejectsMalformedSpecs(t *testing.T) {
+	a := newTestApp(t)
+	for _, bad := range []string{
+		"lb+oz",           // subdivision without its count
+		"lb+",             // empty part
+		"+16oz",           // no unit to subdivide
+		"lb+0oz",          // a subdivision of zero is no subdivision
+		"lb+16",           // count without a label
+		"st+14lb+16oz+2q", // more parts than allowed
+	} {
+		if _, err := a.Trackers.Create(obj("name", "W", "secondary_unit", bad)); err == nil {
+			t.Errorf("secondary_unit %q should be rejected", bad)
+		} else {
+			var ve *ValidationError
+			if !errors.As(err, &ve) {
+				t.Errorf("secondary_unit %q: expected ValidationError, got %T", bad, err)
+			}
+		}
+	}
+}

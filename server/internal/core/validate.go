@@ -53,6 +53,51 @@ func validSectionOrder(s string) bool {
 	return true
 }
 
+// subdivisionRe matches a secondary-unit part that names its own
+// subdivision: "16oz" → 16 and "oz". The label may not start with a digit,
+// so a bare count ("lb+16") is a malformed part rather than 1 of a unit
+// named "6".
+var subdivisionRe = regexp.MustCompile(`^(\d+(?:\.\d+)?)\s*([^\d\s].*)$`)
+
+// maxSecondaryUnitParts caps a secondary-unit spec; "st+14lb+16oz" is
+// already an unusual way to read a number.
+const maxSecondaryUnitParts = 3
+
+// validSecondaryUnit reports whether s is a well-formed secondary-unit spec:
+// a plain unit label ("lb", "mi"), or parts joined with "+" where each later
+// part is prefixed by how many of it make one of the part before ("lb+16oz",
+// "ft+12in"). What the labels mean stays the reader's business, exactly as
+// with a tracker's primary unit — only the shape is pinned. Mirrors
+// parseSecondaryUnit in schema/units.ts. The empty string is allowed and
+// means the same as NULL: no secondary unit.
+func validSecondaryUnit(s string) bool {
+	if s == "" {
+		return true
+	}
+	parts := strings.Split(s, "+")
+	if len(parts) > maxSecondaryUnitParts {
+		return false
+	}
+	for i, part := range parts {
+		text := strings.TrimSpace(part)
+		if text == "" {
+			return false
+		}
+		if i == 0 {
+			continue
+		}
+		m := subdivisionRe.FindStringSubmatch(text)
+		if m == nil {
+			return false
+		}
+		per, err := strconv.ParseFloat(m[1], 64)
+		if err != nil || math.IsInf(per, 0) || math.IsNaN(per) || per <= 0 {
+			return false
+		}
+	}
+	return true
+}
+
 var trackerKinds = map[string]bool{
 	"count": true, "number": true, "duration": true, "boolean": true, "choice": true,
 }
@@ -247,43 +292,46 @@ type TrackerLinkInput struct {
 // tracked. TrackerInput (create) reuses it and then applies the schema
 // defaults.
 type TrackerPatch struct {
-	Name           Opt[string]
-	Description    Opt[string]
-	Color          Opt[string]
-	Icon           Opt[string]
-	Kind           Opt[string]
-	Unit           Opt[string]
-	Target         Opt[float64]
-	ResetPeriod    Opt[string]
-	WeekStart      Opt[int]
-	DayStartMinute Opt[int]
-	MonthStartDay  Opt[int]
-	YearStartMonth Opt[int]
-	DefaultValue   Opt[float64]
-	SortOrder      Opt[int]
-	IsHidden       Opt[int]
-	IsSnapshot     Opt[int]
-	SectionOrder   Opt[string]
-	Links          []TrackerLinkInput
-	HasLinks       bool
+	Name            Opt[string]
+	Description     Opt[string]
+	Color           Opt[string]
+	Icon            Opt[string]
+	Kind            Opt[string]
+	Unit            Opt[string]
+	SecondaryUnit   Opt[string]
+	SecondaryFactor Opt[float64]
+	Target          Opt[float64]
+	ResetPeriod     Opt[string]
+	WeekStart       Opt[int]
+	DayStartMinute  Opt[int]
+	MonthStartDay   Opt[int]
+	YearStartMonth  Opt[int]
+	DefaultValue    Opt[float64]
+	SortOrder       Opt[int]
+	IsHidden        Opt[int]
+	IsSnapshot      Opt[int]
+	SectionOrder    Opt[string]
+	Links           []TrackerLinkInput
+	HasLinks        bool
 }
 
 func parseTrackerFields(c *vctx, m map[string]any, nameRequired bool) TrackerPatch {
 	p := TrackerPatch{
-		Name:           c.str(m, "name", nameRequired, false, 1, 120, true),
-		Description:    c.str(m, "description", false, true, 0, 2000, false),
-		Icon:           c.str(m, "icon", false, true, 0, 60, false),
-		Unit:           c.str(m, "unit", false, true, 0, 30, false),
-		Kind:           c.enum(m, "kind", trackerKinds),
-		Target:         c.num(m, "target", true, false, false, 0, 0),
-		ResetPeriod:    c.enum(m, "reset_period", resetPeriods),
-		DayStartMinute: optInt(c.num(m, "day_start_minute", false, true, true, 0, 1439)),
-		MonthStartDay:  optInt(c.num(m, "month_start_day", false, true, true, 1, 28)),
-		YearStartMonth: optInt(c.num(m, "year_start_month", false, true, true, 1, 12)),
-		DefaultValue:   c.num(m, "default_value", false, false, false, 0, 0),
-		SortOrder:      optInt(c.num(m, "sort_order", false, true, false, 0, 0)),
-		IsHidden:       c.zeroOne(m, "is_hidden"),
-		IsSnapshot:     c.zeroOne(m, "is_snapshot"),
+		Name:            c.str(m, "name", nameRequired, false, 1, 120, true),
+		Description:     c.str(m, "description", false, true, 0, 2000, false),
+		Icon:            c.str(m, "icon", false, true, 0, 60, false),
+		Unit:            c.str(m, "unit", false, true, 0, 30, false),
+		SecondaryFactor: c.num(m, "secondary_factor", true, false, false, 0, 0),
+		Kind:            c.enum(m, "kind", trackerKinds),
+		Target:          c.num(m, "target", true, false, false, 0, 0),
+		ResetPeriod:     c.enum(m, "reset_period", resetPeriods),
+		DayStartMinute:  optInt(c.num(m, "day_start_minute", false, true, true, 0, 1439)),
+		MonthStartDay:   optInt(c.num(m, "month_start_day", false, true, true, 1, 28)),
+		YearStartMonth:  optInt(c.num(m, "year_start_month", false, true, true, 1, 12)),
+		DefaultValue:    c.num(m, "default_value", false, false, false, 0, 0),
+		SortOrder:       optInt(c.num(m, "sort_order", false, true, false, 0, 0)),
+		IsHidden:        c.zeroOne(m, "is_hidden"),
+		IsSnapshot:      c.zeroOne(m, "is_snapshot"),
 	}
 
 	if v, present := m["color"]; present {
@@ -292,6 +340,19 @@ func parseTrackerFields(c *vctx, m map[string]any, nameRequired bool) TrackerPat
 			c.add("invalid_string", "expected a 6-digit hex color like #4ECDC4", "color")
 		} else {
 			p.Color = Opt[string]{Present: true, Value: s}
+		}
+	}
+
+	// secondary_unit names a display-only unit, optionally with its own
+	// subdivision ("lb+16oz"). Like the primary unit the labels are opaque;
+	// only the spec's shape is checked.
+	if s := c.str(m, "secondary_unit", false, true, 0, 40, false); s.Present {
+		p.SecondaryUnit = s
+		if !s.Null && !validSecondaryUnit(s.Value) {
+			c.add("invalid_string",
+				"expected a unit like \"lb\", or one with its subdivision like \"lb+16oz\"",
+				"secondary_unit")
+			p.SecondaryUnit = Opt[string]{}
 		}
 	}
 

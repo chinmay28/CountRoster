@@ -25,6 +25,7 @@ var Migrations = []Migration{
 	{Version: 8, Name: "008_section_order", Up: m008SectionOrder},
 	{Version: 9, Name: "009_cloud_backup", Up: m009CloudBackup},
 	{Version: 10, Name: "010_cloud_provider_credentials", Up: m010CloudProviderCredentials},
+	{Version: 11, Name: "011_secondary_units", Up: m011SecondaryUnits},
 }
 
 // LatestVersion is the highest schema version known to this build.
@@ -312,4 +313,24 @@ const m010CloudProviderCredentials = `
       client_secret TEXT,
       updated_at    TEXT
     );
+  `
+
+// m011SecondaryUnits gives a tracker a second unit that exists purely for
+// display: the value is still stored in the primary unit, and the client
+// converts it for a small line under the headline number. Weight logged in
+// grams is read in pounds and ounces; kilometres are quoted in miles.
+//
+// secondary_factor multiplies the primary value into the secondary unit.
+// secondary_unit is the unit's spec: a plain label ("lb", "mi"), or parts
+// joined with "+" where each later part carries how many of it make one of
+// the part before — "lb+16oz" renders 3350 g as "7 lb 6.17 oz". Encoding the
+// subdivision in the value keeps the reading self-describing: no conversion
+// table has to ship alongside the database.
+//
+// Both columns are nullable and only mean anything together; one without the
+// other is simply no secondary reading. A pure multiplication, so offset
+// scales (°C → °F) are deliberately out of scope.
+const m011SecondaryUnits = `
+    ALTER TABLE trackers ADD COLUMN secondary_unit TEXT;
+    ALTER TABLE trackers ADD COLUMN secondary_factor REAL;
   `

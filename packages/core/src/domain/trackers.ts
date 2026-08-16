@@ -79,12 +79,13 @@ class TrackerServiceImpl implements TrackerService {
     await this.storage.transaction(async (tx) => {
       await tx.exec(
         `INSERT INTO trackers (
-          id, name, description, color, icon, kind, unit, target,
+          id, name, description, color, icon, kind, unit,
+          secondary_unit, secondary_factor, target,
           reset_period, week_start, day_start_minute, month_start_day,
           year_start_month, default_value,
           archived_at, sort_order, is_derived, is_hidden, is_snapshot,
           section_order, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           input.name,
@@ -93,6 +94,8 @@ class TrackerServiceImpl implements TrackerService {
           input.icon ?? null,
           input.kind,
           input.unit ?? null,
+          input.secondary_unit ?? null,
+          input.secondary_factor ?? null,
           input.target ?? null,
           // A snapshot stat has no reset window — normalize to 'never'.
           input.is_snapshot === 1 ? 'never' : input.reset_period,
@@ -145,6 +148,8 @@ class TrackerServiceImpl implements TrackerService {
     assign('icon', 'icon');
     assign('kind', 'kind');
     assign('unit', 'unit');
+    assign('secondary_unit', 'secondary_unit');
+    assign('secondary_factor', 'secondary_factor');
     assign('target', 'target');
     if (nextSnapshot !== 1) assign('reset_period', 'reset_period');
     assign('week_start', 'week_start');

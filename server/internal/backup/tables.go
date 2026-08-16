@@ -15,7 +15,8 @@ type backupTable struct {
 var backupTables = []backupTable{
 	{Name: "app_meta", Columns: []string{"key", "value"}},
 	{Name: "trackers", Columns: []string{
-		"id", "name", "description", "color", "icon", "kind", "unit", "target",
+		"id", "name", "description", "color", "icon", "kind", "unit",
+		"secondary_unit", "secondary_factor", "target",
 		"reset_period", "week_start", "day_start_minute", "month_start_day",
 		"year_start_month", "default_value",
 		"archived_at", "sort_order", "is_derived", "is_hidden", "is_snapshot",

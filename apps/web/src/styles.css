@@ -513,6 +513,16 @@ a {
 .muted {
   color: var(--muted);
 }
+/* The same value read in a tracker's secondary unit — "7 lb 6.17 oz" under
+   "3350 g". It answers a question the headline already asked, so it stays
+   quiet: small, muted, tight under the number it restates. */
+.value-secondary {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-top: 0.1rem;
+  overflow-wrap: anywhere;
+}
 .error {
   color: var(--danger);
 }
@@ -602,6 +612,22 @@ a {
 
 /* Period-window fields: a disclosure that stays out of the way until the
    tracker actually leaves the calendar (it opens itself when it has). */
+/* The secondary-unit block: a menu, the two inputs it can open, and a line
+   showing what the reading will look like. Grouped in a box so the inputs
+   read as parts of the one choice above them. */
+.secondary-unit {
+  gap: 0.5rem;
+}
+.secondary-unit__custom {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.5rem 0.75rem;
+}
+.secondary-unit__hint {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
 .period-window {
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -2007,6 +2033,12 @@ input.txn__name:focus {
   font-size: 0.9rem;
 }
 .quick--painted .quick__muted {
+  color: inherit;
+  opacity: 0.78;
+}
+/* A painted screen replaces the page's colors, so the muted grey the
+   secondary reading normally uses would sink into the paint. */
+.quick--painted .value-secondary {
   color: inherit;
   opacity: 0.78;
 }

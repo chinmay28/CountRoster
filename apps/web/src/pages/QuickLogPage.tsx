@@ -6,6 +6,7 @@ import { EntryFieldsInput } from '../components/EntryFieldsInput.tsx';
 import { QuickKeypadPanel } from '../components/QuickKeypadPanel.tsx';
 import { QuickTapPanel } from '../components/QuickTapPanel.tsx';
 import { datetimeInputLabel, formatValue, toDatetimeLocalValue } from '../lib/format.ts';
+import { formatSecondary } from '../lib/units.ts';
 import { quickMode } from '../lib/quick.ts';
 import { readableInk } from '../lib/color.ts';
 import { emptyAnswers, hasAnyAnswer, type FieldAnswers } from '../lib/fields.ts';
@@ -228,6 +229,8 @@ export function QuickLogPage() {
       : periodRange
         ? sumInRange(entries, periodRange)
         : total;
+  // The same number read in the tracker's secondary unit, when it has one.
+  const headlineSecondary = formatSecondary(tracker, headline);
   const headlineLabel =
     tracker.is_snapshot === 1 ? 'current' : RESET_PERIOD_LABEL[tracker.reset_period];
   // Where the same clock stood in the period before this one. A part-finished
@@ -261,6 +264,7 @@ export function QuickLogPage() {
         <span className="quick__total" style={painted ? undefined : { color: tracker.color }}>
           {formatValue(tracker, headline)}
         </span>
+        {headlineSecondary && <span className="value-secondary">{headlineSecondary}</span>}
         <span className="quick__muted">
           {headlineLabel}
           {tracker.target != null ? ` · target ${formatValue(tracker, tracker.target)}` : ''}

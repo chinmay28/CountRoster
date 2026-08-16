@@ -42,12 +42,13 @@ func (s *TrackerService) Create(raw any) (*Tracker, error) {
 	err = s.st.Transaction(func(tx storage.Storage) error {
 		if err := tx.Exec(
 			`INSERT INTO trackers (
-          id, name, description, color, icon, kind, unit, target,
+          id, name, description, color, icon, kind, unit,
+          secondary_unit, secondary_factor, target,
           reset_period, week_start, day_start_minute, month_start_day,
           year_start_month, default_value,
           archived_at, sort_order, is_derived, is_hidden, is_snapshot,
           section_order, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
 			id,
 			input.Name.Value,
 			nullableString(input.Description),
@@ -55,6 +56,8 @@ func (s *TrackerService) Create(raw any) (*Tracker, error) {
 			nullableString(input.Icon),
 			input.Kind.Value,
 			nullableString(input.Unit),
+			nullableString(input.SecondaryUnit),
+			nullableFloat(input.SecondaryFactor),
 			nullableFloat(input.Target),
 			resetPeriod,
 			input.WeekStart.Value,
@@ -139,6 +142,8 @@ func (s *TrackerService) Update(id string, raw any) (*Tracker, error) {
 	assignStr(patch.Icon, "icon")
 	assignStr(patch.Kind, "kind")
 	assignStr(patch.Unit, "unit")
+	assignStr(patch.SecondaryUnit, "secondary_unit")
+	assignFloat(patch.SecondaryFactor, "secondary_factor")
 	assignFloat(patch.Target, "target")
 	if nextSnapshot != 1 {
 		assignStr(patch.ResetPeriod, "reset_period")

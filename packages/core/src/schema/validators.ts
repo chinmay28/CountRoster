@@ -5,6 +5,7 @@ import type {
   TrackerKind,
   WeekStart,
 } from './tables.js';
+import { MAX_SECONDARY_UNIT_LENGTH, isSecondaryUnit } from './units.js';
 
 /**
  * Zod schemas for *inputs* to the domain layer (create / update DTOs).
@@ -54,6 +55,18 @@ const sectionOrder = z
   );
 
 /**
+ * A tracker's secondary display unit: a label, optionally subdivided —
+ * "lb+16oz". The empty string reads the same as null: no secondary unit.
+ */
+const secondaryUnit = z
+  .string()
+  .max(MAX_SECONDARY_UNIT_LENGTH)
+  .refine(
+    isSecondaryUnit,
+    'expected a unit like "lb", or one with its subdivision like "lb+16oz"',
+  );
+
+/**
  * One operand of a derived tracker. A coefficient of -1 subtracts the source,
  * +1 adds it, 0.5 takes half of it, etc.
  */
@@ -71,6 +84,14 @@ export const trackerInputSchema = z.object({
   icon: z.string().max(60).optional().nullable(),
   kind: trackerKindSchema.default('number'),
   unit: z.string().max(30).optional().nullable(),
+  /**
+   * A second unit the value is only *displayed* in, with the multiplier that
+   * converts into it. They mean nothing apart: a tracker carrying one without
+   * the other simply has no secondary reading, which is what lets either be
+   * cleared on its own.
+   */
+  secondary_unit: secondaryUnit.optional().nullable(),
+  secondary_factor: z.number().finite().optional().nullable(),
   target: z.number().finite().optional().nullable(),
   reset_period: resetPeriodSchema.default('never'),
   week_start: weekStartSchema.default(1),

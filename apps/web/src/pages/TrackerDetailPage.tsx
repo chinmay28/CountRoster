@@ -19,6 +19,7 @@ const StatsPanel = lazy(() =>
   import('../components/StatsPanel.tsx').then((m) => ({ default: m.StatsPanel })),
 );
 import { formatValue, formatNumber, KIND_LABELS } from '../lib/format.ts';
+import { formatSecondary } from '../lib/units.ts';
 import {
   sumValues,
   sumInRange,
@@ -156,6 +157,8 @@ export function TrackerDetailPage() {
     : tracker.reset_period === 'never'
       ? total
       : periodTotal;
+  // The same number read in the tracker's secondary unit, when it has one.
+  const headlineSecondary = formatSecondary(tracker, headline);
   const headlineLabel = isSnapshot
     ? 'current value'
     : tracker.reset_period === 'never'
@@ -286,6 +289,7 @@ export function TrackerDetailPage() {
         <span className="detail__total" style={{ color: tracker.color }}>
           {formatValue(tracker, headline)}
         </span>
+        {headlineSecondary && <span className="value-secondary">{headlineSecondary}</span>}
         <span className="muted">
           {headlineLabel} · {entries.length} entries
         </span>

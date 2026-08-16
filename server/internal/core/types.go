@@ -6,25 +6,34 @@ package core
 
 // Tracker mirrors the trackers table row (schema/tables.ts).
 type Tracker struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	Description    *string  `json:"description"`
-	Color          string   `json:"color"`
-	Icon           *string  `json:"icon"`
-	Kind           string   `json:"kind"`
-	Unit           *string  `json:"unit"`
-	Target         *float64 `json:"target"`
-	ResetPeriod    string   `json:"reset_period"`
-	WeekStart      int      `json:"week_start"`
-	DayStartMinute int      `json:"day_start_minute"`
-	MonthStartDay  int      `json:"month_start_day"`
-	YearStartMonth int      `json:"year_start_month"`
-	DefaultValue   float64  `json:"default_value"`
-	ArchivedAt     *string  `json:"archived_at"`
-	SortOrder      int      `json:"sort_order"`
-	IsDerived      int      `json:"is_derived"`
-	IsHidden       int      `json:"is_hidden"`
-	IsSnapshot     int      `json:"is_snapshot"`
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	Color       string  `json:"color"`
+	Icon        *string `json:"icon"`
+	Kind        string  `json:"kind"`
+	Unit        *string `json:"unit"`
+	// SecondaryUnit is an optional second unit the value is only *displayed*
+	// in — grams logged, "7 lb 6.17 oz" read underneath. Either a plain label
+	// ("lb", "mi") or parts joined with "+", each later part prefixed by how
+	// many of it make one of the part before ("lb+16oz"). SecondaryFactor
+	// multiplies the stored value into the first part. They mean nothing
+	// apart: one without the other is simply no secondary reading. See
+	// migration 011.
+	SecondaryUnit   *string  `json:"secondary_unit"`
+	SecondaryFactor *float64 `json:"secondary_factor"`
+	Target          *float64 `json:"target"`
+	ResetPeriod     string   `json:"reset_period"`
+	WeekStart       int      `json:"week_start"`
+	DayStartMinute  int      `json:"day_start_minute"`
+	MonthStartDay   int      `json:"month_start_day"`
+	YearStartMonth  int      `json:"year_start_month"`
+	DefaultValue    float64  `json:"default_value"`
+	ArchivedAt      *string  `json:"archived_at"`
+	SortOrder       int      `json:"sort_order"`
+	IsDerived       int      `json:"is_derived"`
+	IsHidden        int      `json:"is_hidden"`
+	IsSnapshot      int      `json:"is_snapshot"`
 	// SectionOrder is the user's preferred order for the detail page's
 	// sections: a comma-separated list of opaque section keys, or nil for the
 	// default order. See migration 006.

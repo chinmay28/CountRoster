@@ -215,6 +215,8 @@ CREATE TABLE trackers (
   kind              TEXT NOT NULL
                     CHECK (kind IN ('count','number','duration','boolean','choice')),
   unit              TEXT,                                    -- e.g. "cups", "mg", null for count
+  secondary_unit    TEXT,                                    -- display-only second unit; migration 011
+  secondary_factor  REAL,                                    -- multiplier into it;      migration 011
   target            REAL,                                    -- goal value per reset period; nullable
   reset_period      TEXT NOT NULL DEFAULT 'never'
                     CHECK (reset_period IN ('never','daily','weekly','monthly','yearly')),
@@ -407,6 +409,19 @@ ALTER TABLE trackers ADD COLUMN section_order TEXT;
 ```
 
 **Semantics.** The domain treats the keys as opaque slugs — which sections exist is the *client's* vocabulary (`apps/web/src/lib/sections.ts`), not the domain's. Validation only pins the shape: at most 20 unique lowercase slugs, comma-separated. That keeps the two ends loosely coupled in both directions: a client drops keys it doesn't recognize (or that this tracker has no section for — a derived tracker can't be logged to), and appends any section the stored list never mentioned at its default position, so neither a new section nor a retired one can make a page render wrong. Saving the default order stores `NULL` rather than spelling it out, so a tracker the user never rearranged keeps following the default as it evolves.
+
+### 6.8 Secondary units (migration 011)
+
+A value is stored in one unit but is not always *read* in it: a weight logged in grams is thought about in pounds and ounces, a distance in kilometres is quoted in miles. Converting at logging time would change what's stored — and reinterpret every entry already filed — so the second unit is display-only:
+
+```sql
+ALTER TABLE trackers ADD COLUMN secondary_unit TEXT;
+ALTER TABLE trackers ADD COLUMN secondary_factor REAL;
+```
+
+`secondary_factor` multiplies the primary value into the secondary unit; `secondary_unit` names it. The name is a small spec so that a compound reading needs no lookup table shipped beside the database: parts are joined with `+`, and every part after the first carries how many of it make one of the part before it. `"lb+16oz"` renders 3350 g as *7 lb 6.17 oz*, `"ft+12in"` as *5 ft 10 in*.
+
+**Semantics.** As with the primary `unit`, the labels are opaque to the domain — only the spec's shape is validated (at most three parts, each subdivision a positive count followed by a label). Both columns are nullable and only mean anything together: one without the other is simply no secondary reading, which is what lets either be cleared on its own without a cross-field rule that a PATCH would have to satisfy. The client owns the conversion catalog the tracker form suggests from (`apps/web/src/lib/units.ts`) and the rendering (`formatSecondary`), which rounds in the smallest part's terms before splitting so a rounded subdivision carries into the unit above it rather than printing *7 lb 16 oz*. Being a pure multiplication, offset scales (°C → °F) are out of scope.
 
 ## 7. Core Domain: `@countroster/core`
 
