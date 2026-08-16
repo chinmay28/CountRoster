@@ -84,6 +84,15 @@ levels best-effort (a source that skipped a period carries its last reading
 forward), and its composition donut can step back through past months to show
 how the split looked then.
 
+The form's **Also show as** menu adds a display-only second unit: a weight
+kept in grams reads "7 lb 6.17 oz" in small text under the headline number, on
+the home card, the detail page and the quick-log screen. Nothing about what
+gets stored changes, so it's safe to add to a tracker with years of entries.
+The menu suggests conversions for the unit already typed (grams → pounds +
+ounces, km → miles, ml → fluid ounces, …); "Something else…" takes any unit
+and the multiplier into it. Joining a unit with its subdivision — `lb+16oz`,
+`ft+12in` — reads both at once.
+
 The form's **Period windows** section says where a tracker's periods begin,
 for trackers whose life doesn't follow the calendar: a day can run 7:00 AM →
 6:59 AM (so a 3 AM log still counts for "yesterday"), a week from Sunday, a

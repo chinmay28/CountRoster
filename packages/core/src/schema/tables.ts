@@ -18,6 +18,21 @@ export interface Tracker {
   icon: string | null;
   kind: TrackerKind;
   unit: string | null;
+  /**
+   * An optional second unit the value is *read* in, never stored in: a weight
+   * logged in grams shown as pounds and ounces underneath. The spec is a
+   * plain label ("lb", "mi"), or parts joined with "+" where each later part
+   * is prefixed by how many of it make one of the part before — "lb+16oz"
+   * renders 3350 g as "7 lb 6.17 oz", "ft+12in" as "5 ft 10 in". Null, or a
+   * value without `secondary_factor`, means no secondary reading.
+   */
+  secondary_unit: string | null;
+  /**
+   * Multiplier from the primary value to `secondary_unit`'s first part
+   * (grams → pounds is 0.00220462…). A pure multiplication, so offset scales
+   * like °C → °F are out of scope.
+   */
+  secondary_factor: number | null;
   target: number | null;
   reset_period: ResetPeriod;
   week_start: WeekStart;

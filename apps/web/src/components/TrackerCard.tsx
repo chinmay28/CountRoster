@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { Tracker } from '@countroster/core';
 import { useCore } from '../app/CoreContext.tsx';
 import { formatValue, fromDatetimeLocalValue } from '../lib/format.ts';
+import { formatSecondary } from '../lib/units.ts';
 import { RESET_PERIOD_LABEL } from '../lib/range.ts';
 import { readableInk } from '../lib/color.ts';
 
@@ -32,6 +33,8 @@ export function TrackerCard({ tracker, todayTotal, onLogged }: TrackerCardProps)
 
   // Tint the log button with the tracker's own color (readable ink on top).
   const accent = { background: tracker.color, color: readableInk(tracker.color) };
+  // The same total read in the tracker's secondary unit, when it has one.
+  const secondary = formatSecondary(tracker, todayTotal);
 
   async function customLog(e: React.FormEvent) {
     e.preventDefault();
@@ -71,6 +74,7 @@ export function TrackerCard({ tracker, todayTotal, onLogged }: TrackerCardProps)
           <span className="tracker-card__total" style={{ color: tracker.color }}>
             {formatValue(tracker, todayTotal)}
           </span>
+          {secondary && <span className="value-secondary">{secondary}</span>}
           <span className="tracker-card__sub">
             {tracker.is_snapshot === 1
               ? 'current'

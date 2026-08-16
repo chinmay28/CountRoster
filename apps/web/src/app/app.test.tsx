@@ -105,6 +105,82 @@ describe('create tracker flow', () => {
   });
 });
 
+describe('secondary units', () => {
+  it('reads a home card total in the tracker\'s secondary unit', async () => {
+    const t = await test.createTracker({
+      name: 'Papu Weight',
+      kind: 'number',
+      is_snapshot: 1,
+      unit: 'g',
+      secondary_unit: 'lb+16oz',
+      secondary_factor: 0.002204622621848776,
+    });
+    await test.core.entries.log(t.id, { value: 3350 });
+
+    renderApp(test);
+
+    const card = (await screen.findByText('Papu Weight')).closest('.tracker-card')!;
+    await waitFor(() =>
+      expect(within(card as HTMLElement).getByText('3350 g')).toBeInTheDocument(),
+    );
+    // The same weight, in the unit it's actually thought about in.
+    expect(within(card as HTMLElement).getByText('7 lb 6.17 oz')).toBeInTheDocument();
+  });
+
+  it('saves a suggested conversion from the tracker form', async () => {
+    const user = userEvent.setup();
+    renderApp(test, '/trackers/new');
+
+    await user.type(await screen.findByLabelText('Name'), 'Weight');
+    // The menu only knows what to suggest once the primary unit is typed.
+    await user.type(screen.getByLabelText('Unit (optional)'), 'g');
+    await user.selectOptions(
+      screen.getByLabelText('Also show as (optional)'),
+      'pounds + ounces',
+    );
+    await user.click(screen.getByRole('button', { name: /create tracker/i }));
+
+    await screen.findByRole('heading', { name: 'Weight' });
+    const [created] = await test.core.trackers.list();
+    expect(created).toMatchObject({
+      unit: 'g',
+      secondary_unit: 'lb+16oz',
+    });
+  });
+
+  it('reopens the edit form on the conversion the tracker already has', async () => {
+    const t = await test.createTracker({
+      name: 'Weight',
+      unit: 'g',
+      secondary_unit: 'lb+16oz',
+      secondary_factor: 0.002204622621848776,
+    });
+    renderApp(test, `/trackers/${t.id}/edit`);
+
+    const select = await screen.findByLabelText('Also show as (optional)');
+    expect((select as HTMLSelectElement).selectedOptions[0]!.textContent).toBe(
+      'pounds + ounces',
+    );
+    // …and says what the reading will look like.
+    expect(screen.getByText(/1000 g → 2 lb 3.27 oz/)).toBeInTheDocument();
+  });
+
+  it('refuses a hand-entered unit with no factor to convert by', async () => {
+    const user = userEvent.setup();
+    renderApp(test, '/trackers/new');
+
+    await user.type(await screen.findByLabelText('Name'), 'Widgets');
+    await user.selectOptions(screen.getByLabelText('Also show as (optional)'), 'custom');
+    await user.type(screen.getByLabelText('Unit'), 'crates');
+    await user.click(screen.getByRole('button', { name: /create tracker/i }));
+
+    expect(
+      await screen.findByText(/"crates" needs a conversion factor/),
+    ).toBeInTheDocument();
+    expect(await test.core.trackers.list()).toHaveLength(0);
+  });
+});
+
 describe('period windows', () => {
   it('saves a custom day / month / year window from the tracker form', async () => {
     const user = userEvent.setup();

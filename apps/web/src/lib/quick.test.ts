@@ -11,6 +11,8 @@ function tracker(overrides: Partial<Tracker> = {}): Tracker {
     icon: null,
     kind: 'count',
     unit: null,
+    secondary_unit: null,
+    secondary_factor: null,
     target: null,
     reset_period: 'daily',
     week_start: 1,

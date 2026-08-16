@@ -6,6 +6,7 @@ import { useHiddenMode } from '../app/HiddenMode.tsx';
 import {
   KIND_LABELS,
   TRACKER_KINDS,
+  formatNumber,
   RESET_PERIOD_OPTIONS,
   WEEK_START_OPTIONS,
   MONTH_NAMES,
@@ -20,6 +21,7 @@ import {
   TrackerFieldsEditor,
   type FieldRow,
 } from '../components/TrackerFieldsEditor.tsx';
+import { formatSecondary, presetsFor } from '../lib/units.ts';
 
 /** One row of the derived-sources editor. */
 interface LinkRow {
@@ -33,6 +35,13 @@ interface FormValues {
   color: string;
   kind: TrackerKind;
   unit: string;
+  /**
+   * The optional second unit the value is *read* in, as its spec ("lb+16oz")
+   * and the multiplier that converts into it. Kept as strings so a
+   * half-typed factor is just a half-typed factor, not a NaN.
+   */
+  secondaryUnit: string;
+  secondaryFactor: string;
   target: string;
   default_value: string;
   /** A reset period, or 'snapshot' for a point-in-time stat. */
@@ -57,6 +66,8 @@ const DEFAULTS: FormValues = {
   color: '#4ECDC4',
   kind: 'number',
   unit: '',
+  secondaryUnit: '',
+  secondaryFactor: '',
   target: '',
   default_value: '1',
   reset_period: 'never',
@@ -122,6 +133,8 @@ export function TrackerFormPage() {
         color: t.color,
         kind: t.kind,
         unit: t.unit ?? '',
+        secondaryUnit: t.secondary_unit ?? '',
+        secondaryFactor: t.secondary_factor == null ? '' : String(t.secondary_factor),
         target: t.target == null ? '' : String(t.target),
         default_value: String(t.default_value),
         reset_period: t.is_snapshot === 1 ? 'snapshot' : t.reset_period,
@@ -221,6 +234,22 @@ export function TrackerFormPage() {
       return;
     }
 
+    // A secondary unit and its factor only mean something together — a unit
+    // with no factor would save happily and then display nothing at all, so
+    // say so here rather than let it vanish.
+    const secondaryUnit = values.secondaryUnit.trim();
+    const secondaryFactor = Number(values.secondaryFactor);
+    const hasSecondary =
+      secondaryUnit !== '' &&
+      values.secondaryFactor.trim() !== '' &&
+      Number.isFinite(secondaryFactor) &&
+      secondaryFactor !== 0;
+    if (secondaryUnit !== '' && !hasSecondary) {
+      setError(`"${secondaryUnit}" needs a conversion factor to be shown.`);
+      setSaving(false);
+      return;
+    }
+
     try {
       // A derived tracker holds a computed number; it is never tapped to log.
       // "Snapshot stat" is a UI choice on the same select as the reset
@@ -247,6 +276,10 @@ export function TrackerFormPage() {
       if (description) input.description = description;
       const unit = values.unit.trim();
       if (unit) input.unit = unit;
+      if (hasSecondary) {
+        input.secondary_unit = secondaryUnit;
+        input.secondary_factor = secondaryFactor;
+      }
       if (values.target.trim()) input.target = Number(values.target);
       if (values.isDerived) input.links = links;
       // Only send the hidden flag while hidden mode is unlocked — the
@@ -260,6 +293,8 @@ export function TrackerFormPage() {
           // patch wants explicit nulls to clear; map empties to null.
           description: description || null,
           unit: unit || null,
+          secondary_unit: hasSecondary ? secondaryUnit : null,
+          secondary_factor: hasSecondary ? secondaryFactor : null,
           target: values.target.trim() ? Number(values.target) : null,
           // Always send links so toggling derived off clears any prior ones.
           links: values.isDerived ? links : [],
@@ -375,6 +410,15 @@ export function TrackerFormPage() {
           />
         </label>
 
+        <SecondaryUnitFields
+          primaryUnit={values.unit}
+          unit={values.secondaryUnit}
+          factor={values.secondaryFactor}
+          onChange={(secondaryUnit, secondaryFactor) =>
+            setValues((v) => ({ ...v, secondaryUnit, secondaryFactor }))
+          }
+        />
+
         {!values.isDerived && (
           <label className="field">
             <span>Default value (per tap)</span>
@@ -451,6 +495,118 @@ export function TrackerFormPage() {
         </div>
       </form>
     </section>
+  );
+}
+
+/**
+ * The optional second unit a value is *read* in — grams logged, "7 lb 6.17 oz"
+ * shown underneath. Nothing about what gets stored changes, which is what
+ * makes it safe to add to a tracker that already has years of entries.
+ *
+ * The menu suggests conversions for the primary unit already typed, because
+ * that's the whole of the decision most of the time ("grams… I think in
+ * pounds"). "Something else" is there for the units no list can anticipate: a
+ * unit spec and the multiplier into it, spelled out.
+ */
+function SecondaryUnitFields({
+  primaryUnit,
+  unit,
+  factor,
+  onChange,
+}: {
+  primaryUnit: string;
+  unit: string;
+  factor: string;
+  onChange: (unit: string, factor: string) => void;
+}) {
+  const presets = presetsFor(primaryUnit);
+  // Whether the inputs were opened with nothing in them yet — the one thing
+  // the saved pair can't say for itself.
+  const [customOpen, setCustomOpen] = useState(false);
+  // Otherwise the menu row *is* the current pair, rather than a second copy
+  // of the state to keep in step: a saved tracker reopens on the right row,
+  // and an unrecognized pair (hand-entered, or left behind by a since-edited
+  // primary unit) lands on "Something else" with its values intact.
+  const matched = presets.findIndex((p) => p.unit === unit && String(p.factor) === factor);
+  const choice =
+    customOpen || (matched < 0 && (unit !== '' || factor !== ''))
+      ? 'custom'
+      : matched >= 0
+        ? String(matched)
+        : '';
+
+  // What the reading will look like, on a sample big enough to show whole
+  // units of it — "1 g = 0 lb 0.04 oz" would demonstrate nothing.
+  const parsedFactor = Number(factor);
+  const usable = unit.trim() !== '' && factor.trim() !== '' && Number.isFinite(parsedFactor);
+  const sample = usable
+    ? ([1, 10, 100, 1000].find((n) => Math.abs(n * parsedFactor) >= 1) ?? 1)
+    : 1;
+  const preview = usable
+    ? formatSecondary(
+        { kind: 'number', secondary_unit: unit.trim(), secondary_factor: parsedFactor },
+        sample,
+      )
+    : null;
+
+  return (
+    <div className="field secondary-unit">
+      <label className="field">
+        <span>Also show as (optional)</span>
+        <select
+          value={choice}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === 'custom') return setCustomOpen(true);
+            setCustomOpen(false);
+            if (v === '') return onChange('', '');
+            const preset = presets[Number(v)]!;
+            onChange(preset.unit, String(preset.factor));
+          }}
+        >
+          <option value="">Nothing — just the unit above</option>
+          {presets.map((p, i) => (
+            <option key={p.unit} value={i}>
+              {p.label}
+            </option>
+          ))}
+          <option value="custom">Something else…</option>
+        </select>
+      </label>
+
+      {choice === 'custom' && (
+        <div className="secondary-unit__custom">
+          <label className="field">
+            <span>Unit</span>
+            <input
+              type="text"
+              maxLength={40}
+              placeholder="lb, mi, lb+16oz…"
+              value={unit}
+              onChange={(e) => onChange(e.target.value, factor)}
+            />
+          </label>
+          <label className="field">
+            <span>{`How many per 1 ${primaryUnit.trim() || 'unit'}`}</span>
+            <input
+              type="number"
+              step="any"
+              inputMode="decimal"
+              placeholder="0.0022"
+              value={factor}
+              onChange={(e) => onChange(unit, e.target.value)}
+            />
+          </label>
+        </div>
+      )}
+
+      <p className="muted secondary-unit__hint">
+        {preview
+          ? `Shown under the value: ${formatNumber(sample, primaryUnit.trim() || null)} → ${preview}`
+          : 'A second unit shown as small text under the value. Join a unit with its' +
+            ' subdivision to read both at once — "lb+16oz" gives "7 lb 6.17 oz".'}
+      </p>
+    </div>
   );
 }
 

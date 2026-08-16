@@ -768,6 +768,54 @@ func TestSectionOrderOverAPI(t *testing.T) {
 	}
 }
 
+// TestSecondaryUnitOverAPI pins the wire contract for the display-only second
+// unit: a nullable spec and a nullable factor that survive create and PATCH,
+// clear on an explicit null, and 400 on a malformed spec.
+func TestSecondaryUnitOverAPI(t *testing.T) {
+	c := &client{t: t, base: newServer(t).URL}
+
+	var created m
+	c.postJSON("/api/trackers", m{
+		"name":             "Papu Weight",
+		"unit":             "g",
+		"secondary_unit":   "lb+16oz",
+		"secondary_factor": 0.002204622621848776,
+	}, &created)
+	if created["secondary_unit"] != "lb+16oz" {
+		t.Errorf("secondary_unit = %v", created["secondary_unit"])
+	}
+	if created["secondary_factor"] != 0.002204622621848776 {
+		t.Errorf("secondary_factor = %v", created["secondary_factor"])
+	}
+	id := created["id"].(string)
+
+	var plain m
+	c.postJSON("/api/trackers", m{"name": "Water"}, &plain)
+	if plain["secondary_unit"] != nil || plain["secondary_factor"] != nil {
+		t.Errorf("secondary unit should default to null, got %v / %v",
+			plain["secondary_unit"], plain["secondary_factor"])
+	}
+
+	res, _ := c.do("PATCH", "/api/trackers/"+id, m{"secondary_unit": "lb+oz"})
+	if res.StatusCode != 400 {
+		t.Errorf("malformed secondary_unit should 400, got %d", res.StatusCode)
+	}
+
+	var cleared m
+	res, body := c.do("PATCH", "/api/trackers/"+id,
+		m{"secondary_unit": nil, "secondary_factor": nil})
+	if res.StatusCode != 200 {
+		t.Fatalf("null patch should 200, got %d: %s", res.StatusCode, body)
+	}
+	if err := json.Unmarshal(body, &cleared); err != nil {
+		t.Fatal(err)
+	}
+	if cleared["secondary_unit"] != nil || cleared["secondary_factor"] != nil {
+		t.Errorf("null should clear the secondary unit, got %v / %v",
+			cleared["secondary_unit"], cleared["secondary_factor"])
+	}
+}
+
 // A stat bucket carries min/max alongside value/count — the per-period table
 // reads them for a snapshot tracker's spread.
 func TestBucketsCarryMinAndMax(t *testing.T) {

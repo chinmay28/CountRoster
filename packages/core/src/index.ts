@@ -71,6 +71,15 @@ export {
   type TransactionConfirmInput,
 } from './schema/validators.js';
 
+// The secondary-unit spec (shared with the client, which renders it)
+export {
+  parseSecondaryUnit,
+  isSecondaryUnit,
+  MAX_SECONDARY_UNIT_LENGTH,
+  MAX_SECONDARY_UNIT_PARTS,
+  type SecondaryUnitPart,
+} from './schema/units.js';
+
 // Services
 export {
   type TrackerService,
