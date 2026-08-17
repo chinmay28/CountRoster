@@ -261,13 +261,12 @@ export function QuickLogPage() {
 
       <div className="quick__headline">
         <h1 className="quick__name">{tracker.name}</h1>
+        {/* The secondary reading rides on the total's line rather than under
+            it. It restates the same number, so it was never worth a line of
+            its own — and this screen has none to spare above the keypad. */}
         <span className="quick__total" style={painted ? undefined : { color: tracker.color }}>
           {formatValue(tracker, headline)}
-        </span>
-        {headlineSecondary && <span className="value-secondary">{headlineSecondary}</span>}
-        <span className="quick__muted">
-          {headlineLabel}
-          {tracker.target != null ? ` · target ${formatValue(tracker, tracker.target)}` : ''}
+          {headlineSecondary && <span className="value-secondary">{headlineSecondary}</span>}
         </span>
         {tracker.target != null && tracker.is_snapshot === 0 && (
           <div className="quick__track">
@@ -276,15 +275,16 @@ export function QuickLogPage() {
             />
           </div>
         )}
-        {/* Under the bar rather than on the label line above it: "today" and
-            "target" name the number, this compares it, and three clauses in a
-            row read as one long sentence on a phone. It also lands where the
-            eye already is when it's judging pace. */}
-        {pace && (
-          <span className="quick__pace">
-            {formatValue(tracker, pace.value)} by now {pace.label}
-          </span>
-        )}
+        {/* Everything that qualifies the number — which window it covers, what
+            it's aiming at, where the last one stood by this hour — reads as
+            one caption under the bar. Three clauses would be a mouthful at the
+            label's size, so this line is a step smaller and quieter: it's
+            context you glance at, not a reading. */}
+        <span className="quick__meta">
+          {headlineLabel}
+          {tracker.target != null ? ` · target ${formatValue(tracker, tracker.target)}` : ''}
+          {pace ? ` · ${formatValue(tracker, pace.value)} by now ${pace.label}` : ''}
+        </span>
       </div>
 
       {logError && <p className="quick__error">{logError}</p>}
@@ -298,7 +298,12 @@ export function QuickLogPage() {
             answers={answers}
             onChange={setAnswers}
             disabled={busy}
-            accent={tracker.color}
+            /* A painted screen is already flooded with the tracker's color, so
+               filling a selected chip with it would hide the answer in the
+               ground. There the ink is the contrasting shade, so it's what an
+               answered chip fills with. */
+            accent={painted ? readableInk(tracker.color) : tracker.color}
+            compact
           />
         </div>
       )}

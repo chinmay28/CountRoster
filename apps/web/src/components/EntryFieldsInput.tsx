@@ -13,6 +13,15 @@ interface EntryFieldsInputProps {
    * color so the controls belong to the same surface as the log button.
    */
   accent?: string;
+  /**
+   * Collapse each Yes/No field to a single chip that cycles through its three
+   * states. The quick-log screen turns this on because it has one screen to
+   * fit everything in and a label-over-two-pills block per field is what
+   * pushed the log button off the bottom. Everywhere else has room to scroll,
+   * so the two pills — where both answers are visible and each is one tap —
+   * stay the default.
+   */
+  compact?: boolean;
 }
 
 /**
@@ -29,6 +38,10 @@ interface EntryFieldsInputProps {
  * `fieldColumnBasis`) and the layout in styles.css breaks the row where that
  * width no longer fits. A screen of Yes/No fields pairs up instead of pushing
  * the log control off the bottom.
+ *
+ * In `compact` mode a Yes/No field collapses further still, to a single chip
+ * that carries its own answer — see the prop. Those chips size to their text
+ * rather than to a column, so they wrap as many to a row as fit.
  */
 export function EntryFieldsInput({
   fields,
@@ -36,6 +49,7 @@ export function EntryFieldsInput({
   onChange,
   disabled = false,
   accent,
+  compact = false,
 }: EntryFieldsInputProps) {
   if (fields.length === 0) return null;
 
@@ -44,7 +58,7 @@ export function EntryFieldsInput({
   }
 
   return (
-    <div className="entry-fields">
+    <div className={`entry-fields${compact ? ' entry-fields--compact' : ''}`}>
       {fields.map((field) => {
         const answer = answers[field.id] ?? null;
         // No field is ever mandatory, so nothing is marked as such: an
@@ -94,6 +108,41 @@ export function EntryFieldsInput({
           const on = answer === 1 || answer === true;
           const off = answer === 0 || answer === false;
           const tint = accent ?? 'var(--accent)';
+
+          // One chip carrying its own name and its own answer, cycling
+          // blank → Yes → No → blank. It costs a row per two fields instead
+          // of a row per field, which is the whole point — but it only reads
+          // as three states if all three look different, so an answered chip
+          // is filled (Yes) or outlined-and-ticked (No) while a blank one
+          // stays quiet. The state is in the accessible name too: the glyph
+          // is decoration, and "Wet diaper" alone wouldn't say what it holds.
+          if (compact) {
+            return (
+              <button
+                type="button"
+                key={field.id}
+                className={`pill pill--state${on ? ' pill--on' : ''}${
+                  off ? ' pill--state-off' : ''
+                }`}
+                aria-label={`${field.name}: ${on ? 'yes' : off ? 'no' : 'not answered'}`}
+                disabled={disabled}
+                style={
+                  on
+                    ? { background: tint, borderColor: tint, color: readableInk(accent ?? '#4ECDC4') }
+                    : undefined
+                }
+                onClick={() => set(field.id, on ? 0 : off ? null : 1)}
+              >
+                {(on || off) && (
+                  <span className="pill__mark" aria-hidden="true">
+                    {on ? '✓' : '✕'}
+                  </span>
+                )}
+                {field.name}
+              </button>
+            );
+          }
+
           return (
             <div
               className="entry-fields__group"

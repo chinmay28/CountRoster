@@ -1961,7 +1961,9 @@ input.txn__name:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
+  /* Every block here has to share one screen with a 4-row keypad, so the
+     rhythm between them is tighter than the app's usual 1rem. */
+  gap: 0.7rem;
   padding: max(0.75rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
     max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
   /* Full-bleed on a phone, a centered column on anything wider. */
@@ -2007,7 +2009,7 @@ input.txn__name:focus {
   width: 100%;
 }
 .quick__name {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 650;
   margin: 0;
   letter-spacing: -0.01em;
@@ -2016,11 +2018,24 @@ input.txn__name:focus {
    control below it owns the eye. A painted screen has no competing number,
    so the total can be the headline it deserves to be. */
 .quick__total {
-  font-size: 2rem;
+  font-size: 1.85rem;
   font-weight: 400;
   line-height: 1.15;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+  /* The secondary reading sits inside this line, so keep them on a shared
+     baseline and let the pair wrap as a block if the two together outrun a
+     narrow screen. */
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+}
+/* Inline, it restates rather than annotates: no top margin to push it under
+   the number it's beside. */
+.quick__total .value-secondary {
+  margin-top: 0;
 }
 .quick--painted .quick__total {
   font-size: clamp(3rem, 18vw, 4.5rem);
@@ -2042,24 +2057,27 @@ input.txn__name:focus {
   color: inherit;
   opacity: 0.78;
 }
-/* The pace comparison: a step quieter than the label line, since it's context
-   for the total rather than a reading of it. */
-.quick__pace {
+/* Window, target and pace on one line under the bar: context for the total
+   rather than a reading of it, so it's a step quieter than the total and
+   allowed to wrap to a second line on a narrow screen. */
+.quick__meta {
   color: var(--muted);
   font-size: 0.8rem;
-  margin-top: 0.45rem;
+  margin-top: 0.4rem;
+  text-align: center;
+  text-wrap: balance;
 }
-.quick--painted .quick__pace {
+.quick--painted .quick__meta {
   color: inherit;
   opacity: 0.7;
 }
 .quick__track {
-  width: min(60%, 14rem);
+  width: min(72%, 15rem);
   height: 0.35rem;
   border-radius: 999px;
   background: color-mix(in srgb, currentColor 22%, transparent);
   overflow: hidden;
-  margin-top: 0.6rem;
+  margin-top: 0.45rem;
 }
 .quick__track span {
   display: block;
@@ -2100,7 +2118,7 @@ input.txn__name:focus {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
+  gap: 0.75rem;
   padding-bottom: 0.5rem;
 }
 .quick__readonly {
@@ -2353,7 +2371,9 @@ input.txn__name:focus {
 .keypad__key {
   font: inherit;
   font-size: 1.5rem;
-  min-height: 3.25rem;
+  /* 48px: still comfortably over the 44px touch-target floor, and four rows
+     of it is 64px less than four rows of 3.25rem. */
+  min-height: 3rem;
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--surface);
@@ -2570,11 +2590,49 @@ input.txn__name:focus {
   cursor: default;
 }
 
-/* The quick screen's answers sit between the headline and the control. */
+/* A whole Yes/No field folded into one chip (compact mode — see
+   EntryFieldsInput). It carries its own name, so it sizes to its text instead
+   of claiming a column like the field groups it sits among. */
+.pill--state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+}
+/* Not a column. The `> *` rule above hands every field at least half a row —
+   right for a label stacked over its answers, wrong for a chip that already
+   carries both, so opt out at the same specificity and let these size to
+   their text and wrap as many to a row as fit. */
+.entry-fields > .pill--state {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+/* Three states have to look like three. "Yes" is filled (via .pill--on), "No"
+   is the field's own text at full strength behind a cross, and an unanswered
+   chip stays muted — so a glance across the row separates answered from not,
+   and only then which answer. */
+.pill--state-off {
+  color: var(--text);
+  border-color: var(--muted);
+}
+.pill__mark {
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Compact chips size to their text, so left-packed they'd leave a ragged edge
+   under a centred headline. Centre the row instead. */
+.entry-fields--compact {
+  justify-content: center;
+}
+
+/* The quick screen's answers sit between the headline and the control. The
+   answers here are compact chips that centre themselves and size to their own
+   text, so they need no inset of their own — the screen's padding already
+   holds them off the edge, and anything more just costs a chip per row. */
 .quick__fields {
   width: min(28rem, 100%);
   margin: 0 auto;
-  padding: 0 1rem;
 }
 /* This screen reads down a centre line — headline, amount, keypad — and a
    column is wider than the pills it holds. Centre the answers inside their
@@ -2595,6 +2653,19 @@ input.txn__name:focus {
   background: color-mix(in srgb, var(--quick-ink) 12%, transparent);
   border-color: color-mix(in srgb, var(--quick-ink) 40%, transparent);
   color: var(--quick-ink);
+}
+/* The three chip states again, in the paint's own terms: unanswered recedes,
+   "No" comes forward at full strength, "Yes" is filled by the inline accent
+   (the ink, on this screen — see QuickLogPage). */
+.quick--painted .quick__fields .pill--state {
+  opacity: 0.72;
+}
+.quick--painted .quick__fields .pill--state-off,
+.quick--painted .quick__fields .pill--on {
+  opacity: 1;
+}
+.quick--painted .quick__fields .pill--state-off {
+  border-color: color-mix(in srgb, var(--quick-ink) 80%, transparent);
 }
 
 /* Answers as they read back on an entry row. */
