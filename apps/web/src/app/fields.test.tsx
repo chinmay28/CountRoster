@@ -208,6 +208,46 @@ describe('logging with custom fields', () => {
     });
   });
 
+  /**
+   * The quick screen folds a Yes/No field into one chip so the keypad and the
+   * log button still fit under it. Three taps have to reach all three answers
+   * — including back to blank, since no field is ever mandatory.
+   */
+  it('cycles a yes/no field through its three answers on the quick screen', async () => {
+    const user = userEvent.setup();
+    const { tracker, wetDiaper } = await feedingTracker(test);
+    renderApp(test, `/trackers/${tracker.id}/quick`);
+
+    const chip = () => screen.getByRole('button', { name: /^Wet diaper:/ });
+    expect(await screen.findByRole('button', { name: 'Wet diaper: not answered' }))
+      .toBeInTheDocument();
+
+    await user.click(chip());
+    expect(chip()).toHaveAccessibleName('Wet diaper: yes');
+    await user.click(chip());
+    expect(chip()).toHaveAccessibleName('Wet diaper: no');
+    await user.click(chip());
+    expect(chip()).toHaveAccessibleName('Wet diaper: not answered');
+
+    // Land on "no" and log it: a blank field and a "no" are different answers,
+    // and the one that reached the entry has to be the one on the chip.
+    await user.click(chip());
+    await user.click(chip());
+    const keypad = screen.getByRole('group', { name: 'Number keypad' });
+    await user.click(within(keypad).getByRole('button', { name: '5' }));
+    await user.click(screen.getByRole('button', { name: 'Log entry' }));
+
+    await waitFor(async () => {
+      const entries = await test.core.entries.forTracker(tracker.id);
+      expect(entries).toHaveLength(1);
+      expect(entries[0]!.fields).toHaveLength(1);
+      expect(entries[0]!.fields[0]!.field_id).toBe(wetDiaper.id);
+      expect(entries[0]!.fields[0]!.number_value).toBe(0);
+    });
+    // And the chip resets, so "no" can't ride along on the next feed.
+    await waitFor(() => expect(chip()).toHaveAccessibleName('Wet diaper: not answered'));
+  });
+
   it('edits an entry answer in place', async () => {
     const user = userEvent.setup();
     const { tracker, feedType } = await feedingTracker(test);
