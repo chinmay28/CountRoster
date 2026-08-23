@@ -1,8 +1,10 @@
 # Changelog
 
-Releases are `vMAJOR.MINOR.PATCH`, where the patch number is the repository's
-commit count — `v1.1.98` is the 98th commit on the 1.1 line. See
+Releases are `vYEAR.MONTH.PATCH` — a calendar version whose patch number is
+the repository's commit count — `v2026.8.311` is the 311th commit on the
+2026.8 line. See
 [`server/internal/version/version.go`](./server/internal/version/version.go).
+(Releases up to `v1.1.98` used the older `vMAJOR.MINOR.PATCH` scheme.)
 
 Each section below is the body of the corresponding GitHub release;
 [`.github/workflows/release.yml`](./.github/workflows/release.yml) reads it
