@@ -1,7 +1,7 @@
 /**
- * The running client's version, `vMAJOR.MINOR.PATCH`, where the patch number is
- * the repository's commit count (so `v1.1.311` is the 311th commit on the 1.1
- * line).
+ * The running client's version, `vYEAR.MONTH.PATCH` — a calendar version whose
+ * patch number is the repository's commit count (so `v2026.8.311` is the 311th
+ * commit on the 2026.8 line).
  *
  * Inlined at build time by Vite's `define` (see vite.config.ts) from
  * scripts/version.mjs — the same source the Go binary is stamped from, so the

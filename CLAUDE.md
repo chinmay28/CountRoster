@@ -142,14 +142,17 @@ and skips the routes when it's nil.
 
 `internal/backup` produces/consumes the `.countroster.zip` bundle (manifest + `all.json` + CSVs, stored uncompressed). The manifest checksum is SHA-256 over the **JavaScript-canonical** JSON serialization of the tables — `internal/jsjson` reproduces `JSON.stringify` byte-for-byte (ECMA number formatting, minimal escaping, insertion-ordered keys). Golden fixtures in `internal/backup/testdata/` (a bundle exported by the TS implementation) prove bundles round-trip across implementations; don't regenerate them casually. (Reminders were removed as a feature; the `reminders` table remains in the schema because migrations are append-only and old backups must round-trip.)
 
-### Versioning is `vMAJOR.MINOR.<commit count>`
+### Versioning is `vYEAR.MONTH.<commit count>`
 
-`v1.1.311` is the 311th commit on the 1.1 line. `Major`/`Minor` are consts in
-`server/internal/version/version.go`; the patch number can only come from git,
-so it's stamped at build time — `-ldflags -X …version.Patch=` for the binary,
-Vite `define` for the bundle. Both read `scripts/version.mjs`, which is the one
-place the number is assembled (it parses `Major`/`Minor` out of `version.go`,
-so keep them as plain `Major = 1` lines its regex can find). An unstamped build
+A calendar version: `v2026.8.311` is the 311th commit on the 2026.8 line. The
+month is unpadded — that keeps the tag valid semver. `Year`/`Month` are consts
+in `server/internal/version/version.go`, bumped by hand when a release line
+opens (never taken from the build clock — that would move the version without
+a commit); the patch number can only come from git, so it's stamped at build
+time — `-ldflags -X …version.Patch=` for the binary, Vite `define` for the
+bundle. Both read `scripts/version.mjs`, which is the one place the number is
+assembled (it parses `Year`/`Month` out of `version.go`, so keep them as plain
+`Year = 2026` lines its regex can find). An unstamped build
 reports patch `0`. The web reads it from `apps/web/src/version.ts`; **don't
 assert the literal version string in a test** — it changes with every commit.
 

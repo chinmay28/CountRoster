@@ -89,7 +89,7 @@ a {
   flex-direction: column;
   line-height: 1.15;
 }
-/* The running build, MAJOR.MINOR.<commit count> — see src/version.ts. Tabular
+/* The running build, YEAR.MONTH.<commit count> — see src/version.ts. Tabular
    figures so the number doesn't shimmy as the patch count rolls over. */
 .app__brand-version {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

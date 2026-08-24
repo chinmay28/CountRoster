@@ -120,11 +120,13 @@ before `go build`. Otherwise the server falls back to serving the `--web-dist`
 directory from disk.
 
 `npm run build` stamps the version into both artifacts. It's
-`vMAJOR.MINOR.PATCH` where the patch number is the repository's **commit
-count** — `v1.1.311` is the 311th commit on the 1.1 line — shown in the app
-header, printed by `countroster version`, and returned by `/api/health`. Major
-and minor are constants in `server/internal/version/version.go`; a build made
-without git reports patch `0`. See [`server/README.md`](./server/README.md#version).
+`vYEAR.MONTH.PATCH` — a calendar version whose patch number is the repository's
+**commit count** — `v2026.8.311` is the 311th commit on the 2026.8 line — shown
+in the app header, printed by `countroster version`, and returned by
+`/api/health`. Year and month are constants in
+`server/internal/version/version.go`, bumped by hand when a release line opens;
+a build made without git reports patch `0`. See
+[`server/README.md`](./server/README.md#version).
 
 Configure the server with `countroster serve` flags — prefer these over the
 env vars, which remain only as fallbacks:
