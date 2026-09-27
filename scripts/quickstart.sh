@@ -6,6 +6,10 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/chinmay28/countroster/main/scripts/quickstart.sh | sudo bash
 #
+# and the same one-liner with a flag takes it away again, keeping the data:
+#
+#   curl -fsSL https://raw.githubusercontent.com/chinmay28/countroster/main/scripts/quickstart.sh | sudo bash -s -- --uninstall
+#
 # Two ways to get the binary — COUNTROSTER_INSTALL picks one:
 #
 #   source   (default) clone the repo and build it here. Needs Node and Go at
@@ -82,6 +86,14 @@ step() { printf '\n%s%s%s\n' "$C_DIM" "$*" "$C_OFF"; }
 if [ "$(id -u)" -ne 0 ]; then
   die "Run as root: curl -fsSL .../quickstart.sh | sudo bash   (or: sudo ./scripts/quickstart.sh)"
 fi
+
+# Parsed before anything else runs, so an uninstall never installs a toolchain
+# or clones anything on its way to removing what it would have installed.
+case "${1:-}" in
+  --uninstall) UNINSTALL=1 ;;
+  "")          UNINSTALL=0 ;;
+  *)           die "Unknown option: $1 (only --uninstall is supported)" ;;
+esac
 command -v systemctl >/dev/null 2>&1 || die "systemd is required (no systemctl found)."
 
 # ---------------------------------------------------------------------------
@@ -113,6 +125,38 @@ UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 # server/go.mod pins the real toolchain, which Go fetches automatically.
 GO_MIN_MINOR=21
 GO_INSTALL_VERSION="1.25.0"
+
+# ---------------------------------------------------------------------------
+# Uninstall: undo what an install put on the system, and nothing else.
+# ---------------------------------------------------------------------------
+# It resolves the same paths from the same env vars as an install, so a custom
+# COUNTROSTER_PREFIX / COUNTROSTER_DATA_DIR / COUNTROSTER_USER is honoured.
+# The data directory (database, backups) and the service user are kept: losing
+# someone's records should take a command they typed on purpose. Node and Go
+# are left too — they may have been there first, and other things may use them.
+if [ "$UNINSTALL" -eq 1 ]; then
+  log "Removing CountRoster (data is kept)"
+  # A checkout installed in place (sudo ./scripts/quickstart.sh) is the user's
+  # own clone, not ours to delete; the unit is the only record of where it was.
+  unit_workdir="$(sed -n 's/^WorkingDirectory=//p' "$UNIT_PATH" 2>/dev/null || true)"
+  systemctl disable --now "${SERVICE_NAME}.service" >/dev/null 2>&1 || true
+  rm -f "$UNIT_PATH"
+  systemctl daemon-reload || true
+  systemctl reset-failed "${SERVICE_NAME}.service" >/dev/null 2>&1 || true
+  # Only the two things an install creates under the prefix — the clone and the
+  # release binary — so a prefix that holds anything else survives.
+  rm -rf "${PREFIX:?}/src" "${PREFIX:?}/bin"
+  rmdir "$PREFIX" 2>/dev/null || true
+  ok "service stopped, unit and $PREFIX removed"
+  case "$unit_workdir" in
+    "" | "$PREFIX" | "$PREFIX/src") ;;
+    *) warn "the service was built from your checkout at $unit_workdir — left as it is." ;;
+  esac
+  echo
+  log "Your data is still at $DATA_DIR (database + backups)."
+  log "Delete it with: sudo rm -rf $DATA_DIR && sudo userdel $SVC_USER"
+  exit 0
+fi
 
 # If this script is being run from inside an existing checkout (sudo ./scripts/
 # quickstart.sh) rather than piped from curl, build that checkout in place.

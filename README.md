@@ -66,6 +66,18 @@ curl -fsSL https://raw.githubusercontent.com/chinmay28/countroster/main/scripts/
 
 (or, from a checkout: `sudo ./scripts/quickstart.sh`)
 
+To remove it, run the same one-liner with `--uninstall`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chinmay28/countroster/main/scripts/quickstart.sh | sudo bash -s -- --uninstall
+```
+
+That stops and disables the service and removes its unit and everything under
+`/opt/countroster` (the clone or the release binary). Your data is kept: the
+database and its backups stay in `/var/lib/countroster`, and the `countroster`
+user stays too. The uninstall prints the command that deletes both. Node and Go
+are left installed.
+
 It installs Node 22 and Go if needed (both build-time only), creates a dedicated
 `countroster` system user, compiles the PWA and the static server binary, and runs
 it under systemd serving the API + PWA on `http://<host>:8787`.
