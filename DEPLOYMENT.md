@@ -254,6 +254,24 @@
 > journalctl -u countroster -f
 > ```
 >
+> **Uninstall** with the same one-liner and a flag (pass the same env vars as
+> the install if you overrode `COUNTROSTER_PREFIX`, `COUNTROSTER_DATA_DIR` or
+> `COUNTROSTER_USER`):
+>
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/chinmay28/countroster/main/scripts/quickstart.sh | sudo bash -s -- --uninstall
+> ```
+>
+> It stops and disables `countroster.service`, deletes the unit, and removes
+> `/opt/countroster/src` and `/opt/countroster/bin` (and the prefix itself if
+> that leaves it empty). A checkout that was built in place is left alone. It
+> **keeps the data**: `/var/lib/countroster` (database + backups) and the
+> `countroster` user stay, and the last lines print
+> `sudo rm -rf /var/lib/countroster && sudo userdel countroster` for when you
+> really mean it. Node and Go are left installed; they're build-time tools
+> that may predate CountRoster. Running it again, or on a machine without an
+> install, does nothing and succeeds.
+>
 > Still **no auth** — keep it on a trusted network. For HTTPS + "Add to Home
 > Screen", front it with Tailscale Serve or a reverse proxy (Caddy/nginx).
 >
