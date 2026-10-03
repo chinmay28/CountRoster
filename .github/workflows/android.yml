@@ -3,12 +3,11 @@ name: Android
 # Builds the Android app (apps/android) and tests it at three levels:
 #
 #   * JVM unit tests — the launcher, bridge and shortcut logic, plus the
-#     Kotlin launcher driving the real Go engine (the x86_64 engine is a static
-#     linux/amd64 binary, so the runner can exec it directly);
+#     Kotlin launcher driving the real Go engine (a host-native build of it);
 #   * the Go engine and web suites the app is built from;
-#   * instrumented tests on an emulator — the engine exec'd from the native
-#     library directory, its timezone and DNS on a real Android, and the
-#     WebView rendering the app.
+#   * instrumented tests on an emulator — the arm64 engine (under the
+#     emulator's ARM translation) exec'd from the native library directory,
+#     its timezone and DNS on a real Android, and the WebView rendering the app.
 #
 # The debug APK is uploaded as an artifact. See MOBILE.md.
 
@@ -127,10 +126,13 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # The app ships an arm64 engine only (MOBILE.md §2.1). Android 11's
+      # x86_64 images translate ARM code, binaries included, so the emulator
+      # runs the very engine a phone does.
       - name: Run instrumented tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: 30
           target: google_apis
           arch: x86_64
           disable-animations: true

@@ -62,13 +62,22 @@ Why:
 - **The contract is small and testable on a laptop:** flags, a secret in the
   environment, a READY line on stdout, and exit on stdin EOF
   (`server/cmd/engine/main.go`). JVM tests drive the real engine through the
-  real Kotlin launcher (`RealEngineTest`).
+  real Kotlin launcher (`RealEngineTest`, against a host-native build).
 - **Lifetime is tied to the app for free.** The engine exits when its stdin
   pipe closes, so it can't outlive the app process however that dies.
 
-The ABIs are `arm64-v8a` (a real `android/arm64` build) and `x86_64` for
-emulators. Go can only build `android/amd64` with cgo, so the x86_64 engine is
-a static `linux/amd64` binary, which Android's kernel runs the same way.
+**arm64-v8a only.** The engine is an `android/arm64` build, which covers every
+current phone. x86_64 is deliberately absent, a lesson from the first emulator
+run. The pure-Go SQLite's C runtime (modernc's transpiled musl) uses legacy
+syscalls on x86_64: `fstatat` takes a fast path through `SYS_lstat`, and
+`access` and `open` behave similarly. Android's app seccomp filter only allows
+what bionic uses, the `*at` family, so it kills the engine with SIGSYS on its
+first `lstat`. arm64 has no legacy syscalls, so musl there uses only what
+Android allows. Listing only arm64 makes x86_64 devices (ChromeOS, emulators)
+*incompatible* rather than crashing. CI's x86_64 emulator (API 30) runs the
+arm64 engine through Android 11's ARM translation, so it tests the exact
+binary a phone runs. Supporting x86_64 would take a SQLite driver that avoids
+those syscalls on amd64 (e.g. a wasm build); that's a follow-up, not a v1 need.
 
 The cost of a cgo-free binary on Android is two OS gaps, both closed (§9).
 

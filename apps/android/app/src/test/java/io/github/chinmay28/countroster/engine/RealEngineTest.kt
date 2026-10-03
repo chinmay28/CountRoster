@@ -13,24 +13,20 @@ import java.nio.file.Files
 import java.util.zip.ZipFile
 
 /**
- * The Kotlin launcher against the real Go engine. The x86_64 engine is a
- * static linux/amd64 binary (scripts/build-android.sh), so on a Linux x86_64
- * host — a dev box, CI — the JVM can run exactly what the emulator runs.
- * Skipped anywhere else, or before the engine has been built.
+ * The Kotlin launcher against the real Go engine — a host-native build of
+ * the same code the phone runs (scripts/build-android.sh makes it). Skipped
+ * until the engine has been built.
  */
 class RealEngineTest {
     private val binary = File(
-        System.getProperty("countroster.engineBinary")
-            ?: "src/main/jniLibs/x86_64/libcountroster_engine.so",
+        System.getProperty("countroster.engineBinary") ?: "build/host-engine/countroster-engine",
     )
     private lateinit var dataDir: File
     private var process: EngineProcess? = null
 
     @Before
     fun setUp() {
-        val linuxX64 = System.getProperty("os.name") == "Linux" &&
-            System.getProperty("os.arch") in setOf("amd64", "x86_64")
-        assumeTrue("needs a Linux x86_64 host and a built engine", linuxX64 && binary.canExecute())
+        assumeTrue("build the engine first (scripts/build-android.sh)", binary.canExecute())
         dataDir = Files.createTempDirectory("engine").toFile()
     }
 

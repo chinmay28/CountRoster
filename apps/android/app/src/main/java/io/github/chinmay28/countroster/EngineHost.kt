@@ -85,16 +85,20 @@ class EngineHost private constructor(private val app: Context) {
         if (current != null && process?.isAlive == true) return current
         stopLocked()
 
+        val dataDir = File(app.filesDir, "engine").apply { mkdirs() }
         val command = EngineCommand(
             binary = File(app.applicationInfo.nativeLibraryDir, EngineCommand.BINARY_NAME).path,
-            dataDir = File(app.filesDir, "engine").path,
+            dataDir = dataDir.path,
             timezone = TimeZone.getDefault().id,
             dnsServers = dnsServers,
+            tmpDir = app.cacheDir.path,
         )
         val secret = Secret.generate()
-        val started = EngineProcess.start(command.argv(), command.environment(secret)) { line ->
-            Log.i(ENGINE_TAG, line)
-        }
+        val started = EngineProcess.start(
+            command.argv(),
+            command.environment(secret),
+            workingDir = dataDir,
+        ) { line -> Log.i(ENGINE_TAG, line) }
         val ep = Endpoint(started.port, secret)
         process = started
         endpoint = ep

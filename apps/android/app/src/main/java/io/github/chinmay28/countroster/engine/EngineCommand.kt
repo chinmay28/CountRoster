@@ -15,6 +15,11 @@ data class EngineCommand(
     val timezone: String,
     /** The active network's DNS servers, as IP literals. */
     val dnsServers: List<String> = emptyList(),
+    /**
+     * Scratch space (the app's cache dir). SQLite otherwise falls back to
+     * /var/tmp, /tmp or the working directory, none writable by an app.
+     */
+    val tmpDir: String? = null,
 ) {
     fun argv(): List<String> = buildList {
         add(binary)
@@ -30,7 +35,13 @@ data class EngineCommand(
     }
 
     /** The secret travels in the environment, never on the command line. */
-    fun environment(secret: String): Map<String, String> = mapOf(SECRET_ENV to secret)
+    fun environment(secret: String): Map<String, String> = buildMap {
+        put(SECRET_ENV, secret)
+        tmpDir?.let {
+            put("TMPDIR", it)
+            put("SQLITE_TMPDIR", it)
+        }
+    }
 
     companion object {
         const val SECRET_ENV = "COUNTROSTER_ENGINE_SECRET"

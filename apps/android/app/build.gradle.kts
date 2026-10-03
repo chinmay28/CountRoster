@@ -5,9 +5,11 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// ABIs the Go engine is built for (scripts/build-android.sh). arm64-v8a is
-// every current phone; x86_64 is the emulator.
-val engineAbis = listOf("arm64-v8a", "x86_64")
+// ABIs the Go engine is built for (scripts/build-android.sh): arm64-v8a, every
+// current phone. Not x86_64 — the engine's SQLite runtime uses legacy
+// syscalls there that Android's seccomp filter kills (see MOBILE.md §2.1);
+// listing only arm64 marks x86_64 devices incompatible instead of crashing.
+val engineAbis = listOf("arm64-v8a")
 val engineBinaries = engineAbis.map {
     layout.projectDirectory.file("src/main/jniLibs/$it/libcountroster_engine.so").asFile
 }
@@ -65,7 +67,16 @@ android {
         jniLibs { useLegacyPackaging = true }
     }
 
-    testOptions { unitTests.isReturnDefaultValues = true }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+        // RealEngineTest drives a host-native engine the build script makes.
+        unitTests.all {
+            it.systemProperty(
+                "countroster.engineBinary",
+                layout.buildDirectory.file("host-engine/countroster-engine").get().asFile.path,
+            )
+        }
+    }
 }
 
 kotlin {

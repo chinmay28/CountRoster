@@ -42,6 +42,13 @@ class EngineCommandTest {
         assertFalse(cmd.argv().any { it.contains(secret) })
         assertEquals(mapOf("COUNTROSTER_ENGINE_SECRET" to secret), cmd.environment(secret))
     }
+
+    @Test
+    fun sqliteGetsAWritableTempDir() {
+        val env = EngineCommand("/bin/e", "/d", "UTC", tmpDir = "/data/cache").environment("s")
+        assertEquals("/data/cache", env["TMPDIR"])
+        assertEquals("/data/cache", env["SQLITE_TMPDIR"])
+    }
 }
 
 class ReadyLineTest {
