@@ -8,8 +8,9 @@
 #   1. the web client, built with `--mode native` (no service worker), copied
 #      into server/cmd/engine/webdist/ for embedding;
 #   2. the Go engine, cross-compiled per ABI into the app's jniLibs/ as
-#      libcountroster_engine.so — the app execs it from its native library
-#      directory, the one place Android lets an app run a binary it ships;
+#      libcountroster_engine.so (server/cmd/engine/build-android-engines.sh)
+#      — the app execs it from its native library directory, the one place
+#      Android lets an app run a binary it ships;
 #   3. Gradle, with the calendar version passed in (scripts/version.mjs).
 #
 # Needs Node, Go, a JDK 17+, and the Android SDK (ANDROID_HOME). No NDK: the
@@ -32,20 +33,11 @@ npm run build --workspace @countroster/core >/dev/null
 find server/cmd/engine/webdist -mindepth 1 ! -name README.txt -exec rm -rf {} +
 cp -r apps/web/dist-native/. server/cmd/engine/webdist/
 
-# The engine, per ABI. arm64-v8a (phones) is a plain android/arm64 build.
-# x86_64 (emulators, ChromeOS) is a static linux/amd64 build — Go can't build
-# android/amd64 without cgo, and Android's kernel runs it the same — made by
-# androidlibc/build-amd64.sh, which patches the SQLite runtime's legacy
-# x86_64 syscalls that Android's seccomp filter would kill.
+# The engine for each ABI (static binaries; see that script).
 jni="apps/android/app/src/main/jniLibs"
-ldflags="-s -w -X github.com/chinmay28/countroster/server/internal/version.Patch=$patch"
 rm -rf "$jni"
-mkdir -p "$jni/arm64-v8a" "$jni/x86_64"
-echo "==> engine for arm64-v8a (android/arm64)"
-(cd server && CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -trimpath \
-  -ldflags "$ldflags" -o "../$jni/arm64-v8a/libcountroster_engine.so" ./cmd/engine)
-echo "==> engine for x86_64 (linux/amd64, seccomp-safe)"
-server/cmd/engine/androidlibc/build-amd64.sh "$jni/x86_64/libcountroster_engine.so" -ldflags "$ldflags"
+server/cmd/engine/build-android-engines.sh "$jni" \
+  "-s -w -X github.com/chinmay28/countroster/server/internal/version.Patch=$patch"
 
 # A host-native engine for the JVM unit tests (RealEngineTest), so they
 # drive the real binary through the Kotlin launcher on any dev machine.

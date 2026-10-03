@@ -20,7 +20,8 @@ scripts/build-android.sh assembleRelease testDebugUnitTest
 
 Needs Node, Go, JDK 17+ and the Android SDK (`ANDROID_HOME`). No NDK — the
 engine is pure Go. The script builds the web client with `--mode native`,
-cross-compiles the engine into `app/src/main/jniLibs/<abi>/libcountroster_engine.so`
+cross-compiles the engine (static binaries, via
+`server/cmd/engine/build-android-engines.sh`) into `app/src/main/jniLibs/<abi>/libcountroster_engine.so`
 (arm64-v8a for phones; x86_64 for emulators and ChromeOS, plus a host-native
 copy for the JVM tests), then runs Gradle with the calendar version. The
 x86_64 engine is built with a patched SQLite syscall shim
