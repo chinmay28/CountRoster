@@ -8,6 +8,10 @@ built as a **client-server** app so every device shares one dataset:
   desktop and mobile clients all read and write the same data.
 - **Mobile-friendly PWA.** The web client is installable and behaves like an app
   on a phone — no app store, no native build.
+- **An Android app, local-first.** The same UI with the server's own engine
+  running on the phone: data stays on the device, no server needed. Turn on
+  **Sync** under Data to share one dataset with your server, other phones and
+  the PWA ([apps/android](./apps/android/README.md), [MOBILE.md](./MOBILE.md)).
 - **Real data export.** Backups are documented open formats (a `.countroster.zip`
   bundle of JSON + per-table CSVs, plus a raw SQLite download).
 - **Automatic cloud backup.** Point the server at a folder in your Dropbox or
@@ -33,7 +37,8 @@ countroster/
 ├── packages/
 │   └── core/                 # @countroster/core — TS domain types + in-memory test double for the web client
 └── apps/
-    └── web/                  # @countroster/web — installable PWA client (Vite + React)
+    ├── web/                  # @countroster/web — installable PWA client (Vite + React)
+    └── android/              # Android app — a WebView over the on-device Go engine (server/cmd/engine)
 ```
 
 The deployable artifact is a **single static Go binary** (`server/bin/countroster`)
@@ -170,6 +175,8 @@ pin backup-bundle compatibility with the original TypeScript implementation.
 - [server/README.md](./server/README.md) — the Go backend
 - [apps/web/README.md](./apps/web/README.md) — the PWA client
 - [DEPLOYMENT.md](./DEPLOYMENT.md) — deploying the server + PWA
+- [MOBILE.md](./MOBILE.md) — the Android app: on-device engine, sync, iOS notes
+- [apps/android/README.md](./apps/android/README.md) — building the Android app
 
 ## License
 

@@ -8,6 +8,7 @@ CountRoster is an "anything tracker" (habits, meds, symptoms, spending, moods). 
 
 - `server/` — the **Go** backend: domain layer (schema, services, aggregations, backup) + REST API over a `modernc.org/sqlite` file. Compiles to **one static binary** that also serves the PWA. This SQLite file is the single shared source of truth.
 - `apps/web` (`@countroster/web`) — a mobile-friendly, installable **PWA** (Vite + React) that talks to the server over HTTP and behaves like an app.
+- `apps/android` — the **Android app**: a thin Kotlin shell whose WebView shows the same web client, served by an **on-device engine** (`server/cmd/engine`, the server's own Go code as a child process). Local data by default; **Sync** proxies `/api` to a server. See `MOBILE.md`.
 - `packages/core` (`@countroster/core`) — the *original* TypeScript domain layer, now retained **only** as the web client's type source and in-memory test double. It is not the production path.
 
 > **History:** this project began *local-first* (per-device SQLite; Expo shells), pivoted to client-server on Node/Express/TypeScript, and was then **rewritten in Go** with zero contract changes — the REST API, SQL schema, on-disk SQLite file, and backup format are bit-compatible with the TS implementation, and the UI didn't change at all. Parts of `DESIGN.md`/`DEPLOYMENT.md` describe the older eras — they're marked where superseded. There is **no auth** by design: the server runs on a trusted network (LAN/Tailscale/VPN).
@@ -32,6 +33,8 @@ cd server
 go test ./...        # the authoritative domain + API suites
 go build ./...       # compile check
 ```
+
+Android (needs JDK 17+ and the Android SDK; no NDK): `scripts/build-android.sh [gradle tasks]` — builds the native web bundle, cross-compiles the engine into `apps/android/app/src/main/jniLibs/`, then runs Gradle (default `assembleDebug`). JVM tests: `testDebugUnitTest`; CI (`.github/workflows/android.yml`) also runs instrumented tests on an emulator.
 
 Run the app in development (two processes; **build core first** so the web client's imported types exist):
 
@@ -67,7 +70,7 @@ The PWA is compiled against the REST API's exact shapes: snake_case JSON field n
 
 ### Composition root
 
-`cmd/countroster/main.go` does: open storage → `migrate.Run` → `core.New(storage, clock)` → `api.New(...)` → serve. `core.App` bundles the services (`Trackers`, `Fields`, `Entries`, `Notes`, `Groups`, `Stats`, `Transactions`); backup is `backup.Service`.
+`internal/stack` does: open storage → `migrate.Run` → `core.New(storage, clock)` → backup → cloud → `api.New(...)`. Both `cmd/countroster` (the server) and `internal/engine` (the phone) build exactly this — keep it the one place. The web handler (SPA fallback, quick-log shell) is `internal/web`. `core.App` bundles the services (`Trackers`, `Fields`, `Entries`, `Notes`, `Groups`, `Stats`, `Transactions`); backup is `backup.Service`.
 
 ### Service layer (`server/internal/core`)
 
@@ -172,6 +175,19 @@ publish if the tag isn't the version that commit builds, so tag the commit whose
 count matches. `quickstart.sh` consumes exactly those assets when run with
 `COUNTROSTER_INSTALL=release` — the asset names are the contract between the
 two, so rename one and you must rename the other.
+
+### The mobile engine (`internal/engine`, `cmd/engine`, `apps/android`)
+
+The Android app execs `cmd/engine` (packaged as `jniLibs/<abi>/libcountroster_engine.so`, built by `scripts/build-android.sh`) and points a WebView at it on loopback. `/api` goes to the local stack or, in sync mode, through a reverse proxy to a server; `/_engine/*` is the engine's own API (mode switch, safety bundles, DNS, cloud tick) and never exists on a server. Rules:
+
+- **Launcher contract** — flags, `COUNTROSTER_ENGINE_SECRET` in the env, one `COUNTROSTER_ENGINE_READY {…}` stdout line, exit on stdin EOF. Defined in `cmd/engine/main.go`, mirrored by `apps/android/.../engine/EngineCommand.kt` + `ReadyLine.kt`; change both together.
+- **Everything behind the per-launch secret** (`engine.Gate`: cookie for the WebView, bearer for the shell) — loopback ports are reachable by every app on a phone. The proxy must never forward it.
+- **Go on Android has no timezone and no DNS without cgo**: the engine sets `time.Local` from `--tz` (and embeds tzdata) and resolves through `engine.DNS`, fed by the shell. Keep the engine `CGO_ENABLED=0`.
+- **`api.APILevel`** (reported by `/api/health`) — bump it whenever the API gains something a client may send or rely on. A synced app refuses (and won't write to) a server below its level, because validators silently drop unknown fields.
+- Mode switches move data **before** flipping and take a safety bundle before anything overwrites data; the local DB is never deleted. `engine.json` (the mode) stays out of SQLite and the backup bundle.
+- The native bridge is `window.CountRosterNative` (`apps/web/src/lib/platform.ts`, `apps/android/.../bridge/`): synchronous `capabilities()`, async `postMessage` RPC — keep it async so an iOS host can implement it.
+
+The web client renders mobile-only UI (Sync settings, home-screen pin) only when `/_engine/status` or the bridge answers, so the PWA is unaffected. The engine embeds the `vite build --mode native` bundle (no service worker).
 
 ### Aggregations
 
