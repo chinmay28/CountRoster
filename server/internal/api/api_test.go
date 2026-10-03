@@ -121,6 +121,10 @@ func TestHealth(t *testing.T) {
 	if body["ok"] != true {
 		t.Errorf("health body wrong: %v", body)
 	}
+	// Mobile clients gate sync on this; it must be a number and never go down.
+	if lvl, ok := body["api_level"].(float64); !ok || lvl < 1 || lvl != APILevel {
+		t.Errorf("api_level = %v, want %d", body["api_level"], APILevel)
+	}
 }
 
 func TestTrackerEntryNoteLifecycle(t *testing.T) {
