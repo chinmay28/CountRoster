@@ -56,7 +56,9 @@ class EngineProcessTest {
             EngineProcess.start(sh("echo 'bad flag' >&2; exit 2"), emptyMap())
             fail("expected IOException")
         } catch (e: IOException) {
-            assertTrue(e.message!!, e.message!!.contains("exited before it was ready"))
+            // Why it failed travels with the error: the status and what it said.
+            assertTrue(e.message!!, e.message!!.contains("exited with status 2 before it was ready"))
+            assertTrue(e.message!!, e.message!!.contains("bad flag"))
         }
     }
 
