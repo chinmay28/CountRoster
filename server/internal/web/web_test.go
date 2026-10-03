@@ -1,4 +1,4 @@
-package main
+package web
 
 import (
 	"io"
@@ -56,7 +56,7 @@ func get(t *testing.T, path string, userAgent ...string) (*http.Response, string
 	if len(userAgent) > 0 {
 		req.Header.Set("User-Agent", userAgent[0])
 	}
-	webHandler(api, testFiles(), testLookup).ServeHTTP(rec, req)
+	Handler(api, testFiles(), testLookup).ServeHTTP(rec, req)
 	res := rec.Result()
 	body, _ := io.ReadAll(res.Body)
 	res.Body.Close()

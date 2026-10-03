@@ -26,6 +26,18 @@ import (
 // commit count, stamped at link time — see internal/version.
 var AppVersion = version.String()
 
+// APILevel is what a client may rely on this server to understand, reported
+// by /api/health. The calendar version can't answer that — a mobile app
+// carries its own build of the UI, so it may be newer than the server it
+// syncs to, and validators ignore unknown keys: a field the server doesn't
+// know is dropped without an error. A client refuses a server below the level
+// it was built with (internal/engine).
+//
+// Bump it whenever the API gains something a client may send or depend on:
+// a field, a route, a status. Never lower it. A server without the field
+// (older than its introduction) is level 0.
+const APILevel = 1
+
 const (
 	jsonBodyLimit   = 5 << 20   // express.json({ limit: '5mb' })
 	importBodyLimit = 100 << 20 // express.raw({ limit: '100mb' })
@@ -1005,5 +1017,7 @@ func (s *server) backupImport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "version": AppVersion})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true, "version": AppVersion, "api_level": APILevel,
+	})
 }
