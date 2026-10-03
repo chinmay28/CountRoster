@@ -10,6 +10,7 @@ import { GroupsPage } from '../pages/GroupsPage.tsx';
 import { NotFoundPage } from '../pages/NotFoundPage.tsx';
 import { makeTestCore, type TestCore } from '../test/makeTestCore.ts';
 import { lastNBuckets } from '../lib/range.ts';
+import { toLocalISO } from '@countroster/core';
 
 function renderApp(test: TestCore, initialPath = '/') {
   const router = createMemoryRouter(
@@ -83,9 +84,14 @@ describe('stats panel', () => {
   it('repurposes the streak box for mean/median/range on coarser periods', async () => {
     const t = await test.createTracker({ name: 'Water', kind: 'number' });
     // Three months with one entry each (mid-month, well inside the bucket).
-    await test.core.entries.log(t.id, { value: 10, occurred_at: '2026-05-15T12:00:00.000-07:00' });
-    await test.core.entries.log(t.id, { value: 20, occurred_at: '2026-04-15T12:00:00.000-07:00' });
-    await test.core.entries.log(t.id, { value: 30, occurred_at: '2026-03-15T12:00:00.000-07:00' });
+    // Relative to today: the Month view shows the last six months of the real
+    // clock, so fixed dates would age out of it.
+    const now = new Date();
+    const midMonth = (monthsAgo: number) =>
+      toLocalISO(new Date(now.getFullYear(), now.getMonth() - monthsAgo, 15, 12));
+    await test.core.entries.log(t.id, { value: 10, occurred_at: midMonth(1) });
+    await test.core.entries.log(t.id, { value: 20, occurred_at: midMonth(2) });
+    await test.core.entries.log(t.id, { value: 30, occurred_at: midMonth(3) });
 
     renderApp(test, `/trackers/${t.id}`);
 
