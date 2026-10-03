@@ -34,9 +34,11 @@ import (
 //   - on x86_64 the stock engine must die (proving the stand-in is faithful:
 //     modernc's musl makes legacy syscalls there) and the engine built by
 //     androidlibc/build-amd64.sh must do real work;
-//   - on arm64 the engine must do real work as built. Point
-//     COUNTROSTER_SECCOMP_ENGINE at the android/arm64 artifact itself to
-//     test exactly what ships (CI does, on an arm64 runner).
+//   - on arm64 the engine must do real work as built.
+//
+// Point COUNTROSTER_SECCOMP_ENGINE at a binary from
+// build-android-engines.sh to test exactly what ships (CI does, on an arm64
+// runner).
 //
 // Opt-in — it builds the engine — with COUNTROSTER_SECCOMP_TEST=1.
 
@@ -168,7 +170,7 @@ func buildEngine(t *testing.T, patched bool) string {
 }
 
 // engineUnderTest is the shipping engine: COUNTROSTER_SECCOMP_ENGINE when
-// set (e.g. the android/arm64 artifact), else a fresh build.
+// set (an artifact of build-android-engines.sh), else a fresh build.
 func engineUnderTest(t *testing.T) string {
 	if bin := os.Getenv("COUNTROSTER_SECCOMP_ENGINE"); bin != "" {
 		abs, err := filepath.Abs(bin)

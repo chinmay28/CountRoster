@@ -115,10 +115,10 @@ jobs:
           name: unit-test-reports
           path: apps/android/app/build/reports/tests/
 
-  # The phone binary itself, on arm64, under Android's arm64 app seccomp
-  # allowlist (cmd/engine/android_policy_test.go). It's an android/arm64 build
-  # with no dynamic dependencies, so glibc's loader stands in for Android's
-  # /system/bin/linker64.
+  # The phone binary itself — built exactly as the app packages it — on an
+  # arm64 runner, under Android's arm64 app seccomp allowlist
+  # (cmd/engine/android_policy_test.go). It's a static binary, so it runs
+  # directly, as it does on a phone.
   engine-arm64:
     name: arm64 engine under Android's seccomp policy
     runs-on: ubuntu-24.04-arm
@@ -130,24 +130,16 @@ jobs:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
 
-      - name: Build the shipping arm64 engine
+      - name: Build the engines as the app ships them
         run: |
           set -euo pipefail
-          cd server
-          CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -trimpath -o "$RUNNER_TEMP/engine" ./cmd/engine
-          file "$RUNNER_TEMP/engine"
+          server/cmd/engine/build-android-engines.sh "$RUNNER_TEMP/jniLibs"
+          file "$RUNNER_TEMP/jniLibs/arm64-v8a/libcountroster_engine.so"
 
-      - name: Stand glibc's loader in for Android's
-        run: |
-          set -euo pipefail
-          sudo mkdir -p /system/bin
-          sudo ln -sf "$(ls /lib/ld-linux-aarch64.so.1 /lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 2>/dev/null | head -n 1)" /system/bin/linker64
-          "$RUNNER_TEMP/engine" --help 2>&1 | head -n 3 || true
-
-      - name: Run it under Android's arm64 app policy
+      - name: Run the arm64 engine under Android's arm64 app policy
         env:
           COUNTROSTER_SECCOMP_TEST: '1'
-          COUNTROSTER_SECCOMP_ENGINE: ${{ runner.temp }}/engine
+          COUNTROSTER_SECCOMP_ENGINE: ${{ runner.temp }}/jniLibs/arm64-v8a/libcountroster_engine.so
         run: cd server && go test -count=1 -v -run 'AndroidsFilter' ./cmd/engine
 
   emulator:

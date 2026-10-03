@@ -66,9 +66,15 @@ Why:
 - **Lifetime is tied to the app for free.** The engine exits when its stdin
   pipe closes, so it can't outlive the app process however that dies.
 
-**ABIs: arm64-v8a and x86_64.** Phones get an `android/arm64` build.
-Emulators and ChromeOS get x86_64, and that one taught the lesson of the
-first emulator run. The pure-Go SQLite's C runtime (modernc's transpiled
+**ABIs: arm64-v8a and x86_64, both static.** Each is a static `linux/<arch>`
+binary with no `PT_INTERP`, so Android's kernel runs it directly, with no
+dependency on Android's dynamic linker. An earlier `android/arm64` build was
+dynamically linked against `/system/bin/linker64`, which made it impossible
+to test outside a phone. (glibc's loader can't stand in for bionic's under
+Android's seccomp policy: it calls `rseq` and `set_robust_list`, which the
+policy forbids.) Both are built by `server/cmd/engine/build-android-engines.sh`,
+so CI tests exactly what ships. x86_64 (emulators, ChromeOS) taught the
+lesson of the first emulator run. The pure-Go SQLite's C runtime (modernc's transpiled
 musl) uses legacy syscalls on x86_64: `fstatat` takes a fast path through
 `SYS_lstat`, and `access`, `open`, `unlink`, … do the same. Android's app
 seccomp filter allows only what bionic uses, the `*at` family, so it killed
@@ -85,9 +91,9 @@ generated from AOSP's own policy inputs (`server/cmd/engine/testdata/bionic`),
 so any Linux box stands in for a phone. The stock x86_64 engine dies under
 it at the very PC the emulator reported, and the patched one passes a full
 workout. On a GitHub arm64 runner, the **shipping arm64 binary** runs under
-the arm64 allowlist (glibc's loader standing in for `linker64`). CI also runs
+the arm64 allowlist. CI also runs
 the instrumented tests on a real x86_64 emulator. Go can't build `android/amd64` without cgo, so the x86_64 engine
-is a static `linux/amd64` binary, which Android's kernel runs the same way.
+is a static `linux/amd64` binary, like arm64's.
 
 The cost of a cgo-free binary on Android is two OS gaps, both closed (§9).
 
