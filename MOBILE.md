@@ -80,11 +80,13 @@ The x86_64 engine is therefore built with **modernc's syscall shim patched**
 All of musl's syscalls go through one small file, and its patched copy
 rewrites each legacy call into the equivalent `*at` call. A pinned checksum
 makes a modernc upgrade fail the build instead of silently dropping the fix.
-A seccomp filter that traps those syscalls reproduces Android's restriction
-on any Linux box, and the stock engine dies under it at the very PC the
-emulator reported. CI checks both directions (the stock engine dies, the
-patched one works), then runs the instrumented tests on a real x86_64
-emulator. Go can't build `android/amd64` without cgo, so the x86_64 engine
+The engine's seccomp test applies **Android's exact app allowlist**,
+generated from AOSP's own policy inputs (`server/cmd/engine/testdata/bionic`),
+so any Linux box stands in for a phone. The stock x86_64 engine dies under
+it at the very PC the emulator reported, and the patched one passes a full
+workout. On a GitHub arm64 runner, the **shipping arm64 binary** runs under
+the arm64 allowlist (glibc's loader standing in for `linker64`). CI also runs
+the instrumented tests on a real x86_64 emulator. Go can't build `android/amd64` without cgo, so the x86_64 engine
 is a static `linux/amd64` binary, which Android's kernel runs the same way.
 
 The cost of a cgo-free binary on Android is two OS gaps, both closed (§9).
@@ -321,8 +323,9 @@ recommendations; any can be revisited.
 
 1. Sync is "connect to a server" (online-only while synced).
 2. No merge when both sides have data.
-3. Distribution: a debug APK from CI for now. Release signing reads keystore
-   secrets (`apps/android/README.md`). Store listings are not done yet.
+3. Distribution: a signed `countroster-android.apk` on each GitHub release,
+   once the signing-key secrets are set (`apps/android/README.md`). Store
+   listings are not done yet.
 4. Sync settings live on the React Data page.
 5. minSdk 26, targetSdk 36.
 6. A server is required for sync; a phone can't act as the hub.

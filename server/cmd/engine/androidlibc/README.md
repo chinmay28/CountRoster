@@ -21,10 +21,11 @@ directory holds a copy of it (`syscall_musl.go.overlay`) whose only change is
   refuses to build if a modernc upgrade changed it. When that happens,
   re-derive the overlay from the new file (it's the original plus the marked
   CountRoster section) and update the hash.
-- `../seccomp_linux_amd64_test.go` proves it on any Linux x86_64 box with
-  `COUNTROSTER_SECCOMP_TEST=1`. A seccomp filter trapping those syscalls
-  stands in for Android's: the stock engine must die under it, and the
-  patched one must do real work (CRUD, backup restore, a sync round trip).
+- `../seccomp_linux_test.go` proves it on any Linux x86_64 box with
+  `COUNTROSTER_SECCOMP_TEST=1`. It runs the engine under Android's exact app
+  seccomp allowlist (generated from AOSP's policy files in `../testdata/bionic`):
+  the stock engine must die under it, and the patched one must do real work
+  (CRUD, backup restore, a sync round trip).
 
 Not built into any other binary: the server and the arm64 engine use the
 module unmodified.

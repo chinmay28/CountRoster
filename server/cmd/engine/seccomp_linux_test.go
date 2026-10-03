@@ -1,3 +1,5 @@
+//go:build linux && (amd64 || arm64)
+
 package main
 
 import (
@@ -23,30 +25,20 @@ import (
 	"github.com/chinmay28/countroster/server/internal/stack"
 )
 
-// Android's app seccomp filter only allows the syscalls bionic uses; on
-// x86_64 that rules out the legacy calls the architecture still defines, and
-// a process making one is killed with SIGSYS. These tests rebuild that
-// restriction on a Linux x86_64 host: the engine runs under a filter trapping
-// exactly those calls. The unpatched engine must die under it (proving the
-// filter is a faithful stand-in), and the engine built by
-// androidlibc/build-amd64.sh must do real work under it.
+// Android runs every app — and anything it execs — under a seccomp filter
+// that allows only the syscalls its policy lists and kills the rest with
+// SIGSYS. These tests run the engine under that exact allowlist
+// (android_policy_test.go, generated from bionic's policy inputs in
+// testdata/bionic), so a Linux box stands in for a phone:
 //
-// Opt-in — it builds the engine twice — with COUNTROSTER_SECCOMP_TEST=1
-// (CI's Android workflow sets it).
-
-// androidBlocked are x86_64 syscalls bionic never makes, so Android's filter
-// traps them. Not exhaustive of Android's list, but a superset of what
-// modernc's musl reaches for.
-var androidBlocked = []uintptr{
-	unix.SYS_OPEN, unix.SYS_CREAT, unix.SYS_STAT, unix.SYS_LSTAT, unix.SYS_ACCESS,
-	unix.SYS_UNLINK, unix.SYS_RMDIR, unix.SYS_MKDIR, unix.SYS_RENAME, unix.SYS_LINK,
-	unix.SYS_SYMLINK, unix.SYS_READLINK, unix.SYS_CHMOD, unix.SYS_CHOWN, unix.SYS_LCHOWN,
-	unix.SYS_MKNOD, unix.SYS_PIPE, unix.SYS_DUP2, unix.SYS_POLL, unix.SYS_SELECT,
-	unix.SYS_UTIME, unix.SYS_UTIMES, unix.SYS_FUTIMESAT, unix.SYS_TIME,
-	unix.SYS_EPOLL_CREATE, unix.SYS_EPOLL_WAIT, unix.SYS_GETDENTS, unix.SYS_FORK,
-	unix.SYS_VFORK, unix.SYS_ALARM, unix.SYS_PAUSE, unix.SYS_INOTIFY_INIT,
-	unix.SYS_SIGNALFD, unix.SYS_EVENTFD,
-}
+//   - on x86_64 the stock engine must die (proving the stand-in is faithful:
+//     modernc's musl makes legacy syscalls there) and the engine built by
+//     androidlibc/build-amd64.sh must do real work;
+//   - on arm64 the engine must do real work as built. Point
+//     COUNTROSTER_SECCOMP_ENGINE at the android/arm64 artifact itself to
+//     test exactly what ships (CI does, on an arm64 runner).
+//
+// Opt-in — it builds the engine — with COUNTROSTER_SECCOMP_TEST=1.
 
 const helperEnv = "COUNTROSTER_SECCOMP_EXEC"
 
@@ -70,24 +62,24 @@ func TestSeccompHelper(t *testing.T) {
 
 func installAndroidFilter() error {
 	const (
-		ldAbs  = unix.BPF_LD | unix.BPF_W | unix.BPF_ABS
-		jeqK   = unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K
-		retK   = unix.BPF_RET | unix.BPF_K
-		allow  = unix.SECCOMP_RET_ALLOW
-		trap   = unix.SECCOMP_RET_TRAP // SIGSYS, as Android does
-		x86_64 = unix.AUDIT_ARCH_X86_64
+		ldAbs = unix.BPF_LD | unix.BPF_W | unix.BPF_ABS
+		jeqK  = unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K
+		retK  = unix.BPF_RET | unix.BPF_K
+		allow = unix.SECCOMP_RET_ALLOW
+		trap  = unix.SECCOMP_RET_TRAP // SIGSYS, as Android does
 	)
+	arch := map[string]uint32{"amd64": unix.AUDIT_ARCH_X86_64, "arm64": unix.AUDIT_ARCH_AARCH64}[runtime.GOARCH]
 	f := []unix.SockFilter{
-		{Code: ldAbs, K: 4}, // seccomp_data.arch
-		{Code: jeqK, Jt: 1, Jf: 0, K: x86_64},
-		{Code: retK, K: allow},
+		{Code: ldAbs, K: 4}, // seccomp_data.arch: anything else is refused
+		{Code: jeqK, Jt: 1, Jf: 0, K: arch},
+		{Code: retK, K: trap},
 		{Code: ldAbs, K: 0}, // seccomp_data.nr
 	}
-	for _, nr := range androidBlocked {
-		f = append(f, unix.SockFilter{Code: jeqK, Jt: 0, Jf: 1, K: uint32(nr)},
-			unix.SockFilter{Code: retK, K: trap})
+	for _, nr := range androidAppAllowlist[runtime.GOARCH] {
+		f = append(f, unix.SockFilter{Code: jeqK, Jt: 0, Jf: 1, K: nr},
+			unix.SockFilter{Code: retK, K: allow})
 	}
-	f = append(f, unix.SockFilter{Code: retK, K: allow})
+	f = append(f, unix.SockFilter{Code: retK, K: trap})
 
 	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		return err
@@ -157,15 +149,17 @@ func requireSeccompTest(t *testing.T) {
 	}
 }
 
+// buildEngine builds the engine for this host. patched selects the x86_64
+// build with the syscall shim; on arm64 there is nothing to patch.
 func buildEngine(t *testing.T, patched bool) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "engine")
 	var cmd *exec.Cmd
-	if patched {
+	if patched && runtime.GOARCH == "amd64" {
 		cmd = exec.Command("./androidlibc/build-amd64.sh", out)
 	} else {
 		cmd = exec.Command("go", "build", "-trimpath", "-o", out, ".")
-		cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH=amd64")
+		cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux")
 	}
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build (patched=%v): %v\n%s", patched, err, b)
@@ -173,8 +167,24 @@ func buildEngine(t *testing.T, patched bool) string {
 	return out
 }
 
+// engineUnderTest is the shipping engine: COUNTROSTER_SECCOMP_ENGINE when
+// set (e.g. the android/arm64 artifact), else a fresh build.
+func engineUnderTest(t *testing.T) string {
+	if bin := os.Getenv("COUNTROSTER_SECCOMP_ENGINE"); bin != "" {
+		abs, err := filepath.Abs(bin)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return abs
+	}
+	return buildEngine(t, true)
+}
+
 func TestUnpatchedEngineDiesUnderAndroidsFilter(t *testing.T) {
 	requireSeccompTest(t)
+	if runtime.GOARCH != "amd64" {
+		t.Skip("only x86_64 has the legacy syscalls the patch removes")
+	}
 	bin := buildEngine(t, false)
 	if port, _, died := underAndroidFilter(t, bin, t.TempDir()); port != 0 {
 		t.Fatal("the unpatched engine survived — the filter isn't standing in for Android's")
@@ -183,9 +193,9 @@ func TestUnpatchedEngineDiesUnderAndroidsFilter(t *testing.T) {
 	}
 }
 
-func TestPatchedEngineWorksUnderAndroidsFilter(t *testing.T) {
+func TestShippingEngineWorksUnderAndroidsFilter(t *testing.T) {
 	requireSeccompTest(t)
-	bin := buildEngine(t, true)
+	bin := engineUnderTest(t)
 	dataDir := t.TempDir()
 	port, _, died := underAndroidFilter(t, bin, dataDir)
 	if port == 0 {

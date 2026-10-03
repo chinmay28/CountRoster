@@ -18,6 +18,12 @@ name: Release
 # The release body is the matching section of CHANGELOG.md (see that file's
 # header).
 #
+# A second job attaches the Android app, `countroster-android.apk` (+ .sha256),
+# signed with the key in the COUNTROSTER_ANDROID_* secrets (see
+# apps/android/README.md). Without those secrets it skips with a warning:
+# an unsigned APK can't be installed, and a throwaway key would make every
+# release un-upgradable from the last.
+#
 # NOTE the version is `vYEAR.MONTH.<commit count>` (scripts/version.mjs), so
 # this workflow needs `fetch-depth: 0` — a shallow checkout reports patch 0 —
 # and it refuses to publish if the tag doesn't equal the version the build
@@ -178,3 +184,83 @@ jobs:
               --title "$TITLE" "${notes_args[@]}" dist/countroster-linux-*
           fi
           gh release view "$TAG" --json tagName,assets --jq '{tag: .tagName, assets: [.assets[].name]}'
+
+  android:
+    name: Android app
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.COUNTROSTER_ANDROID_KEYSTORE_BASE64 }}
+    steps:
+      - name: Check for a signing key
+        id: key
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::no COUNTROSTER_ANDROID_KEYSTORE_BASE64 secret — the release ships without the Android app. See apps/android/README.md."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out ${{ github.ref_name }}
+        if: steps.key.outputs.present == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # versionCode is the commit count
+
+      - name: Resolve the release tag
+        if: steps.key.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          case "$GITHUB_REF" in
+            refs/tags/*)          tag="${GITHUB_REF#refs/tags/}" ;;
+            refs/heads/release/*) tag="${GITHUB_REF#refs/heads/release/}" ;;
+            *)                    tag="${{ inputs.tag }}" ;;
+          esac
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        if: steps.key.outputs.present == 'true'
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/setup-go@v5
+        if: steps.key.outputs.present == 'true'
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - uses: actions/setup-java@v4
+        if: steps.key.outputs.present == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.key.outputs.present == 'true'
+
+      - name: Build the signed APK
+        if: steps.key.outputs.present == 'true'
+        env:
+          COUNTROSTER_KEYSTORE_PASSWORD: ${{ secrets.COUNTROSTER_ANDROID_KEYSTORE_PASSWORD }}
+          COUNTROSTER_KEY_ALIAS: ${{ secrets.COUNTROSTER_ANDROID_KEY_ALIAS }}
+          COUNTROSTER_KEY_PASSWORD: ${{ secrets.COUNTROSTER_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          export COUNTROSTER_KEYSTORE="$RUNNER_TEMP/release.keystore"
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$COUNTROSTER_KEYSTORE"
+          npm ci
+          scripts/build-android.sh assembleRelease
+          rm -f "$COUNTROSTER_KEYSTORE"
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)apksigner"
+          "$apksigner" verify apps/android/app/build/outputs/apk/release/app-release.apk
+          mkdir -p dist
+          cp apps/android/app/build/outputs/apk/release/app-release.apk dist/countroster-android.apk
+          (cd dist && sha256sum countroster-android.apk > countroster-android.apk.sha256)
+
+      - name: Attach it to the release
+        if: steps.key.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/countroster-android.apk dist/countroster-android.apk.sha256 --clobber
