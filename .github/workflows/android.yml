@@ -4,7 +4,9 @@ name: Android
 #
 #   * JVM unit tests — the launcher, bridge and shortcut logic, plus the
 #     Kotlin launcher driving the real Go engine (a host-native build of it);
-#   * the Go engine and web suites the app is built from;
+#   * the Go engine suites, including the engine under Android's exact app
+#     seccomp allowlist — x86_64 here, and the shipping arm64 binary on an
+#     arm64 runner;
 #   * instrumented tests on an emulator — the x86_64 engine exec'd from the
 #     native library directory under Android's real seccomp filter, its
 #     timezone and DNS, and the WebView rendering the app.
@@ -75,8 +77,29 @@ jobs:
           COUNTROSTER_SECCOMP_TEST: '1'
         run: cd server && go test ./internal/engine/... ./internal/stack/... ./cmd/engine/...
 
+      # A throwaway keystore proves the release signing path (the real key
+      # lives in the release workflow's secrets).
+      - name: Make a throwaway signing key
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/ci.keystore" \
+            -alias ci -keyalg RSA -keysize 2048 -validity 1 \
+            -storepass ci-pass -keypass ci-pass -dname "CN=CountRoster CI"
+          {
+            echo "COUNTROSTER_KEYSTORE=$RUNNER_TEMP/ci.keystore"
+            echo "COUNTROSTER_KEYSTORE_PASSWORD=ci-pass"
+            echo "COUNTROSTER_KEY_ALIAS=ci"
+            echo "COUNTROSTER_KEY_PASSWORD=ci-pass"
+          } >> "$GITHUB_ENV"
+
       - name: Build the app and run its unit tests
-        run: scripts/build-android.sh assembleDebug testDebugUnitTest
+        run: scripts/build-android.sh assembleDebug assembleRelease testDebugUnitTest
+
+      - name: Verify the release APK is signed
+        run: |
+          set -euo pipefail
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)apksigner"
+          "$apksigner" verify --print-certs apps/android/app/build/outputs/apk/release/app-release.apk
 
       - name: Upload the debug APK
         uses: actions/upload-artifact@v4
@@ -91,6 +114,41 @@ jobs:
         with:
           name: unit-test-reports
           path: apps/android/app/build/reports/tests/
+
+  # The phone binary itself, on arm64, under Android's arm64 app seccomp
+  # allowlist (cmd/engine/android_policy_test.go). It's an android/arm64 build
+  # with no dynamic dependencies, so glibc's loader stands in for Android's
+  # /system/bin/linker64.
+  engine-arm64:
+    name: arm64 engine under Android's seccomp policy
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Build the shipping arm64 engine
+        run: |
+          set -euo pipefail
+          cd server
+          CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -trimpath -o "$RUNNER_TEMP/engine" ./cmd/engine
+          file "$RUNNER_TEMP/engine"
+
+      - name: Stand glibc's loader in for Android's
+        run: |
+          set -euo pipefail
+          sudo mkdir -p /system/bin
+          sudo ln -sf "$(ls /lib/ld-linux-aarch64.so.1 /lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 2>/dev/null | head -n 1)" /system/bin/linker64
+          "$RUNNER_TEMP/engine" --help 2>&1 | head -n 3 || true
+
+      - name: Run it under Android's arm64 app policy
+        env:
+          COUNTROSTER_SECCOMP_TEST: '1'
+          COUNTROSTER_SECCOMP_ENGINE: ${{ runner.temp }}/engine
+        run: cd server && go test -count=1 -v -run 'AndroidsFilter' ./cmd/engine
 
   emulator:
     name: Instrumented tests (emulator)
