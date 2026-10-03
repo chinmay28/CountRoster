@@ -1,0 +1,204 @@
+// Copyright 2024 The Libc Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+//
+// CountRoster: a build-time overlay (go build -overlay) of modernc.org/libc's
+// syscall_musl.go, applied ONLY to the engine's linux/amd64 build — the
+// x86_64 Android ABI. See README.md beside this file. Everything below the
+// marked section is the original file, unchanged except that each syscall
+// first passes through androidCompat.
+
+//go:build linux && amd64
+
+package libc // import "modernc.org/libc"
+
+import (
+	"golang.org/x/sys/unix"
+	"runtime"
+	"time"
+	"unsafe"
+)
+
+// ---- CountRoster: Android x86_64 compatibility --------------------------
+//
+// musl's x86_64 port issues the legacy syscalls the architecture still
+// defines (open, stat, lstat, access, …). Android's app seccomp filter allows
+// only what bionic uses — the *at family — and kills a process with SIGSYS on
+// the rest. arm64 never had the legacy calls, which is why only this ABI
+// needs the translation. Each case is the kernel-equivalent *at call.
+
+const (
+	compatAtFdcwd      = -100 // AT_FDCWD
+	compatSymlinkNoFol = 0x100
+	compatRemoveDir    = 0x200
+)
+
+// androidCompat rewrites a legacy syscall into its allowed equivalent, or
+// performs it outright (handled=true) when the arguments need converting.
+func androidCompat(n long, a *[6]long) (nr long, handled bool, r long) {
+	switch uintptr(n) {
+	case unix.SYS_OPEN: // open(path, flags, mode)
+		*a = [6]long{compatAtFdcwd, a[0], a[1], a[2]}
+		return unix.SYS_OPENAT, false, 0
+	case unix.SYS_CREAT: // creat(path, mode)
+		*a = [6]long{compatAtFdcwd, a[0], unix.O_CREAT | unix.O_WRONLY | unix.O_TRUNC, a[1]}
+		return unix.SYS_OPENAT, false, 0
+	case unix.SYS_STAT: // stat(path, buf)
+		*a = [6]long{compatAtFdcwd, a[0], a[1], 0}
+		return unix.SYS_NEWFSTATAT, false, 0
+	case unix.SYS_LSTAT: // lstat(path, buf)
+		*a = [6]long{compatAtFdcwd, a[0], a[1], compatSymlinkNoFol}
+		return unix.SYS_NEWFSTATAT, false, 0
+	case unix.SYS_ACCESS: // access(path, mode)
+		*a = [6]long{compatAtFdcwd, a[0], a[1]}
+		return unix.SYS_FACCESSAT, false, 0
+	case unix.SYS_UNLINK: // unlink(path)
+		*a = [6]long{compatAtFdcwd, a[0], 0}
+		return unix.SYS_UNLINKAT, false, 0
+	case unix.SYS_RMDIR: // rmdir(path)
+		*a = [6]long{compatAtFdcwd, a[0], compatRemoveDir}
+		return unix.SYS_UNLINKAT, false, 0
+	case unix.SYS_MKDIR: // mkdir(path, mode)
+		*a = [6]long{compatAtFdcwd, a[0], a[1]}
+		return unix.SYS_MKDIRAT, false, 0
+	case unix.SYS_RENAME: // rename(old, new)
+		*a = [6]long{compatAtFdcwd, a[0], compatAtFdcwd, a[1]}
+		return unix.SYS_RENAMEAT, false, 0
+	case unix.SYS_LINK: // link(old, new)
+		*a = [6]long{compatAtFdcwd, a[0], compatAtFdcwd, a[1], 0}
+		return unix.SYS_LINKAT, false, 0
+	case unix.SYS_SYMLINK: // symlink(target, linkpath)
+		*a = [6]long{a[0], compatAtFdcwd, a[1]}
+		return unix.SYS_SYMLINKAT, false, 0
+	case unix.SYS_READLINK: // readlink(path, buf, size)
+		*a = [6]long{compatAtFdcwd, a[0], a[1], a[2]}
+		return unix.SYS_READLINKAT, false, 0
+	case unix.SYS_CHMOD: // chmod(path, mode)
+		*a = [6]long{compatAtFdcwd, a[0], a[1]}
+		return unix.SYS_FCHMODAT, false, 0
+	case unix.SYS_CHOWN: // chown(path, uid, gid)
+		*a = [6]long{compatAtFdcwd, a[0], a[1], a[2], 0}
+		return unix.SYS_FCHOWNAT, false, 0
+	case unix.SYS_LCHOWN: // lchown(path, uid, gid)
+		*a = [6]long{compatAtFdcwd, a[0], a[1], a[2], compatSymlinkNoFol}
+		return unix.SYS_FCHOWNAT, false, 0
+	case unix.SYS_MKNOD: // mknod(path, mode, dev)
+		*a = [6]long{compatAtFdcwd, a[0], a[1], a[2]}
+		return unix.SYS_MKNODAT, false, 0
+	case unix.SYS_PIPE: // pipe(fds)
+		*a = [6]long{a[0], 0}
+		return unix.SYS_PIPE2, false, 0
+	case unix.SYS_EPOLL_CREATE: // epoll_create(size) — size is ignored
+		*a = [6]long{0}
+		return unix.SYS_EPOLL_CREATE1, false, 0
+	case unix.SYS_EPOLL_WAIT: // epoll_wait(fd, events, max, timeout)
+		*a = [6]long{a[0], a[1], a[2], a[3], 0, 0}
+		return unix.SYS_EPOLL_PWAIT, false, 0
+	case unix.SYS_DUP2: // dup2(old, new): dup3 refuses old == new
+		if a[0] == a[1] {
+			if _, _, err := unix.Syscall(unix.SYS_FCNTL, uintptr(a[0]), unix.F_GETFD, 0); err != 0 {
+				return n, true, long(-err)
+			}
+			return n, true, a[1]
+		}
+		*a = [6]long{a[0], a[1], 0}
+		return unix.SYS_DUP3, false, 0
+	case unix.SYS_POLL: // poll(fds, nfds, timeout ms) → ppoll with a timespec
+		var ts *unix.Timespec
+		if ms := int64(int32(a[2])); ms >= 0 {
+			t := unix.NsecToTimespec(ms * int64(time.Millisecond))
+			ts = &t
+		}
+		r1, _, err := unix.Syscall6(unix.SYS_PPOLL, uintptr(a[0]), uintptr(a[1]),
+			uintptr(unsafe.Pointer(ts)), 0, 0, 0)
+		if err != 0 {
+			return n, true, long(-err)
+		}
+		return n, true, long(r1)
+	case unix.SYS_UTIMES, unix.SYS_FUTIMESAT, unix.SYS_UTIME:
+		// utimes(path, tv[2]) / futimesat(dirfd, path, tv[2]) /
+		// utime(path, utimbuf*) → utimensat with timespecs.
+		dir, path, arg := long(compatAtFdcwd), a[0], a[1]
+		if uintptr(n) == unix.SYS_FUTIMESAT {
+			dir, path, arg = a[0], a[1], a[2]
+		}
+		var ts *[2]unix.Timespec
+		if arg != 0 {
+			ts = new([2]unix.Timespec)
+			if uintptr(n) == unix.SYS_UTIME {
+				ub := (*[2]int64)(unsafe.Pointer(uintptr(arg))) // actime, modtime
+				ts[0], ts[1] = unix.Timespec{Sec: ub[0]}, unix.Timespec{Sec: ub[1]}
+			} else {
+				tv := (*[2]unix.Timeval)(unsafe.Pointer(uintptr(arg)))
+				ts[0] = unix.NsecToTimespec(tv[0].Nano())
+				ts[1] = unix.NsecToTimespec(tv[1].Nano())
+			}
+		}
+		r1, _, err := unix.Syscall6(unix.SYS_UTIMENSAT, uintptr(dir), uintptr(path),
+			uintptr(unsafe.Pointer(ts)), 0, 0, 0)
+		if err != 0 {
+			return n, true, long(-err)
+		}
+		return n, true, long(r1)
+	case unix.SYS_TIME: // time(t*)
+		now := time.Now().Unix()
+		if a[0] != 0 {
+			*(*int64)(unsafe.Pointer(uintptr(a[0]))) = now
+		}
+		return n, true, long(now)
+	}
+	return n, false, 0
+}
+
+func compatSyscall(n long, a [6]long) long {
+	n, handled, r := androidCompat(n, &a)
+	if handled {
+		return r
+	}
+	r1, _, err := unix.Syscall6(uintptr(n), uintptr(a[0]), uintptr(a[1]), uintptr(a[2]),
+		uintptr(a[3]), uintptr(a[4]), uintptr(a[5]))
+	if err != 0 {
+		return long(-err)
+	}
+	return long(r1)
+}
+
+// ---- end CountRoster ---------------------------------------------------
+
+func ___syscall_cp(tls *TLS, n, a, b, c, d, e, f long) long {
+	return compatSyscall(n, [6]long{a, b, c, d, e, f})
+}
+
+func X__syscall0(tls *TLS, n long) long {
+	switch n {
+	case __NR_sched_yield:
+		runtime.Gosched()
+		return 0
+	default:
+		return compatSyscall(n, [6]long{})
+	}
+}
+
+func X__syscall1(tls *TLS, n, a1 long) long {
+	return compatSyscall(n, [6]long{a1})
+}
+
+func X__syscall2(tls *TLS, n, a1, a2 long) long {
+	return compatSyscall(n, [6]long{a1, a2})
+}
+
+func X__syscall3(tls *TLS, n, a1, a2, a3 long) long {
+	return compatSyscall(n, [6]long{a1, a2, a3})
+}
+
+func X__syscall4(tls *TLS, n, a1, a2, a3, a4 long) long {
+	return compatSyscall(n, [6]long{a1, a2, a3, a4})
+}
+
+func X__syscall5(tls *TLS, n, a1, a2, a3, a4, a5 long) long {
+	return compatSyscall(n, [6]long{a1, a2, a3, a4, a5})
+}
+
+func X__syscall6(tls *TLS, n, a1, a2, a3, a4, a5, a6 long) long {
+	return compatSyscall(n, [6]long{a1, a2, a3, a4, a5, a6})
+}

@@ -32,20 +32,20 @@ npm run build --workspace @countroster/core >/dev/null
 find server/cmd/engine/webdist -mindepth 1 ! -name README.txt -exec rm -rf {} +
 cp -r apps/web/dist-native/. server/cmd/engine/webdist/
 
-# The engine ships for arm64-v8a only — every current phone. Not x86_64:
-# the pure-Go SQLite's C runtime (modernc's transpiled musl) uses legacy
-# syscalls such as lstat on x86_64, which Android's app seccomp filter kills
-# with SIGSYS; arm64 has no legacy syscalls, so its build only uses the *at
-# family Android allows. Emulators run the arm64 engine through their ARM
-# translation (see .github/workflows/android.yml).
+# The engine, per ABI. arm64-v8a (phones) is a plain android/arm64 build.
+# x86_64 (emulators, ChromeOS) is a static linux/amd64 build — Go can't build
+# android/amd64 without cgo, and Android's kernel runs it the same — made by
+# androidlibc/build-amd64.sh, which patches the SQLite runtime's legacy
+# x86_64 syscalls that Android's seccomp filter would kill.
 jni="apps/android/app/src/main/jniLibs"
+ldflags="-s -w -X github.com/chinmay28/countroster/server/internal/version.Patch=$patch"
 rm -rf "$jni"
-mkdir -p "$jni/arm64-v8a"
+mkdir -p "$jni/arm64-v8a" "$jni/x86_64"
 echo "==> engine for arm64-v8a (android/arm64)"
-(cd server && CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build \
-  -trimpath \
-  -ldflags "-s -w -X github.com/chinmay28/countroster/server/internal/version.Patch=$patch" \
-  -o "../$jni/arm64-v8a/libcountroster_engine.so" ./cmd/engine)
+(cd server && CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -trimpath \
+  -ldflags "$ldflags" -o "../$jni/arm64-v8a/libcountroster_engine.so" ./cmd/engine)
+echo "==> engine for x86_64 (linux/amd64, seccomp-safe)"
+server/cmd/engine/androidlibc/build-amd64.sh "$jni/x86_64/libcountroster_engine.so" -ldflags "$ldflags"
 
 # A host-native engine for the JVM unit tests (RealEngineTest), so they
 # drive the real binary through the Kotlin launcher on any dev machine.
