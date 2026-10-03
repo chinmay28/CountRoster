@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity(), NativeBridge.Host {
     /** For instrumented tests only. */
     internal val webViewForTest: WebView get() = webView
     private lateinit var errorView: LinearLayout
+    private lateinit var errorDetail: TextView
     private val engine by lazy { EngineHost.get(this) }
 
     /** The engine the WebView is pointed at. */
@@ -172,7 +173,7 @@ class MainActivity : ComponentActivity(), NativeBridge.Host {
         intent?.getStringExtra(EXTRA_PATH)?.takeIf(QuickShortcut::isQuickPath)
 
     private fun connect() {
-        engine.whenReady(::attach) { showError() }
+        engine.whenReady(::attach) { showError(it) }
     }
 
     /** Point the WebView at [ep] — first launch, or a replacement engine. */
@@ -197,7 +198,9 @@ class MainActivity : ComponentActivity(), NativeBridge.Host {
         return (uri.encodedPath ?: "/") + query
     }
 
-    private fun showError() {
+    private fun showError(cause: Throwable) {
+        // The engine's own last words — what a bug report needs.
+        errorDetail.text = generateSequence(cause) { it.cause }.mapNotNull { it.message }.firstOrNull() ?: ""
         errorView.visibility = android.view.View.VISIBLE
     }
 
@@ -213,6 +216,14 @@ class MainActivity : ComponentActivity(), NativeBridge.Host {
             textSize = 16f
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+        errorDetail = TextView(context).apply {
+            setTextColor(Color.LTGRAY)
+            textSize = 12f
+            typeface = android.graphics.Typeface.MONOSPACE
+            setTextIsSelectable(true)
+            setPadding(0, pad / 2, 0, pad / 2)
+        }
+        addView(errorDetail, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         addView(Button(context).apply {
             setText(R.string.retry)
             setOnClickListener { connect() }

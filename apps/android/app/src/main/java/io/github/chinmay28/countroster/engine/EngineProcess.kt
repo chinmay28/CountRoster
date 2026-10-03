@@ -25,6 +25,8 @@ class EngineProcess private constructor(
     }
 
     companion object {
+        private const val TAIL_LINES = 20
+
         /**
          * Start the engine and wait for its ready line. [log] receives every
          * other line it prints (stdout and stderr), for Logcat.
@@ -38,20 +40,42 @@ class EngineProcess private constructor(
         ): EngineProcess {
             val process = ProcessBuilder(argv).apply { environment().putAll(environment) }.start()
             val ready = CompletableFuture<Int>()
+            // The last lines the engine printed, so a failure to start can say
+            // why — in Logcat, and on the app's error screen.
+            val tail = ArrayDeque<String>()
+            val record = { line: String ->
+                synchronized(tail) {
+                    tail.addLast(line)
+                    if (tail.size > TAIL_LINES) tail.removeFirst()
+                }
+                log(line)
+            }
 
-            thread(isDaemon = true, name = "engine-stderr") {
-                runCatching { process.errorStream.bufferedReader().forEachLine(log) }
+            val stderr = thread(isDaemon = true, name = "engine-stderr") {
+                runCatching { process.errorStream.bufferedReader().forEachLine(record) }
             }
             thread(isDaemon = true, name = "engine-stdout") {
                 try {
                     process.inputStream.bufferedReader().forEachLine { line ->
                         val port = ReadyLine.port(line)
-                        if (port != null && !ready.isDone) ready.complete(port) else log(line)
+                        if (port != null && !ready.isDone) ready.complete(port) else record(line)
                     }
                 } catch (_: IOException) {
                     // stream closed under us — the process is going away
                 }
-                ready.completeExceptionally(IOException("engine exited before it was ready"))
+                if (!ready.isDone) {
+                    val status = runCatching {
+                        if (process.waitFor(2, TimeUnit.SECONDS)) process.exitValue() else null
+                    }.getOrNull()
+                    stderr.join(1_000)
+                    val output = synchronized(tail) { tail.joinToString("\n") }
+                    ready.completeExceptionally(
+                        IOException(
+                            "engine exited${status?.let { " with status $it" } ?: ""} before it was ready" +
+                                if (output.isNotEmpty()) ":\n$output" else "",
+                        ),
+                    )
+                }
             }
 
             try {
