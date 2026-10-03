@@ -32,23 +32,26 @@ npm run build --workspace @countroster/core >/dev/null
 find server/cmd/engine/webdist -mindepth 1 ! -name README.txt -exec rm -rf {} +
 cp -r apps/web/dist-native/. server/cmd/engine/webdist/
 
-# ABI → Go target. arm64 phones get a real android/arm64 build. Go can only
-# build android/amd64 with cgo, so the emulator's x86_64 gets a static
-# linux/amd64 binary instead, which Android's kernel runs just the same (the
-# engine reads nothing from the OS that differs: zone data is embedded and
-# DNS servers come from the app).
-# (A plain list rather than an associative array: macOS still ships bash 3.)
+# The engine ships for arm64-v8a only — every current phone. Not x86_64:
+# the pure-Go SQLite's C runtime (modernc's transpiled musl) uses legacy
+# syscalls such as lstat on x86_64, which Android's app seccomp filter kills
+# with SIGSYS; arm64 has no legacy syscalls, so its build only uses the *at
+# family Android allows. Emulators run the arm64 engine through their ARM
+# translation (see .github/workflows/android.yml).
 jni="apps/android/app/src/main/jniLibs"
-for target in arm64-v8a:android:arm64 x86_64:linux:amd64; do
-  IFS=: read -r abi goos goarch <<<"$target"
-  out="$jni/$abi/libcountroster_engine.so"
-  echo "==> engine for $abi ($goos/$goarch)"
-  mkdir -p "$jni/$abi"
-  (cd server && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build \
-    -trimpath \
-    -ldflags "-s -w -X github.com/chinmay28/countroster/server/internal/version.Patch=$patch" \
-    -o "../$out" ./cmd/engine)
-done
+rm -rf "$jni"
+mkdir -p "$jni/arm64-v8a"
+echo "==> engine for arm64-v8a (android/arm64)"
+(cd server && CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build \
+  -trimpath \
+  -ldflags "-s -w -X github.com/chinmay28/countroster/server/internal/version.Patch=$patch" \
+  -o "../$jni/arm64-v8a/libcountroster_engine.so" ./cmd/engine)
+
+# A host-native engine for the JVM unit tests (RealEngineTest), so they
+# drive the real binary through the Kotlin launcher on any dev machine.
+echo "==> engine for the host (JVM tests)"
+(cd server && CGO_ENABLED=0 go build -trimpath \
+  -o ../apps/android/app/build/host-engine/countroster-engine ./cmd/engine)
 
 echo "==> gradle ${tasks[*]}"
 cd apps/android

@@ -36,9 +36,13 @@ class EngineProcess private constructor(
             argv: List<String>,
             environment: Map<String, String>,
             timeoutMillis: Long = 15_000,
+            workingDir: java.io.File? = null,
             log: (String) -> Unit = {},
         ): EngineProcess {
-            val process = ProcessBuilder(argv).apply { environment().putAll(environment) }.start()
+            val process = ProcessBuilder(argv).apply {
+                environment().putAll(environment)
+                workingDir?.let { directory(it) }
+            }.start()
             val ready = CompletableFuture<Int>()
             // The last lines the engine printed, so a failure to start can say
             // why — in Logcat, and on the app's error screen.

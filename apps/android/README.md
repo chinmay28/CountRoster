@@ -20,8 +20,12 @@ scripts/build-android.sh assembleRelease testDebugUnitTest
 
 Needs Node, Go, JDK 17+ and the Android SDK (`ANDROID_HOME`). No NDK — the
 engine is pure Go. The script builds the web client with `--mode native`,
-cross-compiles the engine into `app/src/main/jniLibs/<abi>/libcountroster_engine.so`
-(arm64 phones, x86_64 emulators), then runs Gradle with the calendar version.
+cross-compiles the engine into `app/src/main/jniLibs/arm64-v8a/libcountroster_engine.so`
+(plus a host-native copy for the JVM tests), then runs Gradle with the
+calendar version. **arm64 only:** on x86_64 the engine's SQLite runtime uses
+legacy syscalls Android's seccomp filter kills, so x86_64 devices are marked
+incompatible; an x86_64 emulator runs the arm64 engine through its ARM
+translation (API 30 images do).
 Gradle refuses to build if those binaries are missing.
 
 Release signing reads `COUNTROSTER_KEYSTORE`, `COUNTROSTER_KEYSTORE_PASSWORD`,
@@ -42,7 +46,7 @@ build is unsigned.
 ## Tests
 
 - `app/src/test` — JVM unit tests, including `RealEngineTest`, which drives
-  the real engine through the Kotlin launcher on a Linux x86_64 host.
+  the real engine (a host-native build) through the Kotlin launcher.
 - `app/src/androidTest` — on a device or emulator: the engine starts from
   the native library directory, stamps the device's timezone, resolves
   hostnames, and the WebView renders the app.
