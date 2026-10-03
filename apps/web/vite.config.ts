@@ -16,12 +16,17 @@ const allowedHosts = ['.ts.net'];
 // production single-origin deployment.
 const API_TARGET = process.env.VITE_API_TARGET ?? 'http://localhost:8787';
 
-export default defineConfig({
+// `vite build --mode native` is the bundle the mobile app embeds in its
+// on-device engine (scripts/build-android.sh). It is the same app minus the
+// PWA machinery: the assets are already local, so a service worker would only
+// add a stale cache between the app and its own engine, and there is nothing
+// to install.
+export default defineConfig(({ mode }) => ({
   // Stamp the version into the bundle — the browser has no git to ask.
   define: { __APP_VERSION__: JSON.stringify(appVersion()) },
   plugins: [
     react(),
-    VitePWA({
+    mode !== 'native' && VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'favicon.svg', 'apple-touch-icon.png', 'dev-badge.png', 'dev-badge-full.png'],
       manifest: {
@@ -88,4 +93,4 @@ export default defineConfig({
       '/api': { target: API_TARGET, changeOrigin: true },
     },
   },
-});
+}));

@@ -14,6 +14,9 @@ data/
 server/bin/
 server/cmd/countroster/webdist/*
 !server/cmd/countroster/webdist/README.txt
+# …and the engine's, from the `--mode native` web build (scripts/build-android.sh)
+server/cmd/engine/webdist/*
+!server/cmd/engine/webdist/README.txt
 
 # Capacitor / iOS (the ios/ project is committed; these generated parts are not)
 apps/web/ios/App/Pods/

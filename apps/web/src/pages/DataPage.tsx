@@ -7,14 +7,20 @@ import {
 } from '../api/client.ts';
 import { ArchivedTrackers } from '../components/ArchivedTrackers.tsx';
 import { CloudBackupSettings } from '../components/CloudBackupSettings.tsx';
+import { SyncSettings } from '../components/SyncSettings.tsx';
+import { useEngine } from '../app/EngineContext.tsx';
 
 /**
- * Backup & restore. Backups are the documented egress point: download a
+ * Backup & restore (and, in the mobile app, sync). Backups are the documented egress point: download a
  * portable .countroster.zip (or the raw SQLite file), have the server upload
  * one to a cloud folder on a schedule, or restore the server's data from a
  * previously exported bundle.
  */
 export function DataPage() {
+  const { status: engine } = useEngine();
+  // In the mobile app's local mode the data is the device's own, not a
+  // server's shared with other devices — the copy shouldn't say otherwise.
+  const onDevice = engine?.mode === 'local';
   const fileInput = useRef<HTMLInputElement>(null);
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -60,6 +66,9 @@ export function DataPage() {
     <section className="form-page">
       <h1 className="page-title">Your data</h1>
 
+      {/* Only in the mobile app; renders nothing in a browser. */}
+      <SyncSettings />
+
       <section className="card data__section">
         <h2>Export</h2>
         <p className="muted">
@@ -98,8 +107,9 @@ export function DataPage() {
       <section className="card data__section">
         <h2>Restore</h2>
         <p className="muted">
-          Replace the server’s data with a previously exported bundle. This
-          affects every device that uses this server.
+          {onDevice
+            ? 'Replace this device’s data with a previously exported bundle.'
+            : 'Replace the server’s data with a previously exported bundle. This affects every device that uses this server.'}
         </p>
         <form className="data__import" onSubmit={onImport}>
           <input ref={fileInput} type="file" accept=".zip,application/zip" />

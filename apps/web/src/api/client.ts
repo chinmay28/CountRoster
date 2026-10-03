@@ -37,6 +37,7 @@ import type {
   TransactionConfirmInput,
   TransactionListStatus,
 } from '@countroster/core';
+import { nativeBridge } from '../lib/platform.ts';
 
 /**
  * The subset of the core's surface the client exposes to the UI. It is
@@ -257,6 +258,13 @@ function isStandaloneDisplay(): boolean {
  * object-URL anchor saves the file with the page left untouched.
  */
 export async function downloadBackup(url: string, fallbackName: string): Promise<void> {
+  // Inside the mobile app the WebView can't save a blob; the app streams the
+  // URL to a file the user picks instead.
+  const native = nativeBridge();
+  if (native?.has('saveUrl')) {
+    await native.saveUrl(url, fallbackName);
+    return;
+  }
   const res = await fetch(url);
   if (!res.ok) {
     let data: unknown;
