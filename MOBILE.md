@@ -66,18 +66,26 @@ Why:
 - **Lifetime is tied to the app for free.** The engine exits when its stdin
   pipe closes, so it can't outlive the app process however that dies.
 
-**arm64-v8a only.** The engine is an `android/arm64` build, which covers every
-current phone. x86_64 is deliberately absent, a lesson from the first emulator
-run. The pure-Go SQLite's C runtime (modernc's transpiled musl) uses legacy
-syscalls on x86_64: `fstatat` takes a fast path through `SYS_lstat`, and
-`access` and `open` behave similarly. Android's app seccomp filter only allows
-what bionic uses, the `*at` family, so it kills the engine with SIGSYS on its
-first `lstat`. arm64 has no legacy syscalls, so musl there uses only what
-Android allows. Listing only arm64 makes x86_64 devices (ChromeOS, emulators)
-*incompatible* rather than crashing. CI's x86_64 emulator (API 30) runs the
-arm64 engine through Android 11's ARM translation, so it tests the exact
-binary a phone runs. Supporting x86_64 would take a SQLite driver that avoids
-those syscalls on amd64 (e.g. a wasm build); that's a follow-up, not a v1 need.
+**ABIs: arm64-v8a and x86_64.** Phones get an `android/arm64` build.
+Emulators and ChromeOS get x86_64, and that one taught the lesson of the
+first emulator run. The pure-Go SQLite's C runtime (modernc's transpiled
+musl) uses legacy syscalls on x86_64: `fstatat` takes a fast path through
+`SYS_lstat`, and `access`, `open`, `unlink`, … do the same. Android's app
+seccomp filter allows only what bionic uses, the `*at` family, so it killed
+the engine with SIGSYS on its first `lstat`. arm64 has no legacy syscalls,
+so the phone build was never affected.
+
+The x86_64 engine is therefore built with **modernc's syscall shim patched**
+([`server/cmd/engine/androidlibc`](./server/cmd/engine/androidlibc/README.md)).
+All of musl's syscalls go through one small file, and its patched copy
+rewrites each legacy call into the equivalent `*at` call. A pinned checksum
+makes a modernc upgrade fail the build instead of silently dropping the fix.
+A seccomp filter that traps those syscalls reproduces Android's restriction
+on any Linux box, and the stock engine dies under it at the very PC the
+emulator reported. CI checks both directions (the stock engine dies, the
+patched one works), then runs the instrumented tests on a real x86_64
+emulator. Go can't build `android/amd64` without cgo, so the x86_64 engine
+is a static `linux/amd64` binary, which Android's kernel runs the same way.
 
 The cost of a cgo-free binary on Android is two OS gaps, both closed (§9).
 

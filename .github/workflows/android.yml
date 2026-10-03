@@ -5,9 +5,9 @@ name: Android
 #   * JVM unit tests — the launcher, bridge and shortcut logic, plus the
 #     Kotlin launcher driving the real Go engine (a host-native build of it);
 #   * the Go engine and web suites the app is built from;
-#   * instrumented tests on an emulator — the arm64 engine (under the
-#     emulator's ARM translation) exec'd from the native library directory,
-#     its timezone and DNS on a real Android, and the WebView rendering the app.
+#   * instrumented tests on an emulator — the x86_64 engine exec'd from the
+#     native library directory under Android's real seccomp filter, its
+#     timezone and DNS, and the WebView rendering the app.
 #
 # The debug APK is uploaded as an artifact. See MOBILE.md.
 
@@ -68,7 +68,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Includes the Android seccomp stand-in: the stock x86_64 engine must die
+      # under it and the patched one must work (cmd/engine/androidlibc).
       - name: Go engine tests
+        env:
+          COUNTROSTER_SECCOMP_TEST: '1'
         run: cd server && go test ./internal/engine/... ./internal/stack/... ./cmd/engine/...
 
       - name: Build the app and run its unit tests
@@ -126,13 +130,10 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # The app ships an arm64 engine only (MOBILE.md §2.1). Android 11's
-      # x86_64 images translate ARM code, binaries included, so the emulator
-      # runs the very engine a phone does.
       - name: Run instrumented tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
+          api-level: 34
           target: google_apis
           arch: x86_64
           disable-animations: true

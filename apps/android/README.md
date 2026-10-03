@@ -20,12 +20,13 @@ scripts/build-android.sh assembleRelease testDebugUnitTest
 
 Needs Node, Go, JDK 17+ and the Android SDK (`ANDROID_HOME`). No NDK — the
 engine is pure Go. The script builds the web client with `--mode native`,
-cross-compiles the engine into `app/src/main/jniLibs/arm64-v8a/libcountroster_engine.so`
-(plus a host-native copy for the JVM tests), then runs Gradle with the
-calendar version. **arm64 only:** on x86_64 the engine's SQLite runtime uses
-legacy syscalls Android's seccomp filter kills, so x86_64 devices are marked
-incompatible; an x86_64 emulator runs the arm64 engine through its ARM
-translation (API 30 images do).
+cross-compiles the engine into `app/src/main/jniLibs/<abi>/libcountroster_engine.so`
+(arm64-v8a for phones; x86_64 for emulators and ChromeOS, plus a host-native
+copy for the JVM tests), then runs Gradle with the calendar version. The
+x86_64 engine is built with a patched SQLite syscall shim
+([`server/cmd/engine/androidlibc`](../../server/cmd/engine/androidlibc/README.md)),
+because Android's seccomp filter kills the legacy x86_64 syscalls the stock
+one makes.
 Gradle refuses to build if those binaries are missing.
 
 Release signing reads `COUNTROSTER_KEYSTORE`, `COUNTROSTER_KEYSTORE_PASSWORD`,
