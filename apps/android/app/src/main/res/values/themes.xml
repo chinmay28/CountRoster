@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- No action bar: the web client draws its own chrome. The window
+         background matches it, so there's no flash while the engine starts. -->
+    <style name="Theme.CountRoster" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/countroster_ink</item>
+        <item name="android:colorBackground">@color/countroster_ink</item>
+    </style>
+</resources>

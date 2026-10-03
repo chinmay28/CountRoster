@@ -24,3 +24,13 @@ apps/web/ios/App/App/public/
 apps/web/ios/App/build/
 apps/web/ios/DerivedData/
 *.xcuserstate
+
+# Android: the Go engine binaries and the native web bundle are build outputs
+# (scripts/build-android.sh), as are Gradle's
+apps/web/dist-native/
+apps/android/app/src/main/jniLibs/
+apps/android/.gradle/
+apps/android/build/
+apps/android/app/build/
+apps/android/local.properties
+*.keystore
