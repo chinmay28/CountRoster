@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CountRoster</string>
+    <string name="engine_failed">CountRoster couldn’t start its database engine.</string>
+    <string name="retry">Try again</string>
+</resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The WebView loads the on-device engine over plain http on loopback, which
+  needs an explicit cleartext exception. Nothing else gets one: in sync mode
+  the *engine* (a Go process, outside this policy) talks to the server, so an
+  http server on a LAN or tailnet still works.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

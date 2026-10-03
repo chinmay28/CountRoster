@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  apps/web/public/icon.svg (the notepad and fountain pen) as a vector, minus
+  its rounded backdrop, which the adaptive icon's background layer supplies.
+  Scaled into the 66dp safe zone of the 108dp foreground.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.72"
+        android:scaleY="0.72">
+        <group
+            android:pivotX="256"
+            android:pivotY="256"
+            android:rotation="-7">
+            <path
+                android:fillColor="#F5F7F7"
+                android:pathData="M170,104 H320 A20,20 0 0 1 340,124 V372 A20,20 0 0 1 320,392 H170 A20,20 0 0 1 150,372 V124 A20,20 0 0 1 170,104 Z"
+                android:strokeColor="#D4DEDD"
+                android:strokeWidth="4" />
+            <path
+                android:pathData="M182,170 H308 M182,214 H308 M182,258 H308 M182,302 H270"
+                android:strokeColor="#C2D0CF"
+                android:strokeLineCap="round"
+                android:strokeWidth="11" />
+        </group>
+        <group
+            android:pivotX="256"
+            android:pivotY="256"
+            android:rotation="40">
+            <path
+                android:fillColor="#2F9E93"
+                android:pathData="M246,92 H266 A14,14 0 0 1 280,106 V122 A14,14 0 0 1 266,136 H246 A14,14 0 0 1 232,122 V106 A14,14 0 0 1 246,92 Z" />
+            <path
+                android:fillColor="#4ECDC4"
+                android:pathData="M232,128 H280 V314 H232 Z" />
+            <path
+                android:fillColor="#DFE8E7"
+                android:pathData="M234,300 H278 A4,4 0 0 1 282,304 V316 A4,4 0 0 1 278,320 H234 A4,4 0 0 1 230,316 V304 A4,4 0 0 1 234,300 Z" />
+            <path
+                android:fillColor="#F5F7F7"
+                android:pathData="M232,320 H280 L256,420 Z" />
+            <path
+                android:pathData="M256,324 V392"
+                android:strokeColor="#1F2933"
+                android:strokeLineCap="round"
+                android:strokeWidth="6" />
+            <path
+                android:fillColor="#1F2933"
+                android:pathData="M248,338 A8,8 0 1 0 264,338 A8,8 0 1 0 248,338 Z" />
+        </group>
+    </group>
+</vector>

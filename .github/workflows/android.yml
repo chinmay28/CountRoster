@@ -1,0 +1,150 @@
+name: Android
+
+# Builds the Android app (apps/android) and tests it at three levels:
+#
+#   * JVM unit tests — the launcher, bridge and shortcut logic, plus the
+#     Kotlin launcher driving the real Go engine (the x86_64 engine is a static
+#     linux/amd64 binary, so the runner can exec it directly);
+#   * the Go engine and web suites the app is built from;
+#   * instrumented tests on an emulator — the engine exec'd from the native
+#     library directory, its timezone and DNS on a real Android, and the
+#     WebView rendering the app.
+#
+# The debug APK is uploaded as an artifact. See MOBILE.md.
+
+on:
+  push:
+    paths:
+      - 'apps/android/**'
+      - 'apps/web/**'
+      - 'packages/core/**'
+      - 'server/**'
+      - 'scripts/build-android.sh'
+      - 'scripts/version.mjs'
+      - '.github/workflows/android.yml'
+  pull_request:
+    paths:
+      - 'apps/android/**'
+      - 'apps/web/**'
+      - 'packages/core/**'
+      - 'server/**'
+      - 'scripts/build-android.sh'
+      - 'scripts/version.mjs'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and unit test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the version's patch number is the commit count
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Go engine tests
+        run: cd server && go test ./internal/engine/... ./internal/stack/... ./cmd/engine/...
+
+      - name: Build the app and run its unit tests
+        run: scripts/build-android.sh assembleDebug testDebugUnitTest
+
+      - name: Upload the debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: countroster-debug-apk
+          path: apps/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload unit test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: apps/android/app/build/reports/tests/
+
+  emulator:
+    name: Instrumented tests (emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the app and its test APK
+        run: scripts/build-android.sh assembleDebug assembleDebugAndroidTest
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run instrumented tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          # A non-UTC zone, so the test can tell the device's zone from Go's
+          # UTC default. `adb root` works on google_apis images.
+          script: |
+            adb root || true
+            adb wait-for-device
+            adb shell setprop persist.sys.timezone America/Los_Angeles || true
+            cd apps/android && ./gradlew --no-daemon connectedDebugAndroidTest
+
+      - name: Upload instrumented test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: instrumented-test-reports
+          path: apps/android/app/build/reports/androidTests/
