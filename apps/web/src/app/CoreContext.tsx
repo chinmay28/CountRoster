@@ -20,8 +20,9 @@ const CoreContext = createContext<CoreContextValue | null>(null);
 /**
  * Provide the API client to the tree. Unlike the old local-first boot, there's
  * no async DB to open — the client is created synchronously. We do a one-shot
- * health check so the chrome can surface an "offline / server unreachable"
- * banner, but the app renders immediately either way.
+ * health check (repeated when the page becomes visible again) so the chrome
+ * can surface an "offline / server unreachable" banner, but the app renders
+ * immediately either way.
  */
 export function CoreProvider({ children }: { children: ReactNode }) {
   const core = useMemo(() => createApiClient(), []);
@@ -29,15 +30,25 @@ export function CoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`${API_BASE}/health`)
-      .then((res) => {
-        if (!cancelled) setConnected(res.ok);
-      })
-      .catch(() => {
-        if (!cancelled) setConnected(false);
-      });
+    const check = () => {
+      fetch(`${API_BASE}/health`)
+        .then((res) => {
+          if (!cancelled) setConnected(res.ok);
+        })
+        .catch(() => {
+          if (!cancelled) setConnected(false);
+        });
+    };
+    check();
+    // Re-check when the page comes back: a phone that left the Wi-Fi (or
+    // the tailnet) while backgrounded should say so as soon as it's looked at.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') check();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
 

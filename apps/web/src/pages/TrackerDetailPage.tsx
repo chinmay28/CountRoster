@@ -11,6 +11,7 @@ import { EntryTable } from '../components/EntryTable.tsx';
 import { MultiLogPanel } from '../components/MultiLogPanel.tsx';
 import { NotesSection } from '../components/NotesSection.tsx';
 import { PeriodTable } from '../components/PeriodTable.tsx';
+import { PinShortcutButton } from '../components/PinShortcutButton.tsx';
 import { DragHandle, SortableList } from '../components/SortableList.tsx';
 
 // Charts pull in Observable Plot (~100KB gzip); load them on demand so the
@@ -586,6 +587,7 @@ export function TrackerDetailPage() {
               Quick log
             </Link>
           )}
+          {!isDerived && <PinShortcutButton tracker={tracker} />}
           <button
             type="button"
             className={`btn${arranging ? ' btn--active' : ''}`}

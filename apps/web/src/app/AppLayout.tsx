@@ -1,9 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useCoreContext } from './CoreContext.tsx';
+import { useEngine } from './EngineContext.tsx';
 import { HiddenModeProvider, useHiddenMode } from './HiddenMode.tsx';
 import { useKeyboardOpen } from './useKeyboardOpen.ts';
 import { APP_VERSION } from '../version.ts';
+import type { EngineStatus } from '../api/engine.ts';
 
 /** Primary destinations, shown in the desktop header and the mobile tab bar. */
 const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
@@ -34,6 +36,7 @@ export function AppLayout() {
 
 function AppShell() {
   const { connected } = useCoreContext();
+  const { status: engine } = useEngine();
   const { enabled: hiddenMode, registerTap } = useHiddenMode();
   const { pathname } = useLocation();
   // While the on-screen keyboard is up, drop the bottom chrome so it never
@@ -133,7 +136,7 @@ function AppShell() {
       </main>
 
       <footer className="app__footer">
-        <span>Synced to your CountRoster server · the same data on every device.</span>
+        <span>{footerText(engine)}</span>
       </footer>
 
       {/* Floating action button — the primary create action on phones. */}
@@ -189,6 +192,26 @@ function AppShell() {
       )}
     </div>
   );
+}
+
+/** Where the data lives, in one line — it differs between the PWA (always a
+ * server) and the mobile app (this device, unless sync is on). */
+function footerText(engine: EngineStatus | null): string {
+  if (engine?.mode === 'local') {
+    return 'Stored on this device · turn on sync under Data to share it.';
+  }
+  if (engine?.mode === 'remote' && engine.remote_url) {
+    return `Synced to ${hostOf(engine.remote_url)} · the same data on every device.`;
+  }
+  return 'Synced to your CountRoster server · the same data on every device.';
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
 }
 
 /* Inline, dependency-free icons. They inherit `currentColor` and a 24px box. */

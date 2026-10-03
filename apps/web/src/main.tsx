@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { CoreProvider } from './app/CoreContext.tsx';
+import { EngineProvider } from './app/EngineContext.tsx';
 import { AppLayout } from './app/AppLayout.tsx';
 import { HiddenModeProvider } from './app/HiddenMode.tsx';
 import { HomePage } from './pages/HomePage.tsx';
@@ -45,12 +46,14 @@ if (!rootEl) throw new Error('Root element #root not found');
 createRoot(rootEl).render(
   <StrictMode>
     <CoreProvider>
-      {/* Above the router, so hidden mode spans every route — including the
-          quick-log screen, which renders outside the app shell. Unlocking it
-          and stepping onto that screen must not relock on the way back. */}
-      <HiddenModeProvider>
-        <RouterProvider router={router} />
-      </HiddenModeProvider>
+      <EngineProvider>
+        {/* Above the router, so hidden mode spans every route — including the
+            quick-log screen, which renders outside the app shell. Unlocking it
+            and stepping onto that screen must not relock on the way back. */}
+        <HiddenModeProvider>
+          <RouterProvider router={router} />
+        </HiddenModeProvider>
+      </EngineProvider>
     </CoreProvider>
   </StrictMode>,
 );
