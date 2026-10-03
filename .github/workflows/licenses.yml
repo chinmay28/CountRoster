@@ -1,0 +1,50 @@
+name: Licences
+
+# Every dependency CountRoster ships — the Go binaries, the web client's
+# production npm packages, the Android shell's Gradle dependencies — must be
+# permissive. That's what keeps the project dual-licensable (LICENSING.md):
+# the maintainer can relicense code the project owns, never a copyleft
+# dependency. scripts/licenses.mjs is the check; it also writes the
+# third-party notices every build ships.
+
+on:
+  push:
+    paths:
+      - 'package-lock.json'
+      - '**/package.json'
+      - 'server/go.mod'
+      - 'server/go.sum'
+      - 'apps/android/app/build.gradle.kts'
+      - 'scripts/licenses*'
+      - 'scripts/licenses/**'
+      - '.github/workflows/licenses.yml'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  licences:
+    name: Dependency licences
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - run: npm ci
+
+      - name: Policy tests
+        run: node --test scripts/licenses.test.mjs
+
+      - name: Check every shipped dependency
+        run: node scripts/licenses.mjs check

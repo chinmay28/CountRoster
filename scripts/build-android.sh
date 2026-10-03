@@ -29,6 +29,8 @@ echo "==> CountRoster $version for Android"
 
 echo "==> web client (--mode native)"
 npm run build --workspace @countroster/core >/dev/null
+# The licence check gates the build, and its notices ship in the app.
+node scripts/licenses.mjs notices apps/web/public/third-party-notices.txt
 (cd apps/web && npx tsc --noEmit && npx vite build --mode native --emptyOutDir --outDir dist-native >/dev/null)
 find server/cmd/engine/webdist -mindepth 1 ! -name README.txt -exec rm -rf {} +
 cp -r apps/web/dist-native/. server/cmd/engine/webdist/

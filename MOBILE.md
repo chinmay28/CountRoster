@@ -311,7 +311,7 @@ The design carries over. The engine, the UI, the bridge contract, sync and
 | Bridge | A document-start `WKUserScript` defines the same `window.CountRosterNative` over a message handler. |
 | Shortcuts | iOS has no pinned shortcuts, so `capabilities()` omits `pinShortcut`. Home-screen quick actions, App Intents and widgets are later options; widgets need the DB in an App Group. |
 | Background | `BGTaskScheduler` → the same cloud tick. |
-| Distribution | The App Store's terms vs. the AGPL. The maintainer can ship under the CLA's relicensing rights; forks can't. App Review rule 4.2 (wrapper apps) should pass, because the app runs offline on its own engine. |
+| Distribution | The App Store's terms conflict with the AGPL, so the maintainer ships the iOS build under separate terms (`LICENSING.md`). That's possible because the project owns its code (CLA v2, which names app stores), and every shipped dependency is permissive (`scripts/licenses.mjs`). The app's notices screen is the Data page's link to `third-party-notices.txt`; the iOS shell's own dependencies go into `scripts/licenses-lib.mjs` like Android's. App Review rule 4.2 (wrapper apps) should pass, because the app runs offline on its own engine. |
 
 ## 11. Later: true offline sync
 
