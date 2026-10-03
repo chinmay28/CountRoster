@@ -433,3 +433,14 @@ func TestRunChecksTheServerWhenLaunchedSynced(t *testing.T) {
 		t.Errorf("status %+v", s)
 	}
 }
+
+func TestCloudBackupOnTheDeviceUsesThePasteFlow(t *testing.T) {
+	_, c := newEngine(t, t.TempDir())
+	var body struct {
+		RedirectSupported int `json:"redirect_supported"`
+	}
+	c.mustJSON("GET", "/api/cloud/backup", nil, &body, 200)
+	if body.RedirectSupported != 0 {
+		t.Error("the engine offered the OAuth redirect flow; only paste can work on a device")
+	}
+}
