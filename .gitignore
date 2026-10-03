@@ -34,3 +34,6 @@ apps/android/build/
 apps/android/app/build/
 apps/android/local.properties
 *.keystore
+
+# Generated at build time by scripts/licenses.mjs (the web build's prebuild step)
+apps/web/public/third-party-notices.txt

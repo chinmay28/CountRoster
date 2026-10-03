@@ -175,6 +175,7 @@ pin backup-bundle compatibility with the original TypeScript implementation.
 - [server/README.md](./server/README.md) — the Go backend
 - [apps/web/README.md](./apps/web/README.md) — the PWA client
 - [DEPLOYMENT.md](./DEPLOYMENT.md) — deploying the server + PWA
+- [LICENSING.md](./LICENSING.md) — AGPL plus dual licensing, dependencies, name and logo
 - [MOBILE.md](./MOBILE.md) — the Android app: on-device engine, sync, iOS notes
 - [apps/android/README.md](./apps/android/README.md) — building the Android app
 
@@ -188,7 +189,9 @@ The AGPL is a strong copyleft license: anyone who distributes CountRoster — or
 **runs a modified version as a network service** — must make the complete
 corresponding source available under the same license. Copyright in the project
 is held by Chinmay Manjunath, who may also offer CountRoster under separate
-commercial terms.
+terms: commercial licences, or app-store builds such as a future iOS app,
+whose store terms the AGPL doesn't allow. [LICENSING.md](./LICENSING.md)
+explains the model, the permissive-dependencies rule, and the name and logo.
 
 > **Note for operators (AGPL §13):** if you run a modified CountRoster server
 > that other people interact with over a network, you must offer those users the
@@ -198,5 +201,6 @@ commercial terms.
 
 Contributions are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md). By
 contributing you agree to the [Contributor License Agreement](./CLA.md), which
-lets the project be offered under both the AGPL and possible future commercial
-terms. Sign off your commits with `git commit -s`.
+lets the project be offered under both the AGPL and other terms. Sign it once
+when the bot asks on your first pull request, and sign off your commits with
+`git commit -s`.

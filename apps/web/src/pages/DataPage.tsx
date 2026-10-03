@@ -5,6 +5,7 @@ import {
   downloadBackup,
   importBackup,
 } from '../api/client.ts';
+import { AboutSection } from '../components/AboutSection.tsx';
 import { ArchivedTrackers } from '../components/ArchivedTrackers.tsx';
 import { CloudBackupSettings } from '../components/CloudBackupSettings.tsx';
 import { SyncSettings } from '../components/SyncSettings.tsx';
@@ -130,6 +131,8 @@ export function DataPage() {
       </section>
 
       <ArchivedTrackers />
+
+      <AboutSection />
     </section>
   );
 }

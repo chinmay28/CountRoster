@@ -65,7 +65,9 @@ export default defineConfig(({ mode }) => ({
         // play, the SW answered these navigations with the precached generic
         // shell — generic manifest, start_url "/" — and none of the server's
         // work ever reached the browser.
-        navigateFallbackDenylist: [/^\/api/, /\/app\.webmanifest$/, /^\/trackers\/[^/]+\/quick\/?$/],
+        // `.txt` too: the third-party notices are a file the Data page links
+        // to, and the shell's SPA fallback would answer that with "not found".
+        navigateFallbackDenylist: [/^\/api/, /\/app\.webmanifest$/, /^\/trackers\/[^/]+\/quick\/?$/, /\.txt$/],
         // Offline grace for the quick screens the fallback no longer covers:
         // fresh from the server when reachable, last personalized copy when
         // not. (The screen needs the API to log anyway, so this only has to

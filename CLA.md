@@ -1,5 +1,9 @@
 # CountRoster Contributor License Agreement (CLA)
 
+**Version 2 — effective 2026-10-03.** Contributions submitted before this date
+were made under version 1, which granted the same relicensing right but did
+not name app stores or the Maintainer's successors explicitly.
+
 Thank you for your interest in contributing to CountRoster ("the Project"),
 maintained by Chinmay Manjunath ("the Maintainer").
 
@@ -17,6 +21,9 @@ future Contributions.
 
 ## 1. Definitions
 
+- **"Maintainer"** means Chinmay Manjunath and the Maintainer's successors and
+  assigns, including any legal entity to which the Maintainer transfers the
+  Project or the rights granted under this Agreement.
 - **"You"** (or **"Your"**) means the individual or legal entity that submits a
   Contribution. For a legal entity, the entity making a Contribution and all
   other entities that control, are controlled by, or are under common control
@@ -45,6 +52,15 @@ License v3.0, other open-source licenses, and proprietary or commercial
 license terms, and may sublicense these rights through multiple tiers of
 sublicensees. This right is what enables the Project to be offered under a dual
 or commercial license in addition to the AGPL.
+
+This includes distributing Your Contributions, in source or binary form, through
+application stores and similar channels (such as Apple's App Store or Google
+Play) under the terms those channels impose, which may restrict recipients in
+ways the AGPL does not permit.
+
+The Maintainer may assign or transfer this Agreement, and the rights granted
+under it, to any successor; it binds and benefits the Maintainer's successors
+and assigns.
 
 ## 3. Grant of Patent License
 
@@ -88,12 +104,19 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 
 ## 6. How to Accept
 
-You accept this Agreement by submitting a Contribution to the Project and by
-adding a `Signed-off-by` line to each commit, certifying the Developer
-Certificate of Origin (see `CONTRIBUTING.md`). The combination of Your
-`Signed-off-by` sign-off and Your submission of the Contribution constitutes
-Your acceptance of this Agreement for that Contribution and all of Your future
-Contributions to the Project.
+You accept this Agreement explicitly, once, by posting the following comment on
+Your first pull request:
+
+> I have read the CLA Document and I hereby sign the CLA
+
+An automated check (`.github/workflows/cla.yml`) records Your GitHub account,
+the pull request and the time of signing, and a pull request cannot merge until
+every author has signed. Your signature covers that Contribution and all of
+Your future Contributions to the Project.
+
+In addition, every commit must carry a `Signed-off-by` line certifying the
+Developer Certificate of Origin (see `CONTRIBUTING.md`) — that certifies where
+each change came from; the signature above is Your agreement to these terms.
 
 ---
 
