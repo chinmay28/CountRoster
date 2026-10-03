@@ -56,6 +56,12 @@ type Service struct {
 	// for a LAN or Tailscale address reached directly, wrong behind a proxy
 	// that rewrites neither.
 	PublicURL string
+	// PasteOnly says no redirect can ever come back here, whatever the
+	// origin looks like. The mobile engine sets it: it answers on
+	// 127.0.0.1 — an origin providers accept — but on a port that changes
+	// every launch, behind a secret the browser the provider redirects
+	// doesn't hold. The code-paste flow is the one that works there.
+	PasteOnly bool
 
 	pending *pendingStore
 }
@@ -360,6 +366,9 @@ func (s *Service) StartConnect(providerID, requestOrigin string, paste bool) (*C
 // http on a LAN address can only use the paste flow, and the UI should lead
 // with it rather than offering a button that cannot work.
 func (s *Service) RedirectSupported(requestOrigin string) bool {
+	if s.PasteOnly {
+		return false
+	}
 	origin := s.PublicURL
 	if origin == "" {
 		origin = requestOrigin

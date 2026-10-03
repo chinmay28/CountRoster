@@ -977,6 +977,11 @@ func TestRedirectSupportedByOrigin(t *testing.T) {
 	if !h.svc.RedirectSupported("http://192.168.1.7:8787") {
 		t.Error("an https public URL should make redirects supported")
 	}
+	// The mobile engine: loopback, but nothing can redirect back to it.
+	h.svc.PasteOnly = true
+	if h.svc.RedirectSupported("https://roster.example") || h.svc.RedirectSupported("http://127.0.0.1:41234") {
+		t.Error("PasteOnly must rule out redirects for every origin")
+	}
 }
 
 // Paste-mode handles are single-use too — the same state store backs both.

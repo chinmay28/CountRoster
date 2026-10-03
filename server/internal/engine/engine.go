@@ -114,7 +114,12 @@ func New(opts Options) (*Engine, error) {
 	if err := os.MkdirAll(opts.DataDir, 0o700); err != nil {
 		return nil, err
 	}
-	st, err := stack.Open(stack.Options{DBPath: filepath.Join(opts.DataDir, DBFile)})
+	st, err := stack.Open(stack.Options{
+		DBPath: filepath.Join(opts.DataDir, DBFile),
+		// No OAuth redirect can come back to a loopback port that changes
+		// every launch, behind a secret the system browser doesn't hold.
+		CloudPasteOnly: true,
+	})
 	if err != nil {
 		return nil, err
 	}

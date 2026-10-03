@@ -31,6 +31,9 @@ type Options struct {
 	// PublicURL is the origin used to build the OAuth redirect URI; empty
 	// means "the request's own origin".
 	PublicURL string
+	// CloudPasteOnly forces cloud backup's code-paste connect flow (see
+	// cloud.Service.PasteOnly) — the mobile engine's setting.
+	CloudPasteOnly bool
 }
 
 // Stack is an opened, migrated database and everything wired over it.
@@ -76,6 +79,7 @@ func Open(opts Options) (*Stack, error) {
 	cloudSvc := cloud.NewService(db, timeutil.SystemClock, backupSvc,
 		cloud.NewRegistry(opts.Dropbox, opts.Google, nil, time.Now),
 		api.AppVersion, opts.PublicURL)
+	cloudSvc.PasteOnly = opts.CloudPasteOnly
 
 	return &Stack{
 		DB:            db,
