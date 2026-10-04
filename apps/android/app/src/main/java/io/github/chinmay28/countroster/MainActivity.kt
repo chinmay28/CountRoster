@@ -9,7 +9,9 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.util.Log
 import android.webkit.CookieManager
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -49,6 +51,7 @@ class MainActivity : ComponentActivity(), NativeBridge.Host {
     /** For instrumented tests only. */
     internal val webViewForTest: WebView get() = webView
     private lateinit var errorView: LinearLayout
+    private lateinit var root: FrameLayout
     private lateinit var errorDetail: TextView
     private val engine by lazy { EngineHost.get(this) }
 
@@ -87,20 +90,10 @@ class MainActivity : ComponentActivity(), NativeBridge.Host {
         super.onCreate(savedInstanceState)
 
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
-        webView = WebView(this).apply {
-            setBackgroundColor(ink)
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.allowFileAccess = false
-            settings.allowContentAccess = false
-            settings.setSupportMultipleWindows(false)
-            webViewClient = EngineOnlyClient()
-            webChromeClient = FileChooserClient()
-            addJavascriptInterface(NativeBridge(this@MainActivity), "CountRosterNative")
-        }
+        webView = newWebView()
         errorView = buildErrorView()
 
-        val root = FrameLayout(this).apply {
+        root = FrameLayout(this).apply {
             setBackgroundColor(ink)
             addView(webView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             addView(errorView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -130,6 +123,34 @@ class MainActivity : ComponentActivity(), NativeBridge.Host {
         })
 
         pendingPath = startPath(intent)
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun newWebView(): WebView = WebView(this).apply {
+        setBackgroundColor(ContextCompat.getColor(context, R.color.countroster_ink))
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        settings.allowFileAccess = false
+        settings.allowContentAccess = false
+        settings.setSupportMultipleWindows(false)
+        webViewClient = EngineOnlyClient()
+        webChromeClient = FileChooserClient()
+        addJavascriptInterface(NativeBridge(this@MainActivity), "CountRosterNative")
+    }
+
+    /**
+     * The WebView's renderer process died — it crashed, or the system took it
+     * back for memory. Left unhandled, Android kills the app along with it.
+     * Replace the WebView and reopen the screen it was on; the engine (a
+     * separate process) and the session cookie are unaffected.
+     */
+    private fun recoverFromRendererLoss(gone: WebView) {
+        val path = currentPath() ?: "/"
+        root.removeView(gone)
+        gone.destroy()
+        webView = newWebView()
+        root.addView(webView, 0, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        endpoint?.let { webView.loadUrl(it.baseUrl + path) }
     }
 
     override fun onStart() {
@@ -232,6 +253,12 @@ class MainActivity : ComponentActivity(), NativeBridge.Host {
 
     /** Keeps the WebView on the engine's origin; any other link opens outside. */
     private inner class EngineOnlyClient : WebViewClient() {
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            Log.w("CountRoster", "WebView renderer gone (crashed=${detail.didCrash()}); recreating it")
+            if (view === webView) recoverFromRendererLoss(view) else view.destroy()
+            return true // handled: don't take the app down with it
+        }
+
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url
             if (url.host == ENGINE_HOST) return false

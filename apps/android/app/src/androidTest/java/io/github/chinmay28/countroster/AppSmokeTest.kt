@@ -67,18 +67,48 @@ class AppSmokeTest {
     @Test
     fun theWebViewRendersTheAppInLocalMode() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            val deadline = System.currentTimeMillis() + 30_000
-            var footer = ""
-            while (System.currentTimeMillis() < deadline) {
-                footer = evaluate(scenario, "(document.querySelector('.app__footer')||{}).textContent||''")
-                if (footer.contains("Stored on this device")) break
-                Thread.sleep(250)
-            }
+            val footer = awaitFooter(scenario)
             assertTrue("footer was: $footer", footer.contains("Stored on this device"))
 
             val caps = evaluate(scenario, "window.CountRosterNative.capabilities()")
             assertTrue(caps, caps.contains("saveUrl"))
         }
+    }
+
+    @Test
+    fun theAppSurvivesTheWebViewRendererDying() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            assertTrue("app never rendered", awaitFooter(scenario).contains("Stored on this device"))
+            // What a renderer crash, or the system reclaiming it, looks like.
+            var crashed: Any? = null
+            scenario.onActivity {
+                crashed = it.webViewForTest
+                it.webViewForTest.loadUrl("chrome://crash")
+            }
+            // Unhandled, Android would kill the app here; handled, a fresh
+            // WebView replaces the dead one and reopens the same screen.
+            val deadline = System.currentTimeMillis() + 15_000
+            var replaced = false
+            while (!replaced && System.currentTimeMillis() < deadline) {
+                scenario.onActivity { replaced = it.webViewForTest !== crashed }
+                if (!replaced) Thread.sleep(100)
+            }
+            assertTrue("the crashed WebView was never replaced", replaced)
+            assertTrue("app didn't recover", awaitFooter(scenario).contains("Stored on this device"))
+        }
+    }
+
+    private fun awaitFooter(scenario: ActivityScenario<MainActivity>): String {
+        val deadline = System.currentTimeMillis() + 30_000
+        var footer = ""
+        while (System.currentTimeMillis() < deadline) {
+            footer = runCatching {
+                evaluate(scenario, "(document.querySelector('.app__footer')||{}).textContent||''")
+            }.getOrDefault("")
+            if (footer.contains("Stored on this device")) break
+            Thread.sleep(250)
+        }
+        return footer
     }
 
     /** Run [script] in the WebView and return its JSON-encoded result, unquoted. */
