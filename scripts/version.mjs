@@ -2,48 +2,43 @@
 /**
  * The one place the app's version number is assembled.
  *
- * Scheme: vYEAR.MONTH.PATCH — a calendar version, where PATCH is the
- * repository's commit count, so `v2026.8.311` is the 311th commit on the 2026.8
- * line. The month is not zero-padded; that keeps the string valid semver.
+ * Scheme: vYEAR.MONTH.PATCH — a calendar version taken entirely from the
+ * commit being built, never from the build clock:
  *
- *   - YEAR/MONTH are source constants, read out of
- *     server/internal/version/version.go so there is exactly one declaration
- *     of them in the tree. Bump them there when a release line opens; they are
- *     not taken from the build clock, which would move the version without a
- *     commit.
- *   - PATCH comes from `git rev-list --count HEAD`, which only exists at build
- *     time: the Go binary gets it stamped in via -ldflags, the web bundle gets
- *     it inlined by Vite. Both call this file, so they can never disagree.
+ *   - YEAR.MONTH is the month of HEAD's committer date, in UTC (the same
+ *     reading Go makes of the vcs.time it embeds, so the two can't disagree
+ *     at a month boundary). The version moves to a new month by itself, with
+ *     the first commit made in it — nothing to bump.
+ *   - PATCH is `git rev-list --count HEAD`, the repository's commit count, so
+ *     every commit is a patch release and the number only ever grows (the
+ *     Android versionCode relies on that).
+ *
+ * The same commit therefore always builds the same version, which is what
+ * lets the release workflow refuse a tag that isn't its commit's version. The
+ * month is not zero-padded; that keeps the string valid semver.
  *
  * Usage:
- *   node scripts/version.mjs            # print e.g. v2026.8.311
- *   node scripts/version.mjs --patch    # print just the commit count (311)
+ *   node scripts/version.mjs            # print e.g. v2026.10.512
+ *   node scripts/version.mjs --patch    # print just the commit count (512)
+ *   node scripts/version.mjs --ldflags  # the -X flags that stamp the Go binary
  *   import { appVersion } from './scripts/version.mjs'
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const GO_VERSION_FILE = resolve(repoRoot, 'server/internal/version/version.go');
+const GO_VERSION_PKG = 'github.com/chinmay28/countroster/server/internal/version';
 
-/** Read `Year`/`Month` out of the Go source that declares them. */
-function yearMonth() {
-  const src = readFileSync(GO_VERSION_FILE, 'utf8');
-  const read = (name) => {
-    const m = new RegExp(`^\\s*${name}\\s*=\\s*(\\d+)\\s*$`, 'm').exec(src);
-    if (!m) {
-      throw new Error(`could not find ${name} in ${GO_VERSION_FILE}`);
-    }
-    return Number(m[1]);
-  };
-  const year = read('Year');
-  const month = read('Month');
-  if (!(month >= 1 && month <= 12)) {
-    throw new Error(`Month = ${month} in ${GO_VERSION_FILE}; want a calendar month (1-12)`);
-  }
-  return { year, month };
+/**
+ * YEAR and MONTH of HEAD's committer date, in UTC — or 0.0 with no git to ask,
+ * matching the Go binary's unstamped fallback.
+ */
+export function yearMonth() {
+  const seconds = Number(git(['log', '-1', '--format=%ct', 'HEAD']));
+  if (!Number.isFinite(seconds) || seconds <= 0) return { year: 0, month: 0 };
+  const d = new Date(seconds * 1000);
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
 }
 
 /** Run git in the repo root; null if it fails (no repo, no git, old git). */
@@ -66,7 +61,7 @@ function git(args) {
  * Shallow is the trap, and it's why this isn't a bare `rev-list`: a clone made
  * with `--depth 1` answers `rev-list --count HEAD` with `1`, which is not an
  * error and not obviously wrong — it just quietly ships a build calling itself
- * `2026.8.1`. Refuse it. Patch 0 is the agreed "unstamped build" marker (it
+ * `v2026.10.1`. Refuse it. Patch 0 is the agreed "unstamped build" marker (it
  * matches the Go default), and a version ending in `.0` is visibly a
  * non-release rather than a plausible lie.
  *
@@ -89,18 +84,27 @@ export function commitCount() {
 
 /**
  * The full version string, `v`-prefixed to match how the project tags releases
- * (v2026.8.0). Must stay byte-identical to version.String() in the Go package.
- *
- * Note `--patch` / commitCount() stays bare: that one feeds `-ldflags -X` as
- * the value of `version.Patch`, which is the number alone.
+ * (v2026.10.512). Must stay byte-identical to version.String() in the Go
+ * package, which renders the values ldflags() stamps into it.
  */
 export function appVersion() {
   const { year, month } = yearMonth();
   return `v${year}.${month}.${commitCount()}`;
 }
 
+/** The `go build -ldflags` value that stamps this version into the binary. */
+export function ldflags() {
+  const { year, month } = yearMonth();
+  return [
+    `-X ${GO_VERSION_PKG}.Year=${year}`,
+    `-X ${GO_VERSION_PKG}.Month=${month}`,
+    `-X ${GO_VERSION_PKG}.Patch=${commitCount()}`,
+  ].join(' ');
+}
+
 // Invoked directly (by the build scripts), print rather than export.
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  process.stdout.write(process.argv.includes('--patch') ? commitCount() : appVersion());
+  const arg = process.argv[2];
+  process.stdout.write(arg === '--patch' ? commitCount() : arg === '--ldflags' ? ldflags() : appVersion());
   process.stdout.write('\n');
 }
