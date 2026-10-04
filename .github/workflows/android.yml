@@ -188,12 +188,15 @@ jobs:
           arch: x86_64
           disable-animations: true
           # A non-UTC zone, so the test can tell the device's zone from Go's
-          # UTC default. `adb root` works on google_apis images.
+          # UTC default. `adb root` works on google_apis images. On failure:
+          # the crash buffer and the lines that say who died and why (an
+          # unfiltered '*:E' tail is all Play services noise), plus the whole
+          # logcat in the uploaded report.
           script: |
             adb root || true
             adb wait-for-device
             adb shell setprop persist.sys.timezone America/Los_Angeles || true
-            cd apps/android && ./gradlew --no-daemon connectedDebugAndroidTest || { adb logcat -d '*:E' CountRoster:V CountRosterEngine:V TestRunner:V | tail -n 300; exit 1; }
+            cd apps/android && ./gradlew --no-daemon connectedDebugAndroidTest || { mkdir -p app/build/reports/androidTests; adb logcat -d -v threadtime > app/build/reports/androidTests/logcat.txt; adb logcat -d -b crash; grep -E 'CountRoster|TestRunner|AndroidRuntime|DEBUG|libc|chromium|cr_|ActivityManager.*(countroster|Kill|died|ANR)|lowmemorykiller|lmkd' app/build/reports/androidTests/logcat.txt | tail -n 400; exit 1; }
 
       - name: Upload instrumented test reports
         if: always()
