@@ -23,7 +23,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon.svg', 'favicon.svg', 'dev-badge.png', 'dev-badge-full.png'],
+      includeAssets: ['icon.svg', 'favicon.svg', 'apple-touch-icon.png', 'dev-badge.png', 'dev-badge-full.png'],
       manifest: {
         name: 'CountRoster',
         short_name: 'CountRoster',
@@ -33,8 +33,16 @@ export default defineConfig({
         display: 'standalone',
         start_url: '/',
         scope: '/',
+        // Chrome on Android needs raster icons at 192 and 512 to install the
+        // app (WebAPK); with an SVG-only list it says "This app cannot be
+        // installed" and offers a browser shortcut instead. The maskable icon
+        // is a separate full-bleed render. Keep in step with manifestIcons in
+        // server/internal/api/api.go (the per-tracker manifests).
         icons: [
-          { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
+          { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
         ],
       },
       workbox: {

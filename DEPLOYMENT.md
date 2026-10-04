@@ -49,6 +49,9 @@
 >   workers on a secure context (`https://` or `http://localhost`). Tailscale
 >   Serve, a reverse proxy with a cert (Caddy/nginx + Let's Encrypt), or a tunnel
 >   gives you HTTPS.
+>   On Android, Chrome's install sheet saying **"This app cannot be installed"**
+>   (offering only "Create shortcut") over a plain `http://<lan-ip>` address is
+>   this — open the server through its `https://` name instead.
 > - **Process management:** run under systemd / a container; restart on boot.
 >   The binary serves the PWA from (in order) `--web-dist` (env `WEB_DIST`),
 >   the assets embedded at build time, or `apps/web/dist` relative to the
