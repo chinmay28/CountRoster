@@ -193,7 +193,7 @@ jobs:
             adb root || true
             adb wait-for-device
             adb shell setprop persist.sys.timezone America/Los_Angeles || true
-            cd apps/android && ./gradlew --no-daemon connectedDebugAndroidTest || { adb logcat -d -s CountRoster:V CountRosterEngine:V AndroidRuntime:E TestRunner:V | tail -n 200; exit 1; }
+            cd apps/android && ./gradlew --no-daemon connectedDebugAndroidTest || { adb logcat -d '*:E' CountRoster:V CountRosterEngine:V TestRunner:V | tail -n 300; exit 1; }
 
       - name: Upload instrumented test reports
         if: always()
