@@ -55,11 +55,20 @@ class AppSmokeTest {
     @Test
     fun engineResolvesHostnames() {
         val ep = EngineHost.get(context).awaitReady()
-        // Give the network callback a moment to hand over the DNS servers.
-        Thread.sleep(2_000)
-        val (_, body) = call(ep, "POST", "/_engine/sync/probe", """{"url":"http://example.com"}""")
         // example.com answers but isn't CountRoster — reaching that verdict
         // means the name resolved. A DNS failure reads "lookup example.com …".
+        // The network callback hands the DNS servers over asynchronously and
+        // a freshly booted emulator's network can be slow to come up, so keep
+        // asking until the verdict arrives rather than betting on one try.
+        val deadline = System.currentTimeMillis() + 60_000
+        var body = ""
+        while (true) {
+            body = runCatching {
+                call(ep, "POST", "/_engine/sync/probe", """{"url":"http://example.com"}""").second
+            }.getOrElse { "request failed: $it" }
+            if (body.contains("isn't a CountRoster server") || System.currentTimeMillis() > deadline) break
+            Thread.sleep(1_000)
+        }
         assertFalse("DNS failed: $body", body.contains("lookup "))
         assertTrue(body, body.contains("isn't a CountRoster server"))
     }
