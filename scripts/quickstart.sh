@@ -451,14 +451,15 @@ build_src() {
     mkdir -p "$WEBDIST_DIR"
     cp -r "$SRC_DIR/apps/web/dist/." "$WEBDIST_DIR/"
     chown -R "$SVC_USER" "$WEBDIST_DIR" 2>/dev/null || true
-    # Version patch number = the commit count (see scripts/version.mjs). Run it
-    # as the service user like every other build step: git refuses to read a
-    # repo owned by someone else, so asking as root would silently yield 0.
-    # Falls back to 0 — the "unstamped build" marker — if it can't be known.
-    patch="$(as_svc node "$SRC_DIR/scripts/version.mjs" --patch 2>/dev/null || echo 0)"
+    # The version stamp (scripts/version.mjs --ldflags: the commit's month and
+    # its commit count). Run it as the service user like every other build
+    # step: git refuses to read a repo owned by someone else, so asking as root
+    # would silently yield nothing. Without it the binary still reads its
+    # month from the commit Go embeds, and reports patch 0 — "unstamped".
+    vflags="$(as_svc node "$SRC_DIR/scripts/version.mjs" --ldflags 2>/dev/null || true)"
     # CGO_ENABLED=0 → fully static binary (the SQLite driver is pure Go).
     as_svc env PATH="$GO_DIR:$PATH" CGO_ENABLED=0 \
-      sh -c "cd '$SRC_DIR/server' && go build -trimpath -ldflags '-s -w -X github.com/chinmay28/countroster/server/internal/version.Patch=$patch' -o '$SERVER_BIN' ./cmd/countroster"
+      sh -c "cd '$SRC_DIR/server' && go build -trimpath -ldflags '-s -w $vflags' -o '$SERVER_BIN' ./cmd/countroster"
     [ -x "$SERVER_BIN" ] || die "build produced no server binary"
   else
     # Legacy (pre-Go) tree: the deployable unit is the compiled Node server.

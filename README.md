@@ -137,12 +137,12 @@ before `go build`. Otherwise the server falls back to serving the `--web-dist`
 directory from disk.
 
 `npm run build` stamps the version into both artifacts. It's
-`vYEAR.MONTH.PATCH` — a calendar version whose patch number is the repository's
-**commit count** — `v2026.8.311` is the 311th commit on the 2026.8 line — shown
-in the app header, printed by `countroster version`, and returned by
-`/api/health`. Year and month are constants in
-`server/internal/version/version.go`, bumped by hand when a release line opens;
-a build made without git reports patch `0`. See
+`vYEAR.MONTH.PATCH`, a calendar version taken from the commit: the month it
+was committed and the repository's **commit count**, so `v2026.10.512` is
+commit 512, made in October 2026. It's shown in the app header, printed by
+`countroster version`, and returned by `/api/health`. It updates itself every
+month, with nothing to bump, and a build without the full git history reports
+patch `0`. See
 [`server/README.md`](./server/README.md#version).
 
 Configure the server with `countroster serve` flags — prefer these over the

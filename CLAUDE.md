@@ -145,19 +145,24 @@ and skips the routes when it's nil.
 
 `internal/backup` produces/consumes the `.countroster.zip` bundle (manifest + `all.json` + CSVs, stored uncompressed). The manifest checksum is SHA-256 over the **JavaScript-canonical** JSON serialization of the tables — `internal/jsjson` reproduces `JSON.stringify` byte-for-byte (ECMA number formatting, minimal escaping, insertion-ordered keys). Golden fixtures in `internal/backup/testdata/` (a bundle exported by the TS implementation) prove bundles round-trip across implementations; don't regenerate them casually. (Reminders were removed as a feature; the `reminders` table remains in the schema because migrations are append-only and old backups must round-trip.)
 
-### Versioning is `vYEAR.MONTH.<commit count>`
+### Versioning is `vYEAR.MONTH.<commit count>`, all from the commit
 
-A calendar version: `v2026.8.311` is the 311th commit on the 2026.8 line. The
-month is unpadded — that keeps the tag valid semver. `Year`/`Month` are consts
-in `server/internal/version/version.go`, bumped by hand when a release line
-opens (never taken from the build clock — that would move the version without
-a commit); the patch number can only come from git, so it's stamped at build
-time — `-ldflags -X …version.Patch=` for the binary, Vite `define` for the
-bundle. Both read `scripts/version.mjs`, which is the one place the number is
-assembled (it parses `Year`/`Month` out of `version.go`, so keep them as plain
-`Year = 2026` lines its regex can find). An unstamped build
-reports patch `0`. The web reads it from `apps/web/src/version.ts`; **don't
-assert the literal version string in a test** — it changes with every commit.
+A calendar version taken entirely from the commit being built: YEAR.MONTH is
+HEAD's **committer date, in UTC**, and the patch is the repository's commit
+count (`git rev-list --count HEAD`), so `v2026.10.512` is commit 512, made in
+October 2026. The month moves by itself with the first commit of a new month;
+there is nothing to bump. It is **never the build clock**: the same commit
+always builds the same version, which is what lets the release workflow refuse
+a tag that isn't its commit's version. The month is unpadded, which keeps the
+tag valid semver. `scripts/version.mjs` is the one place it's assembled:
+`--ldflags` prints the `-X …version.Year/Month/Patch` flags every Go build
+stamps with (`build:server`, the release workflow, `build-android.sh`,
+`quickstart.sh`), and Vite's `define` inlines the same string into the bundle
+(`apps/web/build-version.ts`). An unstamped `go build` inside a checkout still
+gets YEAR.MONTH from the commit time Go embeds (`vcs.time`, read the same UTC
+way) and reports patch `0`; `go run`/`go test` report `v0.0.0`. The web reads
+it from `apps/web/src/version.ts`. **Don't assert the literal version string
+in a test**, because it changes with every commit.
 
 The count needs the full commit graph: a `--depth 1` clone answers it with `1`,
 silently. `version.mjs` refuses a shallow repo (reports 0 instead of the fake

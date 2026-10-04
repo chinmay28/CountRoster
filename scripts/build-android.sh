@@ -38,8 +38,7 @@ cp -r apps/web/dist-native/. server/cmd/engine/webdist/
 # The engine for each ABI (static binaries; see that script).
 jni="apps/android/app/src/main/jniLibs"
 rm -rf "$jni"
-server/cmd/engine/build-android-engines.sh "$jni" \
-  "-s -w -X github.com/chinmay28/countroster/server/internal/version.Patch=$patch"
+server/cmd/engine/build-android-engines.sh "$jni" "-s -w $(node scripts/version.mjs --ldflags)"
 
 # A host-native engine for the JVM unit tests (RealEngineTest), so they
 # drive the real binary through the Kotlin launcher on any dev machine.

@@ -16,9 +16,10 @@ go build -o bin/countroster ./cmd/countroster   # Go >= 1.21 bootstraps; go.mod 
 ./bin/countroster serve --port 9000             # same thing, on a chosen port
 ```
 
-A bare `go build` reports version `v2026.8.0` — patch **0** marks an unstamped dev
-build. Releases get the real patch number (the commit count) stamped in; see
-[Version](#version) below.
+A bare `go build` reports version `v2026.10.0`: the month of the commit it was
+built from, and patch **0**, which marks an unstamped dev build. Releases get
+the real patch number (the commit count) stamped in; see [Version](#version)
+below.
 
 ## CLI
 
@@ -64,35 +65,39 @@ Go — the result is a fully static binary, cross-compilable with plain
 
 ## Version
 
-`vYEAR.MONTH.PATCH` — a calendar version whose patch number is the repository's
-**commit count** — every commit is a patch release, so `v2026.8.311` is the
-311th commit on the 2026.8 line. The month is unpadded, which keeps the string
-valid semver. It's what `countroster version` prints, what `/api/health`
-returns, what the backup manifest records as `app_version`, and what the PWA
-shows under the wordmark in its header.
+`vYEAR.MONTH.PATCH`, a calendar version taken entirely from the commit being
+built. YEAR.MONTH is the month it was committed (UTC) and PATCH is the
+repository's **commit count**, so `v2026.10.512` is commit 512, made in
+October 2026. The version moves to a new month by itself with the first commit
+made in it. The month is unpadded, which keeps the string valid semver. It's
+what `countroster version` prints, what `/api/health` returns, what the backup
+manifest records as `app_version`, and what the PWA shows under the wordmark in
+its header.
 
 | Part | Source |
 |---|---|
-| Year, month | `Year`/`Month` consts in `internal/version/version.go`. Bump by hand when a release line opens — never from the build clock. |
-| Patch | `git rev-list --count HEAD`, stamped at link time — a binary has no repo to ask. |
+| Year, month | HEAD's committer date, in UTC. Never the build clock: the same commit always builds the same version. |
+| Patch | `git rev-list --count HEAD`, stamped at link time, because a binary has no repo to ask. |
 
-The stamp is `-ldflags "-X .../internal/version.Patch=<count>"` (see the build
-command above). Unstamped, `Patch` stays `"0"`: **patch 0 means a dev build**,
-never a release.
+The stamp is `-ldflags "$(node scripts/version.mjs --ldflags)"`, which sets
+`internal/version.Year`, `.Month` and `.Patch` (see the build command above).
+Unstamped, a binary built inside a git checkout still knows its month: Go
+embeds the commit time (`vcs.time`), read the same UTC way. `Patch` stays
+`"0"`, so **patch 0 means a dev build**, never a release. `go run` and
+`go test` carry no commit time, so they report `v0.0.0`.
 
 **The count needs full history.** A `--depth 1` clone answers `rev-list --count
-HEAD` with `1`, which is not an error — it's a build that calls itself
-`v2026.8.1`. `version.mjs` checks `rev-parse --is-shallow-repository` and
+HEAD` with `1`, which is not an error: it's a build that calls itself
+`v2026.10.1`. `version.mjs` checks `rev-parse --is-shallow-repository` and
 reports 0 rather than the fake count, so the failure shows up as an
-obviously-unstamped `v2026.8.0`.
+obviously-unstamped `v2026.10.0`.
 Clone with `--filter=blob:none` (whole commit graph, only the blobs the
 checkout needs) rather than `--depth 1`, or `fetch-depth: 0` in CI.
 
 `scripts/version.mjs` at the repo root is the one place the number is
-assembled — it reads `Year`/`Month` straight out of `version.go` and runs the
-`git rev-list`. The Go build and the web build both call it, so the binary and
-the bundle can't report different versions. Keep the two constants in a form
-that file's regex still matches (`Year = 2026` on its own line).
+assembled: it reads HEAD's commit date and count from git. The Go build and the
+web build both call it, so the binary and the bundle can't report different
+versions.
 
 ## Layout
 
