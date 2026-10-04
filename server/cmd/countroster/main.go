@@ -249,6 +249,11 @@ func webHandler(apiHandler http.Handler, files fs.FS, lookup trackerLookup) http
 			name = "index.html"
 		}
 		if info, err := fs.Stat(files, name); err == nil && !info.IsDir() {
+			// Go's mime table doesn't know .webmanifest, so it would go out
+			// as text/plain; say what it is.
+			if strings.HasSuffix(name, ".webmanifest") {
+				w.Header().Set("Content-Type", "application/manifest+json")
+			}
 			http.ServeFileFS(w, r, files, name)
 			return
 		}

@@ -350,12 +350,6 @@ func (s *server) trackerManifest(w http.ResponseWriter, r *http.Request) {
 		description = *t.Description
 	}
 
-	icon := jsjson.NewObj()
-	icon.Set("src", "/icon.svg")
-	icon.Set("sizes", "any")
-	icon.Set("type", "image/svg+xml")
-	icon.Set("purpose", "any maskable")
-
 	// Insertion-ordered so the document reads the way a hand-written manifest
 	// would; `id` keeps each tracker a distinct installable app.
 	manifest := jsjson.NewObj()
@@ -369,13 +363,38 @@ func (s *server) trackerManifest(w http.ResponseWriter, r *http.Request) {
 	manifest.Set("background_color", t.Color)
 	manifest.Set("theme_color", t.Color)
 	manifest.Set("lang", "en")
-	manifest.Set("icons", []any{icon})
+	manifest.Set("icons", manifestIcons())
 
 	w.Header().Set("Content-Type", "application/manifest+json; charset=utf-8")
 	// A renamed or recolored tracker should reach the next install.
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsjson.Stringify(manifest))
+}
+
+// manifestIcons is the icon set every installable manifest declares; keep it
+// in step with the static manifest in apps/web/vite.config.ts.
+//
+// Chrome on Android won't mint an installed app (WebAPK) from an SVG-only
+// manifest: it wants raster icons at 192 and 512, and reports "This app
+// cannot be installed" without them, offering only a browser shortcut. The
+// maskable icon is a separate full-bleed render — a combined "any maskable"
+// purpose crops the rounded "any" artwork into the launcher's mask.
+func manifestIcons() []any {
+	icon := func(src, sizes, typ, purpose string) any {
+		o := jsjson.NewObj()
+		o.Set("src", src)
+		o.Set("sizes", sizes)
+		o.Set("type", typ)
+		o.Set("purpose", purpose)
+		return o
+	}
+	return []any{
+		icon("/icon-192.png", "192x192", "image/png", "any"),
+		icon("/icon-512.png", "512x512", "image/png", "any"),
+		icon("/icon-maskable-512.png", "512x512", "image/png", "maskable"),
+		icon("/icon.svg", "any", "image/svg+xml", "any"),
+	}
 }
 
 func (s *server) updateTracker(w http.ResponseWriter, r *http.Request) {

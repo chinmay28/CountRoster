@@ -6,6 +6,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -718,6 +719,24 @@ func TestTrackerManifest(t *testing.T) {
 	// Scope covers the rest of the app, so Details/Home stay standalone.
 	if manifest["scope"] != "/" || manifest["display"] != "standalone" {
 		t.Errorf("scope/display wrong: %v", manifest)
+	}
+
+	// Chrome on Android only installs (rather than shortcuts) a manifest with
+	// raster icons at 192 and 512, plus a maskable one for the launcher shape.
+	have := map[string]bool{}
+	icons, _ := manifest["icons"].([]any)
+	for _, raw := range icons {
+		icon, _ := raw.(map[string]any)
+		have[fmt.Sprint(icon["type"], " ", icon["sizes"], " ", icon["purpose"])] = true
+	}
+	for _, want := range []string{
+		"image/png 192x192 any",
+		"image/png 512x512 any",
+		"image/png 512x512 maskable",
+	} {
+		if !have[want] {
+			t.Errorf("manifest icons lack %q: %v", want, icons)
+		}
 	}
 
 	if res, _ := c.do("GET", "/trackers/does-not-exist/app.webmanifest", nil); res.StatusCode != 404 {

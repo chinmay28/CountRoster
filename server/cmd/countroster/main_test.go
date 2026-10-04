@@ -149,6 +149,13 @@ func TestWebRoutingLeavesEverythingElseAlone(t *testing.T) {
 	}
 }
 
+func TestStaticManifestIsServedAsAManifest(t *testing.T) {
+	res, _ := get(t, "/manifest.webmanifest")
+	if ct := res.Header.Get("Content-Type"); ct != "application/manifest+json" {
+		t.Errorf("content-type %q, want application/manifest+json", ct)
+	}
+}
+
 func TestQuickShellPointsAtTheTrackerManifest(t *testing.T) {
 	tracker := &core.Tracker{ID: "019f97b1-22b3-77d0", Name: "Papu Feed Log", Color: "#ff5ca8"}
 	out := string(quickShell([]byte(shell), tracker, false))
