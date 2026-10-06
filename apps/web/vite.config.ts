@@ -35,6 +35,13 @@ export default defineConfig(({ mode }) => ({
         description: 'Track anything — habits, meds, symptoms, spending, moods.',
         theme_color: '#1f2933',
         background_color: '#1f2933',
+        // The installed app's identity. Absent, Chrome derives it from
+        // start_url — which is "/" too, so existing installs keep theirs —
+        // but pinned, a later start_url change can't fork it into a second
+        // "CountRoster" on the home screen. (The per-tracker manifests set
+        // their own, in server/internal/api/api.go.)
+        id: '/',
+        lang: 'en',
         display: 'standalone',
         start_url: '/',
         scope: '/',
