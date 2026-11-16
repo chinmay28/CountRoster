@@ -36,7 +36,8 @@ build is unsigned.
 
 ## Releases
 
-Pushing a `v*` tag publishes the server binaries (`.github/workflows/release.yml`)
+A release (a commit on `main` that names its own version in `CHANGELOG.md`,
+or a `v*` tag) publishes the server binaries (`.github/workflows/release.yml`)
 and, once a signing key is configured, **`countroster-android.apk`** (with a
 `.sha256`) on the same GitHub release. Install it by opening the APK on the
 phone (allow "install unknown apps" for your browser or file manager).

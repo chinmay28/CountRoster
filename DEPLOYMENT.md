@@ -205,8 +205,9 @@
 > by the same hardened unit against the same data directory — so re-running with
 > the other `COUNTROSTER_INSTALL` switches between them. The release assets are
 > built and published by
-> [`.github/workflows/release.yml`](./.github/workflows/release.yml) when a `v*`
-> tag (or a `release/v*` branch) is pushed; the release body comes from
+> [`.github/workflows/release.yml`](./.github/workflows/release.yml) when a commit
+> that names its own version in `CHANGELOG.md` lands on `main` (or a `v*` tag or
+> `release/v*` branch is pushed); the release body comes from
 > [`CHANGELOG.md`](./CHANGELOG.md).
 >
 > What it does (idempotent — re-run to upgrade):
