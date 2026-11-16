@@ -14,6 +14,41 @@ push to `main` is not a release. A `v*` tag (or a `release/v*` branch) works
 too. A heading must name the tag exactly — the workflow refuses to publish a tag
 that isn't the version its commit builds, or one this file doesn't name.
 
+## v2026.11.126 — CountRoster for Android
+
+The first release on the calendar version, and the first with the phone app.
+
+**Downloads:** `countroster-linux-arm64` (the server, static, web client
+embedded, `.sha256` beside it) and **`countroster-android.apk`**, the Android
+app. On the phone, open
+`https://github.com/chinmay28/countroster/releases/latest/download/countroster-android.apk`;
+later releases install over it and keep the data. (The APK is attached when the
+repository's `COUNTROSTER_ANDROID_*` signing secrets are set.)
+
+### CountRoster for Android
+
+The same app on a phone, local-first: the server's own Go engine runs on the
+device, so your trackers live on the phone and work with no server and no
+network. **Data → Sync** points it at a CountRoster server instead, sharing one
+dataset with every synced phone and browser. Quick-log shortcuts pin to the home
+screen, scheduled cloud backups run while the app is closed, and the app
+recovers by itself if the WebView's renderer dies. See
+[`apps/android/README.md`](./apps/android/README.md) and [`MOBILE.md`](./MOBILE.md).
+
+### Also in this release
+
+- **Versions follow the calendar:** `vYEAR.MONTH.<commit count>`, taken from
+  the commit, so nothing is bumped by hand.
+- **Releases publish from `main`** when this file names the commit's version,
+  as SandHarbor's do.
+- **Read a value in a second unit** (migration 011), and the quick log types
+  snapshot readings on the keypad and fits a phone's screen.
+- **Period tables** gain a change column; snapshot ranges open where the last
+  one closed; the details window's arrows point the way a calendar does.
+- **The PWA installs properly on Android Chrome** (PNG icons, a pinned app id).
+- **`quickstart.sh --uninstall`** removes the service in one line.
+- **Licensing:** ready for dual licensing — contributions run through the CLA.
+
 ## v1.1.98 — Go server, spending imports, custom fields, cloud backup
 
 The first release since `v1.0.0`, and the largest change in the project's life:
