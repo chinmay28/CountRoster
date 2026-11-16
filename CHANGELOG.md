@@ -8,9 +8,11 @@ commit count, so `v2026.10.512` is commit 512, made in October 2026. See
 
 Each section below is the body of the corresponding GitHub release;
 [`.github/workflows/release.yml`](./.github/workflows/release.yml) reads it
-straight out of this file when a `v*` tag (or a `release/v*` branch) is pushed.
-A heading must name the tag exactly — the workflow refuses to publish a tag that
-isn't the version its commit builds.
+straight out of this file. The heading is also the gate: a commit on `main`
+whose version has a section here is released as that version, and any other
+push to `main` is not a release. A `v*` tag (or a `release/v*` branch) works
+too. A heading must name the tag exactly — the workflow refuses to publish a tag
+that isn't the version its commit builds, or one this file doesn't name.
 
 ## v1.1.98 — Go server, spending imports, custom fields, cloud backup
 

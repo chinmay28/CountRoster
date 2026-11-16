@@ -2,12 +2,22 @@ name: Release
 
 # Publishes a GitHub release with the deployable binaries.
 #
-# Three ways in, all releasing the commit they run on:
+# Four ways in, all releasing the commit they run on:
 #
-#   * push a `v*` tag                 — the usual way
+#   * push to `main`                  — releases the version that commit
+#                                       builds, but only when CHANGELOG.md has a
+#                                       `## <that version>` section; any other
+#                                       push to main is an ordinary commit and
+#                                       is skipped (the same gate SandHarbor's
+#                                       release uses)
+#   * push a `v*` tag
 #   * push a `release/v*` branch      — same thing where tag pushes aren't
 #                                       allowed; the release creates the tag
 #   * run it by hand (workflow_dispatch) naming the tag to create
+#
+# The changelog section is the gate: a tag, `release/v*` branch or dispatch
+# whose version CHANGELOG.md doesn't name fails rather than publishing with
+# made-up notes.
 #
 # The artifact is the deployable unit described in README.md: a single static
 # Go binary (CGO_ENABLED=0) with the built PWA embedded, so a target host needs
@@ -35,6 +45,7 @@ on:
     tags:
       - 'v*'
     branches:
+      - main
       - 'release/v*'
   workflow_dispatch:
     inputs:
@@ -46,8 +57,51 @@ permissions:
   contents: write
 
 jobs:
+  # Decides whether this run releases anything, and as which tag, before any
+  # build starts — so an ordinary push to main costs one checkout.
+  gate:
+    name: Is this a release?
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.gate.outputs.release }}
+      tag: ${{ steps.gate.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the version's patch number is the commit count
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Resolve the tag and check CHANGELOG.md names it
+        id: gate
+        run: |
+          set -euo pipefail
+          version="$(node scripts/version.mjs)"
+          case "$GITHUB_REF" in
+            refs/tags/*)          tag="${GITHUB_REF#refs/tags/}" ;;
+            refs/heads/release/*) tag="${GITHUB_REF#refs/heads/release/}" ;;
+            refs/heads/main)      tag="$version" ;;
+            *)                    tag="${{ inputs.tag }}" ;;
+          esac
+          [ -n "$tag" ] || { echo "::error::no tag to release ($GITHUB_REF)"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if grep -qE "^## $tag([^0-9.]|\$)" CHANGELOG.md; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "releasing $GITHUB_SHA as $tag"
+          elif [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            echo "no '## $tag' section in CHANGELOG.md — not a release commit, skipping"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::CHANGELOG.md has no '## $tag' section — a tag the changelog does not name must not be published."
+            exit 1
+          fi
+
   release:
     name: Build and publish
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
     runs-on: ubuntu-latest
     env:
       # Space-separated GOARCH list. Cross-compiling is free here because the
@@ -60,17 +114,8 @@ jobs:
         with:
           fetch-depth: 0 # the version's patch number is the commit count
 
-      - name: Resolve the release tag
-        run: |
-          set -euo pipefail
-          case "$GITHUB_REF" in
-            refs/tags/*)          tag="${GITHUB_REF#refs/tags/}" ;;
-            refs/heads/release/*) tag="${GITHUB_REF#refs/heads/release/}" ;;
-            *)                    tag="${{ inputs.tag }}" ;;
-          esac
-          [ -n "$tag" ] || { echo "::error::no tag to release ($GITHUB_REF)"; exit 1; }
-          echo "TAG=$tag" >> "$GITHUB_ENV"
-          echo "releasing $GITHUB_SHA as $tag"
+      - name: Take the release tag from the gate
+        run: echo "TAG=${{ needs.gate.outputs.tag }}" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
@@ -154,8 +199,10 @@ jobs:
                 "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "$prev" "$TAG" >> release-notes.md
             fi
           else
-            echo "::warning::no '## $TAG' section in CHANGELOG.md — publishing with generated notes instead."
-            echo "title=$TAG" >> "$GITHUB_OUTPUT"
+            # The gate already checked the heading exists; an empty section is
+            # still a release without notes, which is not one to publish.
+            echo "::error::the '## $TAG' section in CHANGELOG.md is empty."
+            exit 1
           fi
 
       - name: Publish the release
@@ -188,7 +235,7 @@ jobs:
 
   android:
     name: Android app
-    needs: release
+    needs: [gate, release]
     runs-on: ubuntu-latest
     env:
       KEYSTORE_B64: ${{ secrets.COUNTROSTER_ANDROID_KEYSTORE_BASE64 }}
@@ -209,16 +256,9 @@ jobs:
         with:
           fetch-depth: 0 # versionCode is the commit count
 
-      - name: Resolve the release tag
+      - name: Take the release tag from the gate
         if: steps.key.outputs.present == 'true'
-        run: |
-          set -euo pipefail
-          case "$GITHUB_REF" in
-            refs/tags/*)          tag="${GITHUB_REF#refs/tags/}" ;;
-            refs/heads/release/*) tag="${GITHUB_REF#refs/heads/release/}" ;;
-            *)                    tag="${{ inputs.tag }}" ;;
-          esac
-          echo "TAG=$tag" >> "$GITHUB_ENV"
+        run: echo "TAG=${{ needs.gate.outputs.tag }}" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         if: steps.key.outputs.present == 'true'

@@ -170,9 +170,12 @@ count), `quickstart.sh` clones with `--filter=blob:none`, and the release
 workflow checks out with `fetch-depth: 0` — keep all three, and don't
 reintroduce `--depth 1` anywhere that feeds a build.
 
-Pushing a `v*` tag — or a `release/v*` branch, for a checkout that can't push
-tags; the release then creates the tag — runs
-`.github/workflows/release.yml`: it builds the static
+A push to `main` whose commit's version has a `## <version>` section in
+`CHANGELOG.md` — or a `v*` tag, or a `release/v*` branch for a checkout that
+can't push tags (the release then creates the tag) — runs
+`.github/workflows/release.yml`. The changelog heading is the gate, as in
+SandHarbor: any other push to `main` is skipped, and a tag the changelog
+doesn't name fails. It builds the static
 `linux/<arch>` binaries (`GOARCHES` in that file — `arm64` today) with the PWA
 embedded, publishes them with a `.sha256` beside each, and takes the release
 body from the matching `## <tag>` section of `CHANGELOG.md`. It refuses to
