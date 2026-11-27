@@ -29,8 +29,9 @@ name: Release
 # header).
 #
 # A second job attaches the Android app, `countroster-android.apk` (+ .sha256),
-# signed with the key in the COUNTROSTER_ANDROID_* secrets (see
-# apps/android/README.md). Without those secrets it skips with a warning:
+# signed with the key in the COUNTROSTER_ANDROID_* secrets, or else the
+# ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD pair every Harbor app's
+# release reads (one key, alias `harbor`; see apps/android/README.md). Without those secrets it skips with a warning:
 # an unsigned APK can't be installed, and a throwaway key would make every
 # release un-upgradable from the last.
 #
@@ -238,13 +239,13 @@ jobs:
     needs: [gate, release]
     runs-on: ubuntu-latest
     env:
-      KEYSTORE_B64: ${{ secrets.COUNTROSTER_ANDROID_KEYSTORE_BASE64 }}
+      KEYSTORE_B64: ${{ secrets.COUNTROSTER_ANDROID_KEYSTORE_BASE64 || secrets.ANDROID_KEYSTORE_BASE64 }}
     steps:
       - name: Check for a signing key
         id: key
         run: |
           if [ -z "$KEYSTORE_B64" ]; then
-            echo "::warning::no COUNTROSTER_ANDROID_KEYSTORE_BASE64 secret — the release ships without the Android app. See apps/android/README.md."
+            echo "::warning::no COUNTROSTER_ANDROID_KEYSTORE_BASE64 (or shared ANDROID_KEYSTORE_BASE64) secret — the release ships without the Android app. See apps/android/README.md."
             echo "present=false" >> "$GITHUB_OUTPUT"
           else
             echo "present=true" >> "$GITHUB_OUTPUT"
@@ -284,9 +285,9 @@ jobs:
       - name: Build the signed APK
         if: steps.key.outputs.present == 'true'
         env:
-          COUNTROSTER_KEYSTORE_PASSWORD: ${{ secrets.COUNTROSTER_ANDROID_KEYSTORE_PASSWORD }}
-          COUNTROSTER_KEY_ALIAS: ${{ secrets.COUNTROSTER_ANDROID_KEY_ALIAS }}
-          COUNTROSTER_KEY_PASSWORD: ${{ secrets.COUNTROSTER_ANDROID_KEY_PASSWORD }}
+          COUNTROSTER_KEYSTORE_PASSWORD: ${{ secrets.COUNTROSTER_ANDROID_KEYSTORE_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
+          COUNTROSTER_KEY_ALIAS: ${{ secrets.COUNTROSTER_ANDROID_KEY_ALIAS || secrets.ANDROID_KEY_ALIAS || 'harbor' }}
+          COUNTROSTER_KEY_PASSWORD: ${{ secrets.COUNTROSTER_ANDROID_KEY_PASSWORD || secrets.ANDROID_KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           set -euo pipefail
           export COUNTROSTER_KEYSTORE="$RUNNER_TEMP/release.keystore"

@@ -58,6 +58,11 @@ base64 -w0 countroster-release.keystore   # → COUNTROSTER_ANDROID_KEYSTORE_BAS
 | `COUNTROSTER_ANDROID_KEY_ALIAS` | `countroster` |
 | `COUNTROSTER_ANDROID_KEY_PASSWORD` | the key password (often the same) |
 
+Instead of these four, the release also accepts the pair every Harbor app
+reads: `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD` (a PKCS12
+keystore, alias `harbor`, whose key password is the store password). One key
+then signs all of them.
+
 **Keep the keystore safe, and keep it forever.** Android only installs an
 update signed with the same key, so a lost key means users must uninstall
 (losing their on-device data) to move to the next release. Without the
