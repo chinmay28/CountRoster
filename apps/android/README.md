@@ -32,13 +32,13 @@ Gradle refuses to build if those binaries are missing.
 
 Release signing reads `COUNTROSTER_KEYSTORE`, `COUNTROSTER_KEYSTORE_PASSWORD`,
 `COUNTROSTER_KEY_ALIAS` and `COUNTROSTER_KEY_PASSWORD`; without them a release
-build is unsigned.
+build is signed with the debug key.
 
 ## Releases
 
 A release (a commit on `main` that names its own version in `CHANGELOG.md`,
 or a `v*` tag) publishes the server binaries (`.github/workflows/release.yml`)
-and, once a signing key is configured, **`countroster-android.apk`** (with a
+and **`countroster-android.apk`** (with a
 `.sha256`) on the same GitHub release. Install it by opening the APK on the
 phone (allow "install unknown apps" for your browser or file manager).
 Later releases install over it and keep the data.
@@ -66,7 +66,8 @@ then signs all of them.
 **Keep the keystore safe, and keep it forever.** Android only installs an
 update signed with the same key, so a lost key means users must uninstall
 (losing their on-device data) to move to the next release. Without the
-secrets, the release job skips the APK with a warning. CI proves the signing
+secrets, the release job signs the APK with the runner's debug key and warns:
+it installs, but never over a release signed with another key. CI proves the signing
 path on every push with a throwaway key.
 
 ## How the pieces fit
