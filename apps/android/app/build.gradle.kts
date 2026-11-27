@@ -14,7 +14,7 @@ val engineBinaries = engineAbis.map {
 }
 
 // Release signing comes from the environment (CI secrets); without it a
-// release build is simply unsigned.
+// release build is signed with the debug key.
 val keystorePath: String? = System.getenv("COUNTROSTER_KEYSTORE")
 
 android {
@@ -48,7 +48,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            if (keystorePath != null) signingConfig = signingConfigs.getByName("release")
+            // The release key when the environment names one (CI secrets);
+            // otherwise the debug key, so a release build always installs.
+            signingConfig = signingConfigs.getByName(if (keystorePath != null) "release" else "debug")
         }
     }
 

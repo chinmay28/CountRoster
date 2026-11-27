@@ -182,9 +182,10 @@ body from the matching `## <tag>` section of `CHANGELOG.md`. It refuses to
 publish if the tag isn't the version that commit builds, so tag the commit whose
 count matches. `quickstart.sh` consumes exactly those assets when run with
 `COUNTROSTER_INSTALL=release` — the asset names are the contract between the
-two, so rename one and you must rename the other. A second job attaches the
-signed `countroster-android.apk` when the `COUNTROSTER_ANDROID_*` signing
-secrets exist (and skips with a warning when they don't).
+two, so rename one and you must rename the other. A second job attaches
+`countroster-android.apk`, signed with the `COUNTROSTER_ANDROID_*` key (or the
+shared `ANDROID_KEYSTORE_*` pair) when the secrets exist, and with the runner's
+debug key, with a warning, when they don't.
 
 ### The mobile engine (`internal/engine`, `cmd/engine`, `apps/android`)
 

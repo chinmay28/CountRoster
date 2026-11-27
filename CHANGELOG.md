@@ -14,6 +14,22 @@ push to `main` is not a release. A `v*` tag (or a `release/v*` branch) works
 too. A heading must name the tag exactly — the workflow refuses to publish a tag
 that isn't the version its commit builds, or one this file doesn't name.
 
+## v2026.11.127 — the Android app, attached
+
+**Downloads:** `countroster-linux-arm64` (the server, `.sha256` beside it) and
+**`countroster-android.apk`**, the Android app. On the phone, open
+`https://github.com/chinmay28/countroster/releases/latest/download/countroster-android.apk`.
+
+v2026.11.126 was meant to be the first release with the phone app, but the
+release attached it only when a signing key was configured, and none was, so
+it shipped the server alone. The APK is now always attached: signed with the
+release key when the repository has one (the `COUNTROSTER_ANDROID_*` secrets,
+or the `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` pair every
+Harbor app reads), and with a debug key otherwise. A debug-signed build
+installs, but a later release signed with the real key can't install over it:
+moving across means one uninstall, which deletes the app's on-device data, so
+export a backup from **Data** first.
+
 ## v2026.11.126 — CountRoster for Android
 
 The first release on the calendar version, and the first with the phone app.
